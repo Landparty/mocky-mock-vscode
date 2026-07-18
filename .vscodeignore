@@ -6,3 +6,4 @@ tsconfig.json
 docs/**
 **/*.map
 .gitignore
+.superpowers/**
