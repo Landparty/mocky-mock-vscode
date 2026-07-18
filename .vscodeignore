@@ -1,0 +1,8 @@
+src/**
+**/*.test.ts
+.vscode/**
+.mocharc.json
+tsconfig.json
+docs/**
+**/*.map
+.gitignore

@@ -1,0 +1,52 @@
+{
+  "name": "mockymock-vscode",
+  "displayName": "mockymock",
+  "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
+  "version": "0.0.1",
+  "publisher": "legacylens",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Testing"],
+  "activationEvents": [
+    "workspaceContains:**/*.cut"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "mockymock",
+      "properties": {
+        "mockymock.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the mockymock executable. Leave empty to resolve 'mockymock' from PATH."
+        },
+        "mockymock.copybookPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test:unit": "mocha",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "mocha": "^10.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.3.4"
+  }
+}
