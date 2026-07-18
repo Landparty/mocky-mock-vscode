@@ -36,7 +36,7 @@ export class EnvironmentManager {
 
     const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
     if (!mockymockOk) {
-      const installed = await this.installMockymock();
+      const installed = await this.installMockymock(executablePath);
       if (!installed) {
         this.setStatus('$(error) mockymock: CLI not found');
         return {
@@ -70,7 +70,7 @@ export class EnvironmentManager {
     return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.' };
   }
 
-  private async installMockymock(): Promise<boolean> {
+  private async installMockymock(executablePath: string): Promise<boolean> {
     this.setStatus('$(sync~spin) mockymock: installing CLI…');
     const uvOk = await checkCommandAvailable(runCommand, 'uv', ['--version']);
     if (!uvOk) {
@@ -94,6 +94,17 @@ export class EnvironmentManager {
         if (result.code !== 0) {
           vscode.window.showErrorMessage(
             `mockymock install failed: ${result.stderr || result.stdout}. If this is a GitHub auth error, run "gh auth setup-git" and try again.`
+          );
+          return false;
+        }
+        // uv installs its shim into a directory (e.g. ~/.local/bin) that may not be on
+        // this already-running VS Code process's in-memory PATH yet. Re-verify the CLI is
+        // actually invocable before declaring success, so we don't silently proceed to the
+        // Docker check and fail later with a confusing raw spawn error.
+        const nowAvailable = await checkCommandAvailable(runCommand, executablePath, ['--version']);
+        if (!nowAvailable) {
+          vscode.window.showWarningMessage(
+            "mockymock was installed, but this VS Code window can't see it yet. Reload the window (Developer: Reload Window) and try again."
           );
           return false;
         }
@@ -131,6 +142,7 @@ export class EnvironmentManager {
         if (choice) {
           vscode.env.openExternal(vscode.Uri.parse('https://www.docker.com/products/docker-desktop/'));
         }
-      });
+      })
+      .then(undefined, () => undefined);
   }
 }

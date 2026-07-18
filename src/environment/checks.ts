@@ -11,10 +11,16 @@ export async function checkCommandAvailable(
 
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
+// Matches stderr produced when the shell itself couldn't find the "docker" executable
+// (as opposed to docker being found but failing to reach its daemon). This is what a
+// missing binary looks like under `shell: true` on Windows (cmd.exe) and on POSIX shells.
+const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not found|no such file or directory/i;
+
 export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
   const result = await run('docker', ['info']);
   if (result.code === 0) return 'available';
   if (result.code === -1) return 'not-installed';
+  if (COMMAND_NOT_FOUND_PATTERN.test(result.stderr)) return 'not-installed';
   return 'daemon-down';
 }
 

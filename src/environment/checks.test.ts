@@ -34,6 +34,17 @@ describe('checkDocker', () => {
     assert.strictEqual(status, 'not-installed');
   });
 
+  it('returns not-installed for a realistic Windows shell:true "not recognized" result', async () => {
+    const status = await checkDocker(
+      fakeRunner({
+        code: 1,
+        stdout: '',
+        stderr: "'docker' is not recognized as an internal or external command,\r\noperable program or batch file.",
+      })
+    );
+    assert.strictEqual(status, 'not-installed');
+  });
+
   it('returns daemon-down when docker runs but the daemon is unreachable', async () => {
     const status = await checkDocker(fakeRunner({ code: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon' }));
     assert.strictEqual(status, 'daemon-down');

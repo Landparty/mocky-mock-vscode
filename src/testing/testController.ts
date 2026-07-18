@@ -9,6 +9,7 @@ import { mapResults } from './resultMapper';
 import { runSuite } from './mockymockRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
+import { resolveExecutablePath } from '../environment/checks';
 
 export function activateTestController(
   context: vscode.ExtensionContext,
@@ -98,7 +99,7 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const junitXmlPath = path.join(os.tmpdir(), `mockymock-${Date.now()}-${Math.random().toString(36).slice(2)}.xml`);
     const config = vscode.workspace.getConfiguration('mockymock');
-    const executablePath = config.get<string>('executablePath') || 'mockymock';
+    const executablePath = resolveExecutablePath(config.get<string>('executablePath'));
     const copybookPaths = config.get<string[]>('copybookPaths') ?? [];
 
     const result = await runSuite(
