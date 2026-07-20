@@ -34,7 +34,13 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
 - **Environment bootstrap**: a missing `mockymock` CLI is installed via
   `uv` automatically; a stopped Docker Desktop is launched and polled; a
   missing Docker install gets a one-click download prompt. A status bar
-  item shows the current phase.
+  item shows the current phase — click it (or run **mockymock: Check
+  Environment Status** from the Command Palette) to check readiness or
+  retry a fix on demand, without waiting for a test run.
+- **Unattributed failures are never silently dropped.** A FAIL mockymock
+  can't tie to any known test case (a `MOCK`/`VERIFY` firing after its case
+  already ended, a framework/binary mismatch) still errors the file in Test
+  Explorer with the raw detail, instead of the run just looking all-green.
 
 ## Settings
 

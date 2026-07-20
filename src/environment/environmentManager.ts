@@ -19,14 +19,44 @@ export class EnvironmentManager {
   constructor(context: vscode.ExtensionContext) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.statusBarItem.name = 'mockymock';
+    this.statusBarItem.command = 'mockymock.checkEnvironment';
     context.subscriptions.push(this.statusBarItem);
-    this.setStatus('$(sync) mockymock: checking…');
+    this.setStatus('$(sync) mockymock: checking…', 'Checking for the mockymock CLI and Docker…');
     this.statusBarItem.show();
+    // ensureReady() (CLI install, Docker launch) only ever runs as a side
+    // effect of an actual test run, so without this the "checking…" label
+    // above would sit there — never true, never resolved — for the entire
+    // session until the user happens to run a test. This is read-only (no
+    // install, no Docker launch) so it's safe to fire on activation.
+    void this.refreshStatus();
   }
 
   private setStatus(text: string, tooltip?: string) {
     this.statusBarItem.text = text;
     this.statusBarItem.tooltip = tooltip ?? text;
+  }
+
+  // Read-only status probe for the status bar: reports what's there without
+  // installing anything or launching Docker. ensureReady() (below) is the
+  // one that actually fixes problems, and is what the status bar item's
+  // click command invokes.
+  async refreshStatus(): Promise<void> {
+    const executablePath = resolveExecutablePath(
+      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath')
+    );
+    const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
+    if (!mockymockOk) {
+      this.setStatus('$(warning) mockymock: CLI not found', 'Click to install the mockymock CLI');
+      return;
+    }
+    const dockerStatus = await checkDocker(runCommand);
+    if (dockerStatus === 'available') {
+      this.setStatus('$(check) mockymock: ready');
+    } else if (dockerStatus === 'daemon-down') {
+      this.setStatus('$(warning) mockymock: Docker not running', 'Click to start Docker Desktop');
+    } else {
+      this.setStatus('$(warning) mockymock: Docker not installed', 'Click to open the Docker Desktop download page');
+    }
   }
 
   async ensureReady(): Promise<ReadyResult> {

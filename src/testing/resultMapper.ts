@@ -1,5 +1,27 @@
 import { JUnitTestSuite } from './junitParser';
 
+// A FAIL reported by mockymock for a case id the run never started (crossed
+// wires between the framework and the compiled binary, or a MOCK/VERIFY
+// firing after its case already ended) surfaces in the JUnit fallback as a
+// `orphan-<id>` testcase — present in junitSuite.cases but never one of the
+// names the controller asked mapResults about, so it would otherwise vanish
+// with no visible trace. This distinguishes those from real, expected cases.
+export interface UnattributedFailure {
+  caseId: string;
+  message: string;
+}
+
+export function unattributedFailures(
+  expectedCaseNames: string[],
+  junitSuite: JUnitTestSuite | null
+): UnattributedFailure[] {
+  if (!junitSuite) return [];
+  const expected = new Set(expectedCaseNames);
+  return junitSuite.cases
+    .filter((c) => !expected.has(c.name) && c.status !== 'passed')
+    .map((c) => ({ caseId: c.name, message: c.messages.join('\n') || c.status }));
+}
+
 // One structured failure inside a failed case: the message always exists;
 // the .cut line (1-based) and expected/actual pair are present only when the
 // source provided them (the JSON report does, the JUnit fallback does not).

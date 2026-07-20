@@ -12,7 +12,7 @@ import {
   CUT_DISCOVERY_EXCLUDE_GLOB,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
-import { mapResults, CaseOutcome } from './resultMapper';
+import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
 import { parseJsonReport, mapJsonReport } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
@@ -331,12 +331,19 @@ export function activateTestController(
     // JUnit XML for a CLI predating --json-report; fall back to the process
     // output when neither was produced (refusal / compile failure).
     let outcomes: Map<string, CaseOutcome>;
+    // FAIL lines mockymock couldn't attribute to any known case id (a
+    // MOCK/VERIFY firing after its case already ended, or a framework/binary
+    // mismatch) — these don't belong to any TestItem, so nothing above would
+    // ever surface them; the run would otherwise look all-green.
+    let orphans: UnattributedFailure[];
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
     if (jsonReport) {
       outcomes = mapJsonReport(selectedNames, jsonReport, processFailureMessage);
+      orphans = jsonReport.orphanFailures;
     } else {
       const junitSuite = result.junitXml ? parseJUnitXml(result.junitXml) : null;
       outcomes = mapResults(selectedNames, junitSuite, junitSuite ? undefined : processFailureMessage);
+      orphans = unattributedFailures(selectedNames, junitSuite);
     }
 
     function messagesFor(outcome: CaseOutcome & { kind: 'failed' }): vscode.TestMessage[] {
@@ -384,7 +391,16 @@ export function activateTestController(
         run.passed(suiteItem);
       }
     });
-    if (wholeFile) {
+    if (orphans.length) {
+      const detail = orphans.map((o) => `case ${o.caseId}: ${o.message}`).join('\n');
+      const summary = `mockymock reported ${orphans.length} failure(s) not attributed to a known test case:\n${detail}`;
+      run.appendOutput(toCrlf(`\n${summary}\n`), undefined, fileItem);
+      // Not part of the wholeFile/case-item rollup above (there is no
+      // TestItem an orphan belongs to) — always flag it on the file itself,
+      // started or not, so it can never be masked by an otherwise-green run.
+      if (!wholeFile) run.started(fileItem);
+      run.errored(fileItem, new vscode.TestMessage(summary));
+    } else if (wholeFile) {
       if (fileHasFailed) {
         run.failed(fileItem, new vscode.TestMessage('one or more cases failed'));
       } else if (fileHasErrored) {
