@@ -91,3 +91,40 @@ describe('isExcludedCutPath', () => {
     );
   });
 });
+
+describe('parseCutFile TAGS', () => {
+  it('parses tags on a TESTCASE line', () => {
+    const text = ['TESTSUITE "s"', 'TESTCASE "a" TAGS "slow" "io"', 'TESTCASE "b"'].join('\n');
+    const suites = parseCutFile(text);
+    assert.deepStrictEqual(suites[0].cases[0].tags, ['slow', 'io']);
+    assert.deepStrictEqual(suites[0].cases[1].tags, []);
+  });
+});
+
+describe('cutSuitesFromCollectJson', () => {
+  it('converts collect output to CutSuite[] with 0-based lines', () => {
+    const { cutSuitesFromCollectJson } = require('./cutDiscovery');
+    const json = JSON.stringify({
+      version: 1,
+      cutFile: '/p/PROG.cut',
+      suite: { name: 'demo', line: 1 },
+      cases: [
+        { name: 'first', line: 3, tags: ['fast'] },
+        { name: 'second', line: 6, tags: [] },
+      ],
+    });
+    const suites = cutSuitesFromCollectJson(json);
+    assert.ok(suites);
+    assert.strictEqual(suites.length, 1);
+    assert.strictEqual(suites[0].name, 'demo');
+    assert.strictEqual(suites[0].line, 0);
+    assert.deepStrictEqual(suites[0].cases[0], { name: 'first', line: 2, tags: ['fast'] });
+    assert.deepStrictEqual(suites[0].cases[1], { name: 'second', line: 5, tags: [] });
+  });
+
+  it('returns null for the collect error document and for junk', () => {
+    const { cutSuitesFromCollectJson } = require('./cutDiscovery');
+    assert.strictEqual(cutSuitesFromCollectJson(JSON.stringify({ version: 1, error: 'boom' })), null);
+    assert.strictEqual(cutSuitesFromCollectJson('junk'), null);
+  });
+});

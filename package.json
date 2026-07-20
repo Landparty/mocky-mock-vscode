@@ -2,11 +2,11 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "publisher": "legacylens",
   "private": true,
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.88.0"
   },
   "categories": ["Testing"],
   "activationEvents": [
@@ -14,6 +14,27 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "languages": [
+      {
+        "id": "cut",
+        "aliases": ["mockymock .cut", "cut"],
+        "extensions": [".cut"],
+        "configuration": "./language/cut-language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cut",
+        "scopeName": "source.cut",
+        "path": "./syntaxes/cut.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "cut",
+        "path": "./snippets/cut.code-snippets"
+      }
+    ],
     "configuration": {
       "title": "mockymock",
       "properties": {
@@ -28,6 +49,19 @@
           "default": [],
           "scope": "resource",
           "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json."
+        },
+        "mockymock.lintOnSave": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Run 'mockymock lint' (static checks only, no Docker) on open/save of a .cut file and show the problems as diagnostics."
+        },
+        "mockymock.maxParallelRuns": {
+          "type": "number",
+          "default": 1,
+          "minimum": 1,
+          "scope": "window",
+          "description": "How many .cut files may run concurrently in one test run. Each run compiles and executes inside the shared mockymock-cobc container; raise this only if your setup tolerates concurrent compiles."
         }
       }
     }
@@ -41,7 +75,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.88.0",
     "@vscode/vsce": "^2.24.0",
     "mocha": "^10.3.0",
     "ts-node": "^10.9.2",

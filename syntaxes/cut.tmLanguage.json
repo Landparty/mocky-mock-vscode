@@ -1,0 +1,91 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "mockymock .cut",
+  "scopeName": "source.cut",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#structure" },
+    { "include": "#directives" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#cobol" }
+  ],
+  "repository": {
+    "comment": {
+      "match": "\\*>.*$",
+      "name": "comment.line.cut"
+    },
+    "structure": {
+      "patterns": [
+        {
+          "match": "^\\s*(TESTSUITE|TESTCASE)\\b(?:(.*?)(\\bTAGS\\b))?",
+          "captures": {
+            "1": { "name": "keyword.control.structure.cut" },
+            "3": { "name": "keyword.other.tags.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|ACCEPT)\\b(\\s+ROWS\\b)?",
+          "captures": {
+            "1": { "name": "keyword.control.mock.cut" },
+            "2": { "name": "storage.type.category.cut" },
+            "3": { "name": "keyword.other.rows.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(END-MOCK)\\.?\\s*$",
+          "name": "keyword.control.mock.cut"
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "match": "^\\s*(EXPECT)\\s+(\\S+)\\s+(TO\\s+BE)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.assertion.cut" },
+            "2": { "name": "variable.other.cobol.cut" },
+            "3": { "name": "keyword.operator.words.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(VERIFY)\\b(.*?)(WAS\\s+(?:CALLED|PERFORMED))\\s+(ONCE|NEVER|AT\\s+LEAST\\s+ONCE|\\d+\\s+TIMES)\\b",
+          "captures": {
+            "1": { "name": "keyword.control.assertion.cut" },
+            "3": { "name": "keyword.operator.words.cut" },
+            "4": { "name": "constant.language.expectation.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(PERFORM)\\s+(\\S+)(?:\\s+(THRU|THROUGH)\\s+(\\S+))?",
+          "captures": {
+            "1": { "name": "keyword.control.perform.cut" },
+            "2": { "name": "entity.name.function.paragraph.cut" },
+            "3": { "name": "keyword.control.perform.cut" },
+            "4": { "name": "entity.name.function.paragraph.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+(\\S+)\\s*$",
+          "captures": {
+            "1": { "name": "keyword.other.move.cut" },
+            "3": { "name": "keyword.other.move.cut" },
+            "4": { "name": "variable.other.cobol.cut" }
+          }
+        }
+      ]
+    },
+    "strings": {
+      "match": "\"[^\"]*\"",
+      "name": "string.quoted.double.cut"
+    },
+    "numbers": {
+      "match": "(?<![\\w-])[+-]?\\d+(?:\\.\\d+)?(?![\\w-])",
+      "name": "constant.numeric.cut"
+    },
+    "cobol": {
+      "match": "\\b(IF|ELSE|END-IF|EVALUATE|WHEN|END-EVALUATE|DISPLAY|COMPUTE|ADD|SUBTRACT|MULTIPLY|DIVIDE)\\b",
+      "name": "keyword.other.cobol.cut"
+    }
+  }
+}

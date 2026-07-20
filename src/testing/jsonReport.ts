@@ -1,0 +1,165 @@
+// Parses `mockymock run --json-report` output and maps it onto CaseOutcomes.
+// This is the preferred results channel (it carries .cut line numbers and
+// expected/actual per failure); the JUnit XML path in resultMapper.ts stays
+// as the fallback for a mockymock CLI that predates --json-report.
+import { CaseOutcome, FailureDetail } from './resultMapper';
+
+export interface JsonReportFailure {
+  message: string;
+  kind: 'expect' | 'verify' | 'unknown';
+  line: number | null;
+  expected: string | null;
+  actual: string | null;
+}
+
+export interface JsonReportCase {
+  name: string;
+  line: number | null;
+  tags: string[];
+  status: 'passed' | 'failed' | 'crashed' | 'not_run';
+  failures: JsonReportFailure[];
+  crashDetail?: string | null;
+}
+
+export interface JsonRunReport {
+  version: number;
+  suite: { name: string; line: number | null };
+  cases: JsonReportCase[];
+  orphanFailures: { caseId: string; message: string }[];
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function asNumberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+// Tolerant by design: a report from a newer/older CLI with extra or missing
+// optional fields still parses; only a structurally alien document (no
+// cases array) returns null and lets the caller fall back to JUnit.
+export function parseJsonReport(text: string): JsonRunReport | null {
+  let doc: unknown;
+  try {
+    doc = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (typeof doc !== 'object' || doc === null) return null;
+  const root = doc as Record<string, unknown>;
+  if (!Array.isArray(root.cases)) return null;
+
+  const suiteRaw = (root.suite ?? {}) as Record<string, unknown>;
+  const cases: JsonReportCase[] = [];
+  for (const entry of root.cases) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const c = entry as Record<string, unknown>;
+    const name = asString(c.name);
+    if (name === null) continue;
+    const status = asString(c.status);
+    const failures: JsonReportFailure[] = [];
+    if (Array.isArray(c.failures)) {
+      for (const f of c.failures) {
+        if (typeof f !== 'object' || f === null) continue;
+        const failure = f as Record<string, unknown>;
+        const kindRaw = asString(failure.kind);
+        failures.push({
+          message: asString(failure.message) ?? '',
+          kind: kindRaw === 'expect' || kindRaw === 'verify' ? kindRaw : 'unknown',
+          line: asNumberOrNull(failure.line),
+          expected: asString(failure.expected),
+          actual: asString(failure.actual),
+        });
+      }
+    }
+    cases.push({
+      name,
+      line: asNumberOrNull(c.line),
+      tags: Array.isArray(c.tags) ? c.tags.filter((t): t is string => typeof t === 'string') : [],
+      status:
+        status === 'passed' || status === 'failed' || status === 'crashed' || status === 'not_run'
+          ? status
+          : 'failed',
+      failures,
+      crashDetail: asString(c.crashDetail),
+    });
+  }
+
+  const orphanFailures: { caseId: string; message: string }[] = [];
+  if (Array.isArray(root.orphanFailures)) {
+    for (const o of root.orphanFailures) {
+      if (typeof o !== 'object' || o === null) continue;
+      const orphan = o as Record<string, unknown>;
+      orphanFailures.push({
+        caseId: asString(orphan.caseId) ?? '?',
+        message: asString(orphan.message) ?? '',
+      });
+    }
+  }
+
+  return {
+    version: asNumberOrNull(root.version) ?? 0,
+    suite: { name: asString(suiteRaw.name) ?? '', line: asNumberOrNull(suiteRaw.line) },
+    cases,
+    orphanFailures,
+  };
+}
+
+export function mapJsonReport(
+  expectedCaseNames: string[],
+  report: JsonRunReport | null,
+  processFailureMessage?: string
+): Map<string, CaseOutcome> {
+  const outcomes = new Map<string, CaseOutcome>();
+
+  if (!report) {
+    const message =
+      processFailureMessage ?? 'mockymock run did not produce results (refused or failed to compile)';
+    for (const name of expectedCaseNames) {
+      outcomes.set(name, { kind: 'errored', message });
+    }
+    return outcomes;
+  }
+
+  const byName = new Map(report.cases.map((c) => [c.name, c]));
+  for (const name of expectedCaseNames) {
+    const found = byName.get(name);
+    if (!found || found.status === 'not_run') {
+      outcomes.set(name, {
+        kind: 'not-run',
+        message:
+          found?.crashDetail
+            ? `did not run — an earlier case in this suite crashed (${found.crashDetail})`
+            : 'did not run — an earlier case in this suite crashed',
+      });
+      continue;
+    }
+    if (found.status === 'passed') {
+      outcomes.set(name, { kind: 'passed' });
+      continue;
+    }
+    if (found.status === 'crashed') {
+      const parts = found.failures.map((f) => f.message);
+      const detail = found.crashDetail ? ` (${found.crashDetail})` : '';
+      const prefix = `case crashed before its checks finished${detail}`;
+      outcomes.set(name, {
+        kind: 'errored',
+        message: parts.length ? `${prefix}\n${parts.join('\n')}` : prefix,
+      });
+      continue;
+    }
+    const details: FailureDetail[] = found.failures.map((f) => ({
+      message: f.message,
+      line: f.line,
+      expected: f.expected,
+      actual: f.actual,
+    }));
+    outcomes.set(name, {
+      kind: 'failed',
+      message: details.map((d) => d.message).join('\n') || 'failed',
+      details,
+    });
+  }
+  return outcomes;
+}
