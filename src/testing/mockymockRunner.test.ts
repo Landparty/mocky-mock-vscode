@@ -64,3 +64,63 @@ describe('runSuite', () => {
     ]);
   });
 });
+
+describe('buildRunArgs extras', () => {
+  it('adds --json-report, --coverage-json, and --case flags', () => {
+    const args = buildRunArgs('/p/PROG.cbl', '/p/PROG.cut', '/tmp/out.xml', ['/copy/a'], {
+      jsonReportPath: '/tmp/report.json',
+      coverageJsonPath: '/tmp/coverage.json',
+      caseNames: ['first case', 'second case'],
+    });
+    assert.deepStrictEqual(args, [
+      'run', '/p/PROG.cbl', '--cut', '/p/PROG.cut', '--junit-xml', '/tmp/out.xml',
+      '--json-report', '/tmp/report.json',
+      '--coverage-json', '/tmp/coverage.json',
+      '--case', 'first case',
+      '--case', 'second case',
+      '--copybook-path', '/copy/a',
+    ]);
+  });
+
+  it('reads back the json report and coverage json when paths are set', async () => {
+    const files: Record<string, string> = {
+      '/tmp/out.xml': '<testsuite/>',
+      '/tmp/report.json': '{"cases":[]}',
+      '/tmp/coverage.json': '{"original":{"lines":[]}}',
+    };
+    const fakeRun: CommandRunner = async () => ({ code: 0, stdout: '', stderr: '' });
+    const result = await runSuite(
+      {
+        executablePath: 'mockymock',
+        cblPath: '/p/PROG.cbl',
+        cutPath: '/p/PROG.cut',
+        junitXmlPath: '/tmp/out.xml',
+        copybookPaths: [],
+        jsonReportPath: '/tmp/report.json',
+        coverageJsonPath: '/tmp/coverage.json',
+      },
+      fakeRun,
+      async (p) => files[p] ?? null
+    );
+    assert.strictEqual(result.junitXml, '<testsuite/>');
+    assert.strictEqual(result.jsonReport, '{"cases":[]}');
+    assert.strictEqual(result.coverageJson, '{"original":{"lines":[]}}');
+  });
+
+  it('forwards an abort signal through to the command runner', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const fakeRun: CommandRunner = async (_cmd, _args, _onOutput, signal) => {
+      seenSignal = signal;
+      return { code: 0, stdout: '', stderr: '' };
+    };
+    const abort = new AbortController();
+    await runSuite(
+      { executablePath: 'mockymock', cblPath: '/p/PROG.cbl', cutPath: '/p/PROG.cut', junitXmlPath: '/tmp/out.xml', copybookPaths: [] },
+      fakeRun,
+      async () => null,
+      undefined,
+      abort.signal
+    );
+    assert.strictEqual(seenSignal, abort.signal);
+  });
+});

@@ -11,7 +11,8 @@ export type OutputListener = (chunk: string, stream: 'stdout' | 'stderr') => voi
 export type CommandRunner = (
   command: string,
   args: string[],
-  onOutput?: OutputListener
+  onOutput?: OutputListener,
+  signal?: AbortSignal
 ) => Promise<CommandResult>;
 
 // When spawn() is invoked with `shell: true`, Node hands the args array to cmd.exe by
@@ -29,7 +30,7 @@ export function quoteArgForWindowsShell(arg: string): string {
   return arg;
 }
 
-export const runCommand: CommandRunner = (command, args, onOutput) => {
+export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -43,7 +44,11 @@ export const runCommand: CommandRunner = (command, args, onOutput) => {
     const spawnCommand = useShell ? quoteArgForWindowsShell(command) : command;
     const spawnArgs = useShell ? args.map(quoteArgForWindowsShell) : args;
     try {
-      child = spawn(spawnCommand, spawnArgs, { shell: useShell });
+      // Node's own AbortSignal support kills the child (SIGTERM) when the
+      // signal fires — this is how a Test Explorer "cancel" actually stops
+      // an in-flight mockymock/docker process instead of merely being
+      // noted between files.
+      child = spawn(spawnCommand, spawnArgs, { shell: useShell, signal });
     } catch {
       resolve({ code: -1, stdout: '', stderr: 'command not found' });
       return;
@@ -58,7 +63,19 @@ export const runCommand: CommandRunner = (command, args, onOutput) => {
       stderr += text;
       onOutput?.(text, 'stderr');
     });
-    child.on('error', () => resolve({ code: -1, stdout, stderr: stderr || 'command not found' }));
-    child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
+    child.on('error', () =>
+      resolve({
+        code: -1,
+        stdout,
+        stderr: signal?.aborted ? 'run cancelled' : stderr || 'command not found',
+      })
+    );
+    child.on('close', (code) =>
+      resolve({
+        code: code ?? -1,
+        stdout,
+        stderr: signal?.aborted && !stderr ? 'run cancelled' : stderr,
+      })
+    );
   });
 };

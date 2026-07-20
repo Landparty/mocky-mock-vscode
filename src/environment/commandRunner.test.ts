@@ -55,3 +55,19 @@ describe('runCommand', () => {
     assert.ok(result.stderr.length > 0);
   });
 });
+
+describe('runCommand cancellation', () => {
+  it('kills the child and resolves with a non-zero code when the signal aborts', async () => {
+    const abort = new AbortController();
+    const pending = runCommand(
+      process.execPath,
+      ['-e', 'setTimeout(() => {}, 30000);'],
+      undefined,
+      abort.signal
+    );
+    setTimeout(() => abort.abort(), 100);
+    const result = await pending;
+    assert.notStrictEqual(result.code, 0);
+    assert.match(result.stderr, /cancelled/);
+  });
+});
