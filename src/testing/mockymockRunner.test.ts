@@ -44,4 +44,23 @@ describe('runSuite', () => {
     assert.strictEqual(result.junitXml, null);
     assert.match(result.stderr, /refused/);
   });
+
+  it('forwards an onOutput listener through to the command runner', async () => {
+    const fakeRun: CommandRunner = async (cmd, args, onOutput) => {
+      onOutput?.('compiling…\n', 'stdout');
+      onOutput?.('warning: foo\n', 'stderr');
+      return { code: 0, stdout: 'compiling…\n', stderr: 'warning: foo\n' };
+    };
+    const chunks: Array<{ text: string; stream: string }> = [];
+    await runSuite(
+      { executablePath: 'mockymock', cblPath: '/p/PROG.cbl', cutPath: '/p/PROG.cut', junitXmlPath: '/tmp/out.xml', copybookPaths: [] },
+      fakeRun,
+      async () => '<testsuite/>',
+      (chunk, stream) => chunks.push({ text: chunk, stream })
+    );
+    assert.deepStrictEqual(chunks, [
+      { text: 'compiling…\n', stream: 'stdout' },
+      { text: 'warning: foo\n', stream: 'stderr' },
+    ]);
+  });
 });

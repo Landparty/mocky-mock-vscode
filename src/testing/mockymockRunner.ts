@@ -1,4 +1,4 @@
-import { CommandRunner } from '../environment/commandRunner';
+import { CommandRunner, OutputListener } from '../environment/commandRunner';
 
 export function buildRunArgs(
   cblPath: string,
@@ -31,10 +31,11 @@ export interface MockymockRunResult {
 export async function runSuite(
   options: RunSuiteOptions,
   run: CommandRunner,
-  readFileIfExists: (path: string) => Promise<string | null>
+  readFileIfExists: (path: string) => Promise<string | null>,
+  onOutput?: OutputListener
 ): Promise<MockymockRunResult> {
   const args = buildRunArgs(options.cblPath, options.cutPath, options.junitXmlPath, options.copybookPaths);
-  const result = await run(options.executablePath, args);
+  const result = await run(options.executablePath, args, onOutput);
   const junitXml = await readFileIfExists(options.junitXmlPath);
   return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr, junitXml };
 }

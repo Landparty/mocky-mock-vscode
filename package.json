@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "legacylens",
   "private": true,
   "engines": {
@@ -26,7 +26,8 @@
           "type": "array",
           "items": { "type": "string" },
           "default": [],
-          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members."
+          "scope": "resource",
+          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json."
         }
       }
     }

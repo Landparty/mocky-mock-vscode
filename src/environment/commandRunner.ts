@@ -6,7 +6,13 @@ export interface CommandResult {
   stderr: string;
 }
 
-export type CommandRunner = (command: string, args: string[]) => Promise<CommandResult>;
+export type OutputListener = (chunk: string, stream: 'stdout' | 'stderr') => void;
+
+export type CommandRunner = (
+  command: string,
+  args: string[],
+  onOutput?: OutputListener
+) => Promise<CommandResult>;
 
 // When spawn() is invoked with `shell: true`, Node hands the args array to cmd.exe by
 // joining it into a single command-line string WITHOUT adding any quoting of its own.
@@ -23,21 +29,35 @@ export function quoteArgForWindowsShell(arg: string): string {
   return arg;
 }
 
-export const runCommand: CommandRunner = (command, args) => {
+export const runCommand: CommandRunner = (command, args, onOutput) => {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
     let child;
     const useShell = process.platform === 'win32';
+    // The command itself needs the same quoting as the args (below): shell:true joins
+    // file+args into one command-line string for cmd.exe, and Node does not quote `file`
+    // for you, so an executablePath containing a space (e.g. a custom mockymock.executablePath
+    // setting under "C:\Program Files\...") would otherwise be split apart before cmd.exe
+    // even looks for it.
+    const spawnCommand = useShell ? quoteArgForWindowsShell(command) : command;
     const spawnArgs = useShell ? args.map(quoteArgForWindowsShell) : args;
     try {
-      child = spawn(command, spawnArgs, { shell: useShell });
+      child = spawn(spawnCommand, spawnArgs, { shell: useShell });
     } catch {
       resolve({ code: -1, stdout: '', stderr: 'command not found' });
       return;
     }
-    child.stdout?.on('data', (d) => (stdout += d.toString()));
-    child.stderr?.on('data', (d) => (stderr += d.toString()));
+    child.stdout?.on('data', (d) => {
+      const text = d.toString();
+      stdout += text;
+      onOutput?.(text, 'stdout');
+    });
+    child.stderr?.on('data', (d) => {
+      const text = d.toString();
+      stderr += text;
+      onOutput?.(text, 'stderr');
+    });
     child.on('error', () => resolve({ code: -1, stdout, stderr: stderr || 'command not found' }));
     child.on('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
   });

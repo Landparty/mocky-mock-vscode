@@ -3,13 +3,14 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { parseCutFile, resolveCblPath } from '../discovery/cutDiscovery';
+import { parseCutFile, resolveCblPath, isExcludedCutPath, CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import { mapResults } from './resultMapper';
 import { runSuite } from './mockymockRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
 import { resolveExecutablePath } from '../environment/checks';
+import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 export function activateTestController(
   context: vscode.ExtensionContext,
@@ -21,6 +22,7 @@ export function activateTestController(
   const fileItems = new Map<string, vscode.TestItem>();
 
   async function discoverAndBuild(uri: vscode.Uri) {
+    if (isExcludedCutPath(uri.fsPath)) return;
     let text: string;
     try {
       text = await fs.readFile(uri.fsPath, 'utf8');
@@ -30,6 +32,11 @@ export function activateTestController(
     const suites = parseCutFile(text);
 
     const fileItem = controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+    const relativeDir = path.dirname(
+      workspaceFolder ? path.relative(workspaceFolder.uri.fsPath, uri.fsPath) : uri.fsPath
+    );
+    if (relativeDir !== '.') fileItem.description = relativeDir;
     const suiteItems = suites.map((suite) => {
       const suiteItem = controller.createTestItem(`${uri.toString()}::${suite.name}`, suite.name, uri);
       suiteItem.range = new vscode.Range(suite.line, 0, suite.line, 0);
@@ -57,7 +64,7 @@ export function activateTestController(
   }
 
   async function discoverAllCutFiles() {
-    const uris = await vscode.workspace.findFiles('**/*.cut', '**/node_modules/**');
+    const uris = await vscode.workspace.findFiles('**/*.cut', CUT_DISCOVERY_EXCLUDE_GLOB);
     await Promise.all(uris.map(discoverAndBuild));
   }
 
@@ -87,6 +94,7 @@ export function activateTestController(
 
     const ready = await environmentManager.ensureReady();
     if (!ready.ok) {
+      run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
       fileItem.children.forEach((suiteItem) => {
         suiteItem.children.forEach((caseItem) => run.errored(caseItem, new vscode.TestMessage(ready.message)));
         run.errored(suiteItem, new vscode.TestMessage(ready.message));
@@ -98,10 +106,14 @@ export function activateTestController(
     const cutPath = fileItem.uri!.fsPath;
     const cblPath = resolveCblPath(cutPath);
     const junitXmlPath = path.join(os.tmpdir(), `mockymock-${Date.now()}-${Math.random().toString(36).slice(2)}.xml`);
-    const config = vscode.workspace.getConfiguration('mockymock');
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileItem.uri!);
+    const config = vscode.workspace.getConfiguration('mockymock', fileItem.uri);
     const executablePath = resolveExecutablePath(config.get<string>('executablePath'));
-    const copybookPaths = config.get<string[]>('copybookPaths') ?? [];
+    const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
+      workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
+    );
 
+    run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, fileItem);
     const result = await runSuite(
       { executablePath, cblPath, cutPath, junitXmlPath, copybookPaths },
       runCommand,
@@ -111,8 +123,10 @@ export function activateTestController(
         } catch {
           return null;
         }
-      }
+      },
+      createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem))
     );
+    run.appendOutput(formatRunTrailer(result.exitCode), undefined, fileItem);
     await fs.unlink(junitXmlPath).catch(() => undefined);
 
     const allCaseNames: string[] = [];
@@ -187,6 +201,7 @@ export function activateTestController(
           // (e.g. a bad JUnit XML parse) after marking items started, mark this file's
           // whole tree as errored and move on to the next file.
           const message = err instanceof Error ? err.message : String(err);
+          run.appendOutput(toCrlf(`${message}\n`), undefined, fileItem);
           fileItem.children.forEach((suiteItem) => {
             suiteItem.children.forEach((caseItem) => run.errored(caseItem, new vscode.TestMessage(message)));
             run.errored(suiteItem, new vscode.TestMessage(message));

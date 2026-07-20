@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { parseCutFile, resolveCblPath } from './cutDiscovery';
+import { parseCutFile, resolveCblPath, isExcludedCutPath } from './cutDiscovery';
 
 describe('parseCutFile', () => {
   it('parses a single suite with multiple cases', () => {
@@ -53,5 +53,41 @@ describe('resolveCblPath', () => {
     const cutPath = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cut');
     const expected = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cbl');
     assert.strictEqual(resolveCblPath(cutPath), expected);
+  });
+});
+
+describe('isExcludedCutPath', () => {
+  it('excludes a path under a .claude/worktrees checkout', () => {
+    assert.strictEqual(
+      isExcludedCutPath('/repo/.claude/worktrees/some-branch/examples/invupdt/INVUPDT.cut'),
+      true
+    );
+  });
+
+  it('excludes a path under a top-level .worktrees checkout', () => {
+    assert.strictEqual(isExcludedCutPath('/repo/.worktrees/some-branch/examples/invupdt/INVUPDT.cut'), true);
+  });
+
+  it('excludes a path under a plain worktrees/ directory', () => {
+    assert.strictEqual(isExcludedCutPath('/repo/worktrees/some-branch/examples/invupdt/INVUPDT.cut'), true);
+  });
+
+  it('excludes a path under node_modules', () => {
+    assert.strictEqual(isExcludedCutPath('/repo/node_modules/some-package/fixture.cut'), true);
+  });
+
+  it('does not exclude a real example path', () => {
+    assert.strictEqual(isExcludedCutPath('/repo/examples/invupdt/INVUPDT.cut'), false);
+  });
+
+  it('does not exclude a path that merely contains "worktrees" as a substring, not a whole segment', () => {
+    assert.strictEqual(isExcludedCutPath('/repo/my-worktrees-notes/INVUPDT.cut'), false);
+  });
+
+  it('works with Windows-style backslash separators', () => {
+    assert.strictEqual(
+      isExcludedCutPath('C:\\repo\\.claude\\worktrees\\some-branch\\examples\\invupdt\\INVUPDT.cut'),
+      true
+    );
   });
 });
