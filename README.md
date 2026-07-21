@@ -22,6 +22,13 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
 - **Coverage profile.** "Run with Coverage" uses
   `--coverage-json` and paints gutter coverage on the **original** `.cbl`
   (the framework excludes its own instrumentation lines).
+- **Debug (Execution Trace).** The debug icon on a single `TESTCASE` runs
+  `mockymock run --trace-json` and prints the executed path through your
+  `.cbl` plus the mocks that fired, in order, into the Test Results panel.
+  Needs exactly one selected case (the CLI itself refuses an unscoped
+  trace) and a `mockymock` new enough for `--trace-json` — an older CLI
+  degrades to a clear "too old" message instead of a confusing generic
+  failure.
 - **Continuous run.** Toggle the eye icon on a test to re-run it whenever
   its `.cut` or paired `.cbl` changes.
 - **Cancellation actually cancels** — stopping a run kills the in-flight
@@ -57,7 +64,9 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
   Single-test runs, tags, lint, JSON reports, and coverage mapping need a
   CLI new enough to have `collect`/`lint`/`--case`/`--json-report`/
   `--coverage-json`; older CLIs degrade gracefully (whole-file runs, JUnit
-  results, regex discovery).
+  results, regex discovery). Debug (Execution Trace) additionally needs
+  `--trace-json`; an older CLI degrades to a clear message on that one
+  profile rather than failing anything else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container).
 - VS Code ≥ 1.88.
