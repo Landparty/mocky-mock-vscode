@@ -15,16 +15,32 @@ import { parseJUnitXml } from './junitParser';
 import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
 import { parseJsonReport, mapJsonReport } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
+import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { resolveExecutablePath } from '../environment/checks';
+import { resolveExecutablePath, supportsTraceFlag } from '../environment/checks';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 interface FilePlan {
   fileItem: vscode.TestItem;
   /** null = run the whole file (no --case flags, identical to a classic run). */
   caseNames: string[] | null;
+}
+
+function messagesForOutcome(outcome: CaseOutcome & { kind: 'failed' }, cutUri: vscode.Uri): vscode.TestMessage[] {
+  if (!outcome.details?.length) return [new vscode.TestMessage(outcome.message)];
+  return outcome.details.map((detail) => {
+    const message =
+      detail.expected !== null && detail.actual !== null
+        ? vscode.TestMessage.diff(detail.message, detail.expected, detail.actual)
+        : new vscode.TestMessage(detail.message);
+    if (detail.line !== null) {
+      // JSON report lines are 1-based; editor positions are 0-based.
+      message.location = new vscode.Location(cutUri, new vscode.Position(detail.line - 1, 0));
+    }
+    return message;
+  });
 }
 
 export function activateTestController(
@@ -346,22 +362,6 @@ export function activateTestController(
       orphans = unattributedFailures(selectedNames, junitSuite);
     }
 
-    function messagesFor(outcome: CaseOutcome & { kind: 'failed' }): vscode.TestMessage[] {
-      if (!outcome.details?.length) return [new vscode.TestMessage(outcome.message)];
-      const cutUri = fileItem.uri!;
-      return outcome.details.map((detail) => {
-        const message =
-          detail.expected !== null && detail.actual !== null
-            ? vscode.TestMessage.diff(detail.message, detail.expected, detail.actual)
-            : new vscode.TestMessage(detail.message);
-        if (detail.line !== null) {
-          // JSON report lines are 1-based; editor positions are 0-based.
-          message.location = new vscode.Location(cutUri, new vscode.Position(detail.line - 1, 0));
-        }
-        return message;
-      });
-    }
-
     let fileHasFailed = false;
     let fileHasErrored = false;
     forEachSelectedSuite(plan, selected, (suiteItem, cases) => {
@@ -373,7 +373,7 @@ export function activateTestController(
           run.passed(caseItem);
         } else if (outcome.kind === 'failed') {
           suiteHasFailed = true;
-          run.failed(caseItem, messagesFor(outcome));
+          run.failed(caseItem, messagesForOutcome(outcome, fileItem.uri!));
         } else {
           // 'errored' (refusal/compile failure/crash) or 'not-run' (an
           // earlier sibling crashed mid-suite before this case started).
@@ -425,6 +425,143 @@ export function activateTestController(
         );
         run.addCoverage(fileCoverage);
       }
+    }
+  }
+
+  // "Debug (Execution Trace)": runs exactly ONE selected test case with
+  // --trace-json and renders the executed path + mock timeline into the
+  // Test Results panel. Mirrors runOneFile's plumbing (temp files, output
+  // streaming, pass/fail mapping) but scoped to a single case, because the
+  // sibling mockymock CLI itself refuses --trace unless exactly one case is
+  // selected -- the suite compiles as a single binary and the trace file
+  // carries no per-case markers, so an unscoped trace cannot be attributed.
+  async function runDebugTrace(
+    run: vscode.TestRun,
+    token: vscode.CancellationToken,
+    plans: FilePlan[]
+  ) {
+    const allSelected = plans.flatMap(selectedCaseItems);
+    if (allSelected.length !== 1) {
+      const message =
+        'mockymock: "Debug (Execution Trace)" needs exactly one selected test case -- ' +
+        'the suite runs as a single binary, so an unscoped trace cannot be attributed to ' +
+        'one case. Select a single TESTCASE and try again.';
+      for (const item of allSelected) {
+        run.started(item);
+        run.errored(item, new vscode.TestMessage(message));
+      }
+      return;
+    }
+
+    const [caseItem] = allSelected;
+    const plan = plans.find((p) => selectedCaseItems(p).includes(caseItem))!;
+    run.started(caseItem);
+
+    const ready = await environmentManager.ensureReady();
+    if (!ready.ok) {
+      run.appendOutput(toCrlf(`${ready.message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(ready.message));
+      return;
+    }
+    if (token.isCancellationRequested) {
+      run.skipped(caseItem);
+      return;
+    }
+
+    const cutUri = plan.fileItem.uri!;
+    const cutPath = cutUri.fsPath;
+    const cblPath = resolveCblPath(cutPath);
+    const executablePath = resolveConfiguredExecutable(cutUri);
+
+    const supportsTrace = await supportsTraceFlag(runCommand, executablePath);
+    if (!supportsTrace) {
+      const message =
+        `mockymock at "${executablePath}" is too old to support execution tracing ` +
+        '(needs --trace-json). Upgrade mockymock and try again.';
+      run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(message));
+      return;
+    }
+
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(cutUri);
+    const config = vscode.workspace.getConfiguration('mockymock', cutUri);
+    const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
+      workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
+    );
+
+    const stamp = `mockymock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const junitXmlPath = path.join(os.tmpdir(), `${stamp}.xml`);
+    const jsonReportPath = path.join(os.tmpdir(), `${stamp}.json`);
+    const traceJsonPath = path.join(os.tmpdir(), `${stamp}-trace.json`);
+
+    const abort = new AbortController();
+    const cancelListener = token.onCancellationRequested(() => abort.abort());
+
+    run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, caseItem);
+    let result;
+    try {
+      result = await runSuite(
+        {
+          executablePath,
+          cblPath,
+          cutPath,
+          junitXmlPath,
+          copybookPaths,
+          jsonReportPath,
+          traceJsonPath,
+          caseNames: [caseItem.label],
+        },
+        runCommand,
+        async (p) => {
+          try {
+            return await fs.readFile(p, 'utf8');
+          } catch {
+            return null;
+          }
+        },
+        createOutputStreamer((text) => run.appendOutput(text, undefined, caseItem)),
+        abort.signal
+      );
+    } finally {
+      cancelListener.dispose();
+    }
+    run.appendOutput(formatRunTrailer(result.exitCode), undefined, caseItem);
+    await fs.unlink(junitXmlPath).catch(() => undefined);
+    await fs.unlink(jsonReportPath).catch(() => undefined);
+    await fs.unlink(traceJsonPath).catch(() => undefined);
+
+    if (token.isCancellationRequested) {
+      run.skipped(caseItem);
+      return;
+    }
+
+    const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
+    const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
+    const outcomes = jsonReport
+      ? mapJsonReport([caseItem.label], jsonReport, processFailureMessage)
+      : mapResults(
+          [caseItem.label],
+          result.junitXml ? parseJUnitXml(result.junitXml) : null,
+          result.junitXml ? undefined : processFailureMessage
+        );
+    const outcome = outcomes.get(caseItem.label);
+    if (!outcome || outcome.kind === 'passed') {
+      run.passed(caseItem);
+    } else if (outcome.kind === 'failed') {
+      run.failed(caseItem, messagesForOutcome(outcome, cutUri));
+    } else {
+      run.errored(caseItem, new vscode.TestMessage(outcome.message));
+    }
+
+    if (result.traceJson) {
+      const trace = parseTraceJson(result.traceJson);
+      if (trace) {
+        run.appendOutput(toCrlf(formatTraceOutput(trace)), undefined, caseItem);
+      } else {
+        run.appendOutput(toCrlf('mockymock: execution trace could not be parsed\n'), undefined, caseItem);
+      }
+    } else {
+      run.appendOutput(toCrlf('mockymock: no execution trace produced\n'), undefined, caseItem);
     }
   }
 
@@ -513,6 +650,21 @@ export function activateTestController(
   coverageProfile.loadDetailedCoverage = async (_testRun, fileCoverage) =>
     coverageDetails.get(fileCoverage as vscode.FileCoverage) ?? [];
   context.subscriptions.push(coverageProfile);
+
+  const debugProfile = controller.createRunProfile(
+    'Debug (Execution Trace)',
+    vscode.TestRunProfileKind.Debug,
+    async (request, token) => {
+      const run = controller.createTestRun(request);
+      try {
+        await runDebugTrace(run, token, planRuns(request));
+      } finally {
+        run.end();
+      }
+    },
+    true
+  );
+  context.subscriptions.push(debugProfile);
 
   return controller;
 }
