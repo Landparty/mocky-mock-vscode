@@ -3,6 +3,7 @@ import { CommandRunner, OutputListener } from '../environment/commandRunner';
 export interface RunArgExtras {
   jsonReportPath?: string;
   coverageJsonPath?: string;
+  traceJsonPath?: string;
   caseNames?: string[];
 }
 
@@ -19,6 +20,9 @@ export function buildRunArgs(
   }
   if (extras.coverageJsonPath) {
     args.push('--coverage-json', extras.coverageJsonPath);
+  }
+  if (extras.traceJsonPath) {
+    args.push('--trace-json', extras.traceJsonPath);
   }
   for (const name of extras.caseNames ?? []) {
     args.push('--case', name);
@@ -39,6 +43,8 @@ export interface RunSuiteOptions {
   jsonReportPath?: string;
   /** Temp path for --coverage-json; when set, the result carries its content. */
   coverageJsonPath?: string;
+  /** Temp path for --trace-json; when set, the result carries its content. */
+  traceJsonPath?: string;
   /** Restrict the run to these TESTCASE names (mockymock run --case ...). */
   caseNames?: string[];
 }
@@ -50,6 +56,7 @@ export interface MockymockRunResult {
   junitXml: string | null;
   jsonReport: string | null;
   coverageJson: string | null;
+  traceJson: string | null;
 }
 
 export async function runSuite(
@@ -62,11 +69,13 @@ export async function runSuite(
   const args = buildRunArgs(options.cblPath, options.cutPath, options.junitXmlPath, options.copybookPaths, {
     jsonReportPath: options.jsonReportPath,
     coverageJsonPath: options.coverageJsonPath,
+    traceJsonPath: options.traceJsonPath,
     caseNames: options.caseNames,
   });
   const result = await run(options.executablePath, args, onOutput, signal);
   const junitXml = await readFileIfExists(options.junitXmlPath);
   const jsonReport = options.jsonReportPath ? await readFileIfExists(options.jsonReportPath) : null;
   const coverageJson = options.coverageJsonPath ? await readFileIfExists(options.coverageJsonPath) : null;
-  return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr, junitXml, jsonReport, coverageJson };
+  const traceJson = options.traceJsonPath ? await readFileIfExists(options.traceJsonPath) : null;
+  return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr, junitXml, jsonReport, coverageJson, traceJson };
 }

@@ -82,6 +82,49 @@ describe('buildRunArgs extras', () => {
     ]);
   });
 
+  it('reads back the trace json when the path is set', async () => {
+    const files: Record<string, string> = {
+      '/tmp/out.xml': '<testsuite/>',
+      '/tmp/trace.json': '{"path":[],"mocks":[]}',
+    };
+    const fakeRun: CommandRunner = async () => ({ code: 0, stdout: '', stderr: '' });
+    const result = await runSuite(
+      {
+        executablePath: 'mockymock',
+        cblPath: '/p/PROG.cbl',
+        cutPath: '/p/PROG.cut',
+        junitXmlPath: '/tmp/out.xml',
+        copybookPaths: [],
+        traceJsonPath: '/tmp/trace.json',
+      },
+      fakeRun,
+      async (p) => files[p] ?? null
+    );
+    assert.strictEqual(result.traceJson, '{"path":[],"mocks":[]}');
+  });
+
+  it('leaves traceJson null when no trace path was requested', async () => {
+    const fakeRun: CommandRunner = async () => ({ code: 0, stdout: '', stderr: '' });
+    const result = await runSuite(
+      { executablePath: 'mockymock', cblPath: '/p/PROG.cbl', cutPath: '/p/PROG.cut', junitXmlPath: '/tmp/out.xml', copybookPaths: [] },
+      fakeRun,
+      async () => '<testsuite/>'
+    );
+    assert.strictEqual(result.traceJson, null);
+  });
+
+  it('adds a --trace-json flag when requested', () => {
+    const args = buildRunArgs('/p/PROG.cbl', '/p/PROG.cut', '/tmp/out.xml', [], {
+      traceJsonPath: '/tmp/trace.json',
+      caseNames: ['only case'],
+    });
+    assert.deepStrictEqual(args, [
+      'run', '/p/PROG.cbl', '--cut', '/p/PROG.cut', '--junit-xml', '/tmp/out.xml',
+      '--trace-json', '/tmp/trace.json',
+      '--case', 'only case',
+    ]);
+  });
+
   it('reads back the json report and coverage json when paths are set', async () => {
     const files: Record<string, string> = {
       '/tmp/out.xml': '<testsuite/>',
