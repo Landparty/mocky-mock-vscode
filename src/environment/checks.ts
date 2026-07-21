@@ -9,6 +9,19 @@ export async function checkCommandAvailable(
   return result.code === 0;
 }
 
+// `mockymock run --trace-json PATH` is a flag argparse may not recognize on
+// an older installed CLI -- and an unrecognized flag fails the ENTIRE `run`
+// invocation (argparse exit 2), not just that flag. Probing with `--help`
+// first is cheap and always succeeds regardless of the command's OTHER
+// required arguments (argparse's --help short-circuits before validating
+// `program`/`--cut`), so this is a safe capability check to run before ever
+// using the flag for real -- exactly the discoverSuites-style "check first,
+// degrade gracefully" pattern, applied to a flag instead of a subcommand.
+export async function supportsTraceFlag(run: CommandRunner, executablePath: string): Promise<boolean> {
+  const result = await run(executablePath, ['run', '--help']);
+  return result.code === 0 && result.stdout.includes('--trace-json');
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable

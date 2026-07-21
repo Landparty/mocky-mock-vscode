@@ -4,6 +4,7 @@ import {
   checkDocker,
   resolveExecutablePath,
   getDockerDesktopLaunchCommand,
+  supportsTraceFlag,
 } from './checks';
 import { CommandResult, CommandRunner } from './commandRunner';
 
@@ -48,6 +49,29 @@ describe('checkDocker', () => {
   it('returns daemon-down when docker runs but the daemon is unreachable', async () => {
     const status = await checkDocker(fakeRunner({ code: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon' }));
     assert.strictEqual(status, 'daemon-down');
+  });
+});
+
+describe('supportsTraceFlag', () => {
+  it('returns true when --help lists --trace-json', async () => {
+    const ok = await supportsTraceFlag(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock run ...\n  --trace-json PATH  ...\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the flag', async () => {
+    const ok = await supportsTraceFlag(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock run ...\n  --coverage-json PATH  ...\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsTraceFlag(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
+    assert.strictEqual(ok, false);
   });
 });
 
