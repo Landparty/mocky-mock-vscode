@@ -101,6 +101,150 @@ describe('parseCutFile TAGS', () => {
   });
 });
 
+describe('parseCutFile USING PROVIDER', () => {
+  // Mirrors examples/statelkup/STATELKUP.cut in the mocky-mock repo. The
+  // expected names/lines are pinned to real `mockymock collect --json`
+  // output for that file (names "base [row N: <first value>]", each case
+  // anchored at its ROW line) — the fallback must agree with collect or
+  // result mapping breaks: reports only ever contain expanded names.
+  const statelkup = [
+    'TESTSUITE "STATELKUP state name lookup"',
+    '',
+    '*> comment',
+    '*> comment',
+    '*> comment',
+    'PROVIDER StateNames',
+    '    HEADER Abbreviation, Name',
+    '    ROW "AZ", "Arizona"',
+    '    ROW "KY", "Kentucky"',
+    '    ROW "XX", "*Undefined*"',
+    '',
+    'TESTCASE "1000-LOOKUP-STATE resolves a state name" USING PROVIDER StateNames',
+    '    MOVE {Abbreviation} TO WS-STATE-CODE',
+    '    PERFORM 1000-LOOKUP-STATE',
+    '    EXPECT WS-STATE-NAME TO BE {Name}',
+  ].join('\n');
+
+  it('expands a provider-bound TESTCASE into one case per ROW, matching collect', () => {
+    const suites = parseCutFile(statelkup);
+    assert.strictEqual(suites.length, 1);
+    assert.deepStrictEqual(
+      suites[0].cases.map((c) => ({ name: c.name, line: c.line })),
+      [
+        { name: '1000-LOOKUP-STATE resolves a state name [row 1: AZ]', line: 7 },
+        { name: '1000-LOOKUP-STATE resolves a state name [row 2: KY]', line: 8 },
+        { name: '1000-LOOKUP-STATE resolves a state name [row 3: XX]', line: 9 },
+      ]
+    );
+  });
+
+  it('carries TAGS onto every expanded case', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A',
+      '    ROW "x"',
+      '    ROW "y"',
+      'TESTCASE "c" TAGS "slow" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.strictEqual(suites[0].cases.length, 2);
+    assert.deepStrictEqual(suites[0].cases[0].tags, ['slow']);
+    assert.deepStrictEqual(suites[0].cases[1].tags, ['slow']);
+  });
+
+  it('does not split the first ROW value at a comma inside quotes', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A, B',
+      '    ROW "SMITH, JR.", "X"',
+      'TESTCASE "c" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.strictEqual(suites[0].cases[0].name, 'c [row 1: SMITH, JR.]');
+  });
+
+  it('strips one layer of single quotes from the display value', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A',
+      "    ROW 'AZ'",
+      'TESTCASE "c" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.strictEqual(suites[0].cases[0].name, 'c [row 1: AZ]');
+  });
+
+  it('keeps an unquoted first value verbatim', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A, B',
+      '    ROW 42, 43',
+      'TESTCASE "c" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.strictEqual(suites[0].cases[0].name, 'c [row 1: 42]');
+  });
+
+  it('falls back to the unexpanded case when the PROVIDER was never declared', () => {
+    const text = ['TESTSUITE "s"', 'TESTCASE "c" USING PROVIDER Ghost'].join('\n');
+    const suites = parseCutFile(text);
+    assert.deepStrictEqual(
+      suites[0].cases.map((c) => c.name),
+      ['c']
+    );
+  });
+
+  it('falls back to the unexpanded case when the PROVIDER has no rows', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER Empty',
+      '    HEADER A',
+      'TESTCASE "c" USING PROVIDER Empty',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.deepStrictEqual(
+      suites[0].cases.map((c) => c.name),
+      ['c']
+    );
+  });
+
+  it('ignores commented-out ROW lines', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A',
+      '    ROW "real"',
+      '*>  ROW "not real"',
+      'TESTCASE "c" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.deepStrictEqual(
+      suites[0].cases.map((c) => c.name),
+      ['c [row 1: real]']
+    );
+  });
+
+  it('leaves ordinary TESTCASEs in the same file untouched', () => {
+    const text = [
+      'TESTSUITE "s"',
+      'PROVIDER P',
+      '    HEADER A',
+      '    ROW "x"',
+      'TESTCASE "plain"',
+      'TESTCASE "param" USING PROVIDER P',
+    ].join('\n');
+    const suites = parseCutFile(text);
+    assert.deepStrictEqual(
+      suites[0].cases.map((c) => c.name),
+      ['plain', 'param [row 1: x]']
+    );
+  });
+});
+
 describe('cutSuitesFromCollectJson', () => {
   it('converts collect output to CutSuite[] with 0-based lines', () => {
     const { cutSuitesFromCollectJson } = require('./cutDiscovery');

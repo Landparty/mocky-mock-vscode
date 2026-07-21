@@ -38,5 +38,40 @@
     "prefix": "expect",
     "body": ["EXPECT ${1:WS-FIELD} TO BE ${2:VALUE}"],
     "description": "EXPECT assertion"
+  },
+  "Before each test case": {
+    "prefix": "before-each",
+    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
+  },
+  "Before all test cases": {
+    "prefix": "before-all",
+    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "description": "BEFORE-ALL block of shared mocks (BEFORE-EACH and TESTCASE mocks override these)"
+  },
+  "Mock a paragraph or section": {
+    "prefix": "mock-paragraph",
+    "body": ["MOCK ${1|PARAGRAPH,SECTION|} ${2:PARA-NAME}", "    ${3:*> mock body}", "END-MOCK"],
+    "description": "MOCK PARAGRAPH/SECTION block for an internal PROCEDURE DIVISION target"
+  },
+  "File status inside a file mock": {
+    "prefix": "file-status",
+    "body": ["FILE-STATUS IS ${1|SUCCESS,END-OF-FILE,DUPLICATE-KEY,RECORD-NOT-FOUND,FILE-NOT-FOUND,ALREADY-OPEN,NOT-OPEN,NO-CURRENT-RECORD|}"],
+    "description": "FILE-STATUS IS <mnemonic> inside a MOCK <file-op> body (or a quoted two-char code, e.g. \"92\")"
+  },
+  "Mock a file op with a status": {
+    "prefix": "mock-file-status",
+    "body": ["MOCK ${1|OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK|} ${2:FILE-NAME}", "    FILE-STATUS IS ${3|SUCCESS,END-OF-FILE,DUPLICATE-KEY,RECORD-NOT-FOUND,FILE-NOT-FOUND,ALREADY-OPEN,NOT-OPEN,NO-CURRENT-RECORD|}", "END-MOCK"],
+    "description": "MOCK <file-op> block that sets the file status"
+  },
+  "Provider data table": {
+    "prefix": "provider",
+    "body": ["PROVIDER ${1:ProviderName}", "    HEADER ${2:FieldOne}, ${3:FieldTwo}", "    ROW ${4:\"value\"}, ${5:\"value\"}"],
+    "description": "PROVIDER block with HEADER and a first ROW"
+  },
+  "Parameterized test case": {
+    "prefix": "testcase-provider",
+    "body": ["TESTCASE \"${1:case name}\" USING PROVIDER ${2:ProviderName}", "    MOVE {${3:FieldOne}} TO ${4:WS-FIELD}", "    PERFORM ${5:PARAGRAPH-NAME}", "    EXPECT ${6:WS-RESULT} TO BE {${7:FieldTwo}}"],
+    "description": "TESTCASE ... USING PROVIDER — expands into one case per ROW, {Field} placeholders substitute in MOVE/EXPECT values"
   }
 }

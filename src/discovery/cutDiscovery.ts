@@ -13,9 +13,13 @@ export interface CutSuite {
 }
 
 const TESTSUITE_RE = /^\s*TESTSUITE\s+"([^"]*)"/;
-// Group 2 captures the raw TAGS tail (`"slow" "io"`) when present.
-const TESTCASE_RE = /^\s*TESTCASE\s+"([^"]*)"(?:\s+TAGS\s+((?:"[^"]*"\s*)+))?/;
+// Group 2 captures the raw TAGS tail (`"slow" "io"`) when present; group 3
+// the PROVIDER name of a `USING PROVIDER <name>` suffix.
+const TESTCASE_RE =
+  /^\s*TESTCASE\s+"([^"]*)"(?:\s+TAGS\s+("[^"]*"(?:\s+"[^"]*")*))?(?:\s+USING\s+PROVIDER\s+([A-Za-z0-9][A-Za-z0-9-]*))?/;
 const TAG_RE = /"([^"]*)"/g;
+const PROVIDER_RE = /^\s*PROVIDER\s+([A-Za-z0-9][A-Za-z0-9-]*)\s*$/;
+const PROVIDER_ROW_RE = /^\s*ROW\s+(.+)$/;
 
 function parseTags(rawTags: string | undefined): string[] {
   if (!rawTags) return [];
@@ -26,21 +30,89 @@ function parseTags(rawTags: string | undefined): string[] {
   return tags;
 }
 
+interface ProviderRow {
+  firstValue: string;
+  line: number;
+}
+
+// First comma-separated value of a ROW line, ignoring commas inside '...'
+// or "..." spans — mirrors the CLI parser's `_split_top_level`.
+function firstRowValue(values: string): string {
+  let quote: string | null = null;
+  for (let i = 0; i < values.length; i++) {
+    const char = values[i];
+    if (quote !== null) {
+      if (char === quote) quote = null;
+    } else if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === ',') {
+      return values.slice(0, i).trim();
+    }
+  }
+  return values.trim();
+}
+
+// Strip one layer of matching quote characters for the generated case name —
+// mirrors the CLI parser's `_display_value` (cosmetic only).
+function displayValue(raw: string): string {
+  if (raw.length >= 2 && raw[0] === raw[raw.length - 1] && (raw[0] === "'" || raw[0] === '"')) {
+    return raw.slice(1, -1);
+  }
+  return raw;
+}
+
 export function parseCutFile(text: string): CutSuite[] {
   const lines = text.split(/\r\n|\n/);
   const suites: CutSuite[] = [];
   let current: CutSuite | null = null;
+  // PROVIDER name -> its ROW lines seen so far. A `TESTCASE ... USING
+  // PROVIDER <name>` expands into one case per ROW with the same
+  // `name [row N: value]` names and ROW-line anchors the CLI parser
+  // generates (`_expand_providers`), because run reports only ever contain
+  // the expanded names — an unexpanded fallback case would never match the
+  // report and would surface as a bogus "did not run". Unknown or row-less
+  // providers keep the unexpanded case: this regex scan is best-effort by
+  // design, and authoritative discovery (`mockymock collect`) rejects those
+  // files with a real parse error.
+  const providers = new Map<string, ProviderRow[]>();
+  let currentProvider: ProviderRow[] | null = null;
 
   lines.forEach((line, index) => {
     const suiteMatch = TESTSUITE_RE.exec(line);
     if (suiteMatch) {
       current = { name: suiteMatch[1], line: index, cases: [] };
       suites.push(current);
+      currentProvider = null;
+      return;
+    }
+    const providerMatch = PROVIDER_RE.exec(line);
+    if (providerMatch) {
+      currentProvider = [];
+      providers.set(providerMatch[1], currentProvider);
+      return;
+    }
+    const rowMatch = PROVIDER_ROW_RE.exec(line);
+    if (rowMatch && currentProvider) {
+      currentProvider.push({ firstValue: firstRowValue(rowMatch[1]), line: index });
       return;
     }
     const caseMatch = TESTCASE_RE.exec(line);
     if (caseMatch && current) {
-      current.cases.push({ name: caseMatch[1], line: index, tags: parseTags(caseMatch[2]) });
+      currentProvider = null;
+      const name = caseMatch[1];
+      const tags = parseTags(caseMatch[2]);
+      const rows = caseMatch[3] ? providers.get(caseMatch[3]) : undefined;
+      if (rows && rows.length) {
+        rows.forEach((row, rowIndex) => {
+          current!.cases.push({
+            name: `${name} [row ${rowIndex + 1}: ${displayValue(row.firstValue)}]`,
+            line: row.line,
+            tags: [...tags],
+          });
+        });
+      } else {
+        current.cases.push({ name, line: index, tags });
+      }
     }
   });
 

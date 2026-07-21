@@ -7,6 +7,7 @@
     { "include": "#structure" },
     { "include": "#directives" },
     { "include": "#strings" },
+    { "include": "#placeholder" },
     { "include": "#numbers" },
     { "include": "#cobol" }
   ],
@@ -25,7 +26,14 @@
           }
         },
         {
-          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|ACCEPT)\\b(\\s+ROWS\\b)?",
+          "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)",
+          "captures": {
+            "1": { "name": "keyword.other.provider.cut" },
+            "2": { "name": "entity.name.provider.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|ACCEPT|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
           "captures": {
             "1": { "name": "keyword.control.mock.cut" },
             "2": { "name": "storage.type.category.cut" },
@@ -33,8 +41,34 @@
           }
         },
         {
-          "match": "^\\s*(END-MOCK)\\.?\\s*$",
+          "match": "^\\s*(?i:(END-MOCK))\\.?\\s*$",
           "name": "keyword.control.mock.cut"
+        },
+        {
+          "match": "^\\s*(BEFORE-ALL|BEFORE-EACH)\\s*$",
+          "name": "keyword.control.structure.cut"
+        },
+        {
+          "match": "^\\s*(?i:(END-BEFORE))\\.?\\s*$",
+          "name": "keyword.control.structure.cut"
+        },
+        {
+          "match": "^\\s*(PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)\\s*$",
+          "captures": {
+            "1": { "name": "keyword.control.provider.cut" },
+            "2": { "name": "entity.name.provider.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(HEADER)\\s+([A-Za-z][A-Za-z0-9-]*(?:\\s*,\\s*[A-Za-z][A-Za-z0-9-]*)*)\\s*$",
+          "captures": {
+            "1": { "name": "keyword.control.provider.cut" },
+            "2": { "name": "variable.parameter.header.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(ROW)\\b",
+          "name": "keyword.control.provider.cut"
         }
       ]
     },
@@ -69,8 +103,25 @@
           "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+(\\S+)\\s*$",
           "captures": {
             "1": { "name": "keyword.other.move.cut" },
+            "2": {
+              "patterns": [
+                { "include": "#strings" },
+                { "include": "#placeholder" },
+                { "include": "#numbers" }
+              ]
+            },
             "3": { "name": "keyword.other.move.cut" },
             "4": { "name": "variable.other.cobol.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(FILE-STATUS)\\s+(IS)\\s+(?:(SUCCESS|END-OF-FILE|DUPLICATE-KEY|RECORD-NOT-FOUND|FILE-NOT-FOUND|ALREADY-OPEN|NOT-OPEN|NO-CURRENT-RECORD)\\b|(\"[^\"]*\")|([A-Za-z][A-Za-z-]*))\\s*$",
+          "captures": {
+            "1": { "name": "keyword.control.filestatus.cut" },
+            "2": { "name": "keyword.operator.words.cut" },
+            "3": { "name": "constant.language.filestatus.cut" },
+            "4": { "name": "string.quoted.double.cut" },
+            "5": { "name": "invalid.illegal.filestatus.cut" }
           }
         }
       ]
@@ -78,6 +129,10 @@
     "strings": {
       "match": "\"[^\"]*\"",
       "name": "string.quoted.double.cut"
+    },
+    "placeholder": {
+      "match": "\\{[A-Za-z][A-Za-z0-9-]*\\}",
+      "name": "variable.other.placeholder.cut"
     },
     "numbers": {
       "match": "(?<![\\w-])[+-]?\\d+(?:\\.\\d+)?(?![\\w-])",
