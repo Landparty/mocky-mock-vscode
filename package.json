@@ -21,6 +21,13 @@
         "category": "mockymock"
       }
     ],
+    "debuggers": [
+      {
+        "type": "mockymock-cobol",
+        "label": "mockymock COBOL",
+        "languages": ["cut"]
+      }
+    ],
     "languages": [
       {
         "id": "cut",

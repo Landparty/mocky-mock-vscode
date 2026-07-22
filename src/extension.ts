@@ -3,11 +3,23 @@ import * as vscode from 'vscode';
 import { EnvironmentManager } from './environment/environmentManager';
 import { activateTestController } from './testing/testController';
 import { activateLintDiagnostics } from './linting/lintDiagnostics';
+import { MockymockDebugAdapterDescriptorFactory } from './debug/debugAdapterFactory';
+import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationProvider';
+
+const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
 export function activate(context: vscode.ExtensionContext) {
   const environmentManager = new EnvironmentManager(context);
   activateTestController(context, environmentManager);
   activateLintDiagnostics(context);
+
+  context.subscriptions.push(
+    vscode.debug.registerDebugAdapterDescriptorFactory(
+      MOCKYMOCK_DEBUG_TYPE,
+      new MockymockDebugAdapterDescriptorFactory()
+    ),
+    vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider())
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.checkEnvironment', async () => {
