@@ -22,6 +22,17 @@ export async function supportsTraceFlag(run: CommandRunner, executablePath: stri
   return result.code === 0 && result.stdout.includes('--trace-json');
 }
 
+// Same "check first, degrade gracefully" pattern as supportsTraceFlag, but for
+// a whole subcommand rather than a flag: an installed CLI that predates
+// `mockymock debug` exits 2 (argparse's "invalid choice" for an unknown
+// subcommand) on `debug --help`. Checking for `--dap-stdio` specifically
+// (rather than just a zero exit code) also catches the unlikely case of a
+// `debug` subcommand existing without the exact flag this extension needs.
+export async function supportsDebugCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  const result = await run(executablePath, ['debug', '--help']);
+  return result.code === 0 && result.stdout.includes('--dap-stdio');
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable
