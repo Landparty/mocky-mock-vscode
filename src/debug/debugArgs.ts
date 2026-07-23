@@ -23,3 +23,15 @@ export function buildDebugArgs(config: MockymockDebugConfiguration): string[] {
   }
   return args;
 }
+
+// The lint preflight `runInteractiveDebug` runs before ever starting a debug
+// session (see lintGate.ts): built from the same program/cut/copybookPaths a
+// debug session would use, so it can never false-positive-block on a
+// copybook path the session itself would have resolved fine.
+export function buildLintArgs(config: Pick<MockymockDebugConfiguration, 'program' | 'cut' | 'copybookPaths'>): string[] {
+  const args = ['lint', config.program, '--cut', config.cut];
+  for (const p of config.copybookPaths ?? []) {
+    args.push('--copybook-path', p);
+  }
+  return args;
+}

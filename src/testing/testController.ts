@@ -20,7 +20,8 @@ import { runSuite } from './mockymockRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
 import { resolveExecutablePath, supportsTraceFlag, supportsDebugCommand } from '../environment/checks';
-import { MockymockDebugConfiguration } from '../debug/debugArgs';
+import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
+import { evaluateLintResult } from '../debug/lintGate';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 interface FilePlan {
@@ -623,6 +624,20 @@ export function activateTestController(
     const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
       workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
     );
+
+    // `mockymock debug --dap-stdio` runs these same static checks, but on
+    // failure it prints plain text and exits non-zero before ever speaking
+    // DAP -- run `lint` first with the exact program/cut/copybookPaths the
+    // debug session itself will use, so a static problem surfaces as a
+    // clear error here instead of a generic "debug adapter process
+    // terminated unexpectedly" dialog.
+    const lintResult = await runCommand(executablePath, buildLintArgs({ program: cblPath, cut: cutPath, copybookPaths }));
+    const lintGate = evaluateLintResult(lintResult);
+    if (lintGate.blocked) {
+      run.appendOutput(toCrlf(`${lintGate.message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(lintGate.message));
+      return;
+    }
 
     const sessionName = `mockymock: ${caseItem.label}`;
     const debugConfig: MockymockDebugConfiguration & vscode.DebugConfiguration = {

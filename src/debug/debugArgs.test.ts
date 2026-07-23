@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { buildDebugArgs, MockymockDebugConfiguration } from './debugArgs';
+import { buildDebugArgs, buildLintArgs, MockymockDebugConfiguration } from './debugArgs';
 
 describe('buildDebugArgs', () => {
   it('builds the debug --dap-stdio argv for a config with no copybook paths', () => {
@@ -46,5 +46,27 @@ describe('buildDebugArgs', () => {
       '--copybook-path',
       '/ws/shared/copybooks',
     ]);
+  });
+});
+
+describe('buildLintArgs', () => {
+  it('builds the lint argv for a program/cut pair with no copybook paths', () => {
+    assert.deepStrictEqual(buildLintArgs({ program: '/ws/ACCTPRG.cbl', cut: '/ws/ACCTPRG.cut' }), [
+      'lint',
+      '/ws/ACCTPRG.cbl',
+      '--cut',
+      '/ws/ACCTPRG.cut',
+    ]);
+  });
+
+  it('appends one --copybook-path flag per configured directory, in order', () => {
+    assert.deepStrictEqual(
+      buildLintArgs({
+        program: 'P.cbl',
+        cut: 'P.cut',
+        copybookPaths: ['/ws/copybooks', '/ws/shared/copybooks'],
+      }),
+      ['lint', 'P.cbl', '--cut', 'P.cut', '--copybook-path', '/ws/copybooks', '--copybook-path', '/ws/shared/copybooks']
+    );
   });
 });
