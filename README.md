@@ -39,7 +39,11 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
   test item is marked "skipped" (not scored) and the run stays open until
   you end the debug session. Needs exactly one selected case and a
   `mockymock` new enough for the `debug` subcommand, with the same
-  too-old-CLI degradation as the trace profile.
+  too-old-CLI degradation as the trace profile. Runs `mockymock lint` first
+  (same static checks the debug session's own compile step would hit) so a
+  bad breakpoint target, unresolved copybook, or syntax error surfaces as a
+  clear error message instead of a generic "debug adapter process
+  terminated unexpectedly" dialog.
 - **Continuous run.** Toggle the eye icon on a test to re-run it whenever
   its `.cut` or paired `.cbl` changes.
 - **Cancellation actually cancels** — stopping a run kills the in-flight

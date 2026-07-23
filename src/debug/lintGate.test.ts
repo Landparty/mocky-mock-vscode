@@ -32,4 +32,17 @@ describe('evaluateLintResult', () => {
     assert.match(message, /line 12/);
     assert.match(message, /copybook FOO not found/);
   });
+
+  it('blocks with a bare message when the problem has no code and no line (file-level, generic)', () => {
+    const result = evaluateLintResult({
+      code: 1,
+      stdout: 'mockymock lint: something else is wrong\n',
+      stderr: '',
+    });
+    assert.strictEqual(result.blocked, true);
+    const message = (result as { blocked: true; message: string }).message;
+    assert.match(message, /something else is wrong/);
+    assert.doesNotMatch(message, /\[.*\]/);
+    assert.doesNotMatch(message, /line \d+:/);
+  });
 });
