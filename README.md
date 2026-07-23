@@ -29,6 +29,17 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
   trace) and a `mockymock` new enough for `--trace-json` — an older CLI
   degrades to a clear "too old" message instead of a confusing generic
   failure.
+- **Debug (Interactive).** A second profile in the same dropdown (next to
+  the bug icon) starts a real interactive debug session —
+  `mockymock debug --dap-stdio` — for a single `TESTCASE`: breakpoints on
+  your original `.cbl` lines, stepping, VS Code's own Call Stack/Variables
+  views showing COBOL paragraphs and COBOL-named, COBOL-shaped values (a
+  `PIC 9(5)V99 COMP-3` item renders as a decimal). Unlike every other
+  profile, there's no scripted pass/fail for an interactive session — the
+  test item is marked "skipped" (not scored) and the run stays open until
+  you end the debug session. Needs exactly one selected case and a
+  `mockymock` new enough for the `debug` subcommand, with the same
+  too-old-CLI degradation as the trace profile.
 - **Continuous run.** Toggle the eye icon on a test to re-run it whenever
   its `.cut` or paired `.cbl` changes.
 - **Cancellation actually cancels** — stopping a run kills the in-flight
@@ -65,8 +76,9 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
   CLI new enough to have `collect`/`lint`/`--case`/`--json-report`/
   `--coverage-json`; older CLIs degrade gracefully (whole-file runs, JUnit
   results, regex discovery). Debug (Execution Trace) additionally needs
-  `--trace-json`; an older CLI degrades to a clear message on that one
-  profile rather than failing anything else.
+  `--trace-json`; Debug (Interactive) needs the `debug` subcommand. An
+  older CLI degrades to a clear message on the one profile it affects
+  rather than failing anything else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container).
 - VS Code ≥ 1.88.

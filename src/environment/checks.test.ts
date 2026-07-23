@@ -5,6 +5,7 @@ import {
   resolveExecutablePath,
   getDockerDesktopLaunchCommand,
   supportsTraceFlag,
+  supportsDebugCommand,
 } from './checks';
 import { CommandResult, CommandRunner } from './commandRunner';
 
@@ -71,6 +72,29 @@ describe('supportsTraceFlag', () => {
 
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsTraceFlag(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
+    assert.strictEqual(ok, false);
+  });
+});
+
+describe('supportsDebugCommand', () => {
+  it('returns true when debug --help lists --dap-stdio', async () => {
+    const ok = await supportsDebugCommand(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock debug ...\n  --dap-stdio  ...\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the debug subcommand', async () => {
+    const ok = await supportsDebugCommand(
+      fakeRunner({ code: 2, stdout: '', stderr: "argument command: invalid choice: 'debug'" }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsDebugCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
     assert.strictEqual(ok, false);
   });
 });

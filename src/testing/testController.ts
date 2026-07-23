@@ -19,7 +19,8 @@ import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { resolveExecutablePath, supportsTraceFlag } from '../environment/checks';
+import { resolveExecutablePath, supportsTraceFlag, supportsDebugCommand } from '../environment/checks';
+import { MockymockDebugConfiguration } from '../debug/debugArgs';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 interface FilePlan {
@@ -565,6 +566,106 @@ export function activateTestController(
     }
   }
 
+  // "Debug (Interactive)": starts a real DAP session (mockymock debug
+  // --dap-stdio) for exactly one selected test case, handing control to
+  // VS Code's own debug UI (breakpoints, step controls, Variables/Call
+  // Stack views) rather than scripting a pass/fail verdict the way every
+  // other profile does -- there is no JUnit/JSON report to scrape from an
+  // interactive session the user is driving. The TestRun stays open
+  // (never marked passed/failed) until the debug session actually ends,
+  // so the Test Results panel accurately reflects "still debugging".
+  async function runInteractiveDebug(run: vscode.TestRun, token: vscode.CancellationToken, plans: FilePlan[]) {
+    const allSelected = plans.flatMap(selectedCaseItems);
+    if (allSelected.length !== 1) {
+      const message =
+        'mockymock: "Debug (Interactive)" needs exactly one selected test case -- ' +
+        'the suite runs as a single binary, so a debug session cannot be attributed to ' +
+        'one case. Select a single TESTCASE and try again.';
+      for (const item of allSelected) {
+        run.started(item);
+        run.errored(item, new vscode.TestMessage(message));
+      }
+      return;
+    }
+
+    const [caseItem] = allSelected;
+    const plan = plans.find((p) => selectedCaseItems(p).includes(caseItem))!;
+    run.started(caseItem);
+
+    const ready = await environmentManager.ensureReady();
+    if (!ready.ok) {
+      run.appendOutput(toCrlf(`${ready.message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(ready.message));
+      return;
+    }
+    if (token.isCancellationRequested) {
+      run.skipped(caseItem);
+      return;
+    }
+
+    const cutUri = plan.fileItem.uri!;
+    const cutPath = cutUri.fsPath;
+    const cblPath = resolveCblPath(cutPath);
+    const executablePath = resolveConfiguredExecutable(cutUri);
+
+    const supportsDebug = await supportsDebugCommand(runCommand, executablePath);
+    if (!supportsDebug) {
+      const message =
+        `mockymock at "${executablePath}" is too old to support interactive debugging ` +
+        '(needs the debug subcommand). Upgrade mockymock and try again.';
+      run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(message));
+      return;
+    }
+
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(cutUri);
+    const config = vscode.workspace.getConfiguration('mockymock', cutUri);
+    const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
+      workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
+    );
+
+    const sessionName = `mockymock: ${caseItem.label}`;
+    const debugConfig: MockymockDebugConfiguration & vscode.DebugConfiguration = {
+      type: 'mockymock-cobol',
+      request: 'launch',
+      name: sessionName,
+      program: cblPath,
+      cut: cutPath,
+      case: caseItem.label,
+      executablePath,
+      copybookPaths,
+    };
+
+    const started = await vscode.debug.startDebugging(workspaceFolder, debugConfig);
+    if (!started) {
+      const message = 'mockymock: failed to start the interactive debug session (see the Debug Console for details)';
+      run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(message));
+      return;
+    }
+
+    run.appendOutput(toCrlf(`mockymock: interactive debug session started for "${caseItem.label}"\n`), undefined, caseItem);
+    // No scripted verdict for an interactive session -- "skipped" reads as
+    // "not scored," which is accurate here, and leaves the item in a
+    // terminal-but-neutral state rather than a misleading pass/fail.
+    run.skipped(caseItem);
+
+    // The run stays open until the interactive session actually ends (or
+    // the user cancels from the Test Results panel) -- the caller's finally
+    // block ends it once this returns.
+    await new Promise<void>((resolve) => {
+      const cancelListener = token.onCancellationRequested(() => finish());
+      const terminateListener = vscode.debug.onDidTerminateDebugSession((session) => {
+        if (session.name === sessionName) finish();
+      });
+      function finish() {
+        cancelListener.dispose();
+        terminateListener.dispose();
+        resolve();
+      }
+    });
+  }
+
   function makeRunHandler(withCoverage: boolean) {
     return async (request: vscode.TestRunRequest, token: vscode.CancellationToken) => {
       // Continuous mode: don't run now — re-fire a normal run for the same
@@ -665,6 +766,26 @@ export function activateTestController(
     true
   );
   context.subscriptions.push(debugProfile);
+
+  // A second profile of the same kind: VS Code shows both in the dropdown
+  // next to the Test Explorer's bug icon. "Debug (Execution Trace)" stays
+  // the default (fast, read-only, always available); this one is the
+  // slower, heavier real interactive session -- see
+  // docs/2026-07-22-dap-debugger-design.md in the sibling mocky-mock repo.
+  const interactiveDebugProfile = controller.createRunProfile(
+    'Debug (Interactive)',
+    vscode.TestRunProfileKind.Debug,
+    async (request, token) => {
+      const run = controller.createTestRun(request);
+      try {
+        await runInteractiveDebug(run, token, planRuns(request));
+      } finally {
+        run.end();
+      }
+    },
+    false
+  );
+  context.subscriptions.push(interactiveDebugProfile);
 
   return controller;
 }
