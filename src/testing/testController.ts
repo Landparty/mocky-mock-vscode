@@ -778,14 +778,16 @@ export function activateTestController(
         run.end();
       }
     },
-    true
+    false
   );
   context.subscriptions.push(debugProfile);
 
   // A second profile of the same kind: VS Code shows both in the dropdown
-  // next to the Test Explorer's bug icon. "Debug (Execution Trace)" stays
-  // the default (fast, read-only, always available); this one is the
-  // slower, heavier real interactive session -- see
+  // next to the Test Explorer's bug icon. This one -- the real interactive
+  // session (breakpoints, stepping, Watch/Variables) -- is the default now
+  // that it's proven out; "Debug (Execution Trace)" (fast, read-only,
+  // always available, no live gdb session) stays one click away for when
+  // a full interactive session isn't needed. See
   // docs/2026-07-22-dap-debugger-design.md in the sibling mocky-mock repo.
   const interactiveDebugProfile = controller.createRunProfile(
     'Debug (Interactive)',
@@ -798,7 +800,7 @@ export function activateTestController(
         run.end();
       }
     },
-    false
+    true
   );
   context.subscriptions.push(interactiveDebugProfile);
 
