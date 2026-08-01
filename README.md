@@ -2,8 +2,11 @@
 
 Run [`mockymock`](https://github.com/samdion1994/mocky-mock) `.cut` COBOL
 test suites directly from VS Code's native Test Explorer — with automatic
-environment bootstrap (installs the `mockymock` CLI via `uv`, launches a
-stopped Docker Desktop), so the day-to-day loop never needs a terminal.
+environment bootstrap (installs the `mockymock` CLI — via `gh release
+download` when the `gh` CLI is available, falling back to `uv` otherwise —
+and launches a stopped Docker Desktop), so the day-to-day loop never needs
+a terminal. See `PUBLISHING.md` for what each install path actually needs
+in terms of GitHub access.
 
 ## Features
 

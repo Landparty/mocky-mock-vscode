@@ -57,6 +57,18 @@ export interface LaunchCommand {
   args: string[];
 }
 
+// Maps the running machine to the exact release asset filename produced by
+// mocky-mock's release workflow (.github/workflows/release-please.yml) --
+// keep these three names in sync with that workflow's build matrix. Returns
+// null for any OS/arch combination the release workflow doesn't build (e.g.
+// Intel Mac), so callers can fall back to the uv/pip install path instead.
+export function resolveReleaseAssetName(platform: NodeJS.Platform, arch: string): string | null {
+  if (platform === 'linux' && arch === 'x64') return 'mockymock-linux-x86_64';
+  if (platform === 'darwin' && arch === 'arm64') return 'mockymock-macos-arm64';
+  if (platform === 'win32' && arch === 'x64') return 'mockymock-windows-amd64.exe';
+  return null;
+}
+
 export function getDockerDesktopLaunchCommand(platform: NodeJS.Platform): LaunchCommand | null {
   if (platform === 'win32') {
     return { command: '"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"', args: [] };
