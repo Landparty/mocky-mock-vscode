@@ -1,6 +1,6 @@
 # mockymock for VS Code
 
-[![Download latest release](https://img.shields.io/github/v/release/samdion1994/mocky-mock-vscode?label=Download&style=for-the-badge)](https://github.com/samdion1994/mocky-mock-vscode/releases/latest)
+[![Download latest release](https://img.shields.io/github/v/release/samdion1994/mocky-mock-vscode?label=Download&style=for-the-badge&cacheSeconds=60)](https://github.com/samdion1994/mocky-mock-vscode/releases/latest)
 
 Download the `.vsix` and install it in VS Code to start unit-testing your
 COBOL today — see you on the *wildside*.
