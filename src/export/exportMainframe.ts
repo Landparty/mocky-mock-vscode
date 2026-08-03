@@ -5,12 +5,6 @@ import { resolveExecutablePath } from '../environment/checks';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
 import { runExport } from './exportRunner';
 
-// Re-exported so the export feature's pure logic remains reachable from
-// this module's public surface, even though it actually lives in
-// exportRunner.ts (kept vscode-free there for mocha -- see that file).
-export { buildExportArgs, runExport } from './exportRunner';
-export type { ExportResult } from './exportRunner';
-
 function defaultOutputPath(cblPath: string): string {
   const parsed = path.parse(cblPath);
   return path.join(parsed.dir, `${parsed.name}.mainframe.cbl`);
