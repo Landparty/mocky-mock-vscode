@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run check-types
+      - run: npm run test:unit
+      - name: Build the production bundle
+        run: node esbuild.js --production
+
+      # Regression guard for exactly the bug this check is designed to
+      # catch: esbuild only emits out/extension.js, but a stale `tsc -p ./`
+      # run (or a not-fully-clean checkout) can leave readable per-module
+      # .js files sitting alongside it, and .vscodeignore has to explicitly
+      # exclude them (see PUBLISHING.md) or they silently ship in the
+      # .vsix. `vsce ls` reflects whatever's actually on disk -- it does
+      # NOT build first the way `vsce package` does -- so the explicit
+      # build step above is required, or this check would pass vacuously
+      # against a missing bundle instead of actually verifying one.
+      - name: Verify the packaged .vsix ships the bundle and no source
+        run: |
+          npx vsce ls > /tmp/vsix-files.txt
+          cat /tmp/vsix-files.txt
+          if ! grep -qE '^out/extension\.js$' /tmp/vsix-files.txt; then
+            echo "ERROR: out/extension.js (the bundled extension) is missing from the package"
+            exit 1
+          fi
+          if grep -qE '^src/' /tmp/vsix-files.txt; then
+            echo "ERROR: src/ (TypeScript source) is present in the packaged .vsix"
+            exit 1
+          fi
+          BAD_OUT=$(grep -E '^out/' /tmp/vsix-files.txt | grep -v -E '^out/extension\.js$' || true)
+          if [ -n "$BAD_OUT" ]; then
+            echo "ERROR: unexpected files under out/ (expected only out/extension.js):"
+            echo "$BAD_OUT"
+            exit 1
+          fi
+          echo "OK: packaged .vsix contains exactly out/extension.js and no source"
