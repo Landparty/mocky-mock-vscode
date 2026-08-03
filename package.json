@@ -56,7 +56,7 @@
         "mockymock.executablePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the mockymock executable. Leave empty to resolve 'mockymock' from PATH."
+          "description": "Path to the mockymock executable. Leave empty to use the CLI binary bundled in this extension (if present), otherwise resolve 'mockymock' from PATH."
         },
         "mockymock.copybookPaths": {
           "type": "array",

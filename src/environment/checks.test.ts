@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
+  bundledBinaryName,
   checkCommandAvailable,
   checkDocker,
   resolveExecutablePath,
@@ -99,6 +100,17 @@ describe('supportsDebugCommand', () => {
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsDebugCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
     assert.strictEqual(ok, false);
+  });
+});
+
+describe('bundledBinaryName', () => {
+  it('returns mockymock.exe on win32', () => {
+    assert.strictEqual(bundledBinaryName('win32'), 'mockymock.exe');
+  });
+
+  it('returns mockymock on non-win32 platforms', () => {
+    assert.strictEqual(bundledBinaryName('linux'), 'mockymock');
+    assert.strictEqual(bundledBinaryName('darwin'), 'mockymock');
   });
 });
 

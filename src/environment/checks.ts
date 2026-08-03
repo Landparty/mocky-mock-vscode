@@ -50,12 +50,15 @@ export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
   return 'daemon-down';
 }
 
+export function bundledBinaryName(platform: NodeJS.Platform): string {
+  return platform === 'win32' ? 'mockymock.exe' : 'mockymock';
+}
+
 export function resolveExecutablePath(configuredPath: string | undefined, extensionPath: string): string {
   if (configuredPath && configuredPath.trim().length > 0) {
     return configuredPath.trim();
   }
-  const bundledName = process.platform === 'win32' ? 'mockymock.exe' : 'mockymock';
-  const bundledPath = path.join(extensionPath, 'bin', bundledName);
+  const bundledPath = path.join(extensionPath, 'bin', bundledBinaryName(process.platform));
   if (fs.existsSync(bundledPath)) {
     return bundledPath;
   }

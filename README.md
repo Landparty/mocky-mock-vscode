@@ -53,12 +53,13 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
 - **`.cut` language support**: syntax highlighting, `*>` comment toggling,
   MOCK/END-MOCK folding, and snippets (`testcase`, `mock-call`,
   `mock-sql-rows`, `verify`, ...).
-- **Environment bootstrap**: a missing `mockymock` CLI is installed via
-  `uv` automatically; a stopped Docker Desktop is launched and polled; a
-  missing Docker install gets a one-click download prompt. A status bar
-  item shows the current phase — click it (or run **mockymock: Check
-  Environment Status** from the Command Palette) to check readiness or
-  retry a fix on demand, without waiting for a test run.
+- **Environment bootstrap**: a CLI binary bundled in the extension is used
+  automatically when present for your platform; otherwise a missing
+  `mockymock` CLI is installed via `uv` automatically; a stopped Docker
+  Desktop is launched and polled; a missing Docker install gets a one-click
+  download prompt. A status bar item shows the current phase — click it (or
+  run **mockymock: Check Environment Status** from the Command Palette) to
+  check readiness or retry a fix on demand, without waiting for a test run.
 - **Unattributed failures are never silently dropped.** A FAIL mockymock
   can't tie to any known test case (a `MOCK`/`VERIFY` firing after its case
   already ended, a framework/binary mismatch) still errors the file in Test
@@ -71,14 +72,14 @@ Download the `.vsix` matching your OS from this repo's
 then install it:
 
 ```bash
-code --install-extension mockymock-vscode-<version>-<platform>.vsix
+code --install-extension mockymock-vscode-<platform>-<version>.vsix
 ```
 
 | OS | File to download |
 |---|---|
-| Windows (x64) | `mockymock-vscode-<version>-win32-x64.vsix` |
-| Linux (x64) | `mockymock-vscode-<version>-linux-x64.vsix` |
-| macOS (Apple Silicon) | `mockymock-vscode-<version>-darwin-arm64.vsix` |
+| Windows (x64) | `mockymock-vscode-win32-x64-<version>.vsix` |
+| Linux (x64) | `mockymock-vscode-linux-x64-<version>.vsix` |
+| macOS (Apple Silicon) | `mockymock-vscode-darwin-arm64-<version>.vsix` |
 
 Each package bundles a matching `mockymock` CLI binary — no separate CLI
 install step needed. Docker Desktop is still required at runtime (see
@@ -90,7 +91,7 @@ before.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (PATH otherwise) |
+| `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
 | `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder) |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |

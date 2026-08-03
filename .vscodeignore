@@ -7,3 +7,6 @@ docs/**
 **/*.map
 .gitignore
 .superpowers/**
+staging/**
+dist/**
+.github/**
