@@ -90,6 +90,36 @@ in terms of GitHub access.
   container).
 - VS Code ≥ 1.88.
 
+## Examples
+
+[`examples/`](examples/) has 13 worked COBOL programs, copied from
+`mockymock`'s own test suite so they're here even though the CLI's
+source repo is private. Each proves a boundary category compiles and
+runs for real under GnuCOBOL, and each has its own README plus a
+runnable `.cut`:
+
+```bash
+mockymock run examples/invupdt/INVUPDT.cbl --cut examples/invupdt/INVUPDT.cut
+```
+
+(Examples under `copybooks/` — `cpyproc`, `custprog`, and everything
+under `real-world/` — need a `--copybook-path examples/<name>/copybooks`
+flag too; see that example's own README.)
+
+- [`ordrproc`](examples/ordrproc) — the minimal case: one external subprogram `CALL`.
+- [`raterte`](examples/raterte) — dynamic `CALL` through a variable holding the program name ("poor man's polymorphism").
+- [`invupdt`](examples/invupdt) — every boundary category in one program: file I/O, a DB2 `UPDATE`, an MQ `CALL`, and operator `ACCEPT`.
+- [`custinq`](examples/custinq) — a CICS transaction (`EXEC CICS READ`/`RETURN`), no CICS translator needed.
+- [`custprog`](examples/custprog) — DB2 cursors (`DECLARE`/`OPEN`/`FETCH`/`CLOSE`) and DCLGEN-style copybook host variables.
+- [`claimseg`](examples/claimseg) — IMS DL/I segment retrieval and insert (`EXEC DLI GU`/`ISRT`).
+- [`cpyproc`](examples/cpyproc) — a shared paragraph pulled in via a `COPY` copybook, tested directly and as a stubbed collaborator.
+- [`flowmock`](examples/flowmock) — mocking an internal paragraph or section directly, not just external calls.
+- [`regnavg`](examples/regnavg) — subscripted tables, `REDEFINES`, `DIVIDE ROUNDED`, and `--trace` output.
+- [`statelkup`](examples/statelkup) — data-driven cases: one `TESTCASE ... USING PROVIDER` row-expands into many.
+- [`taxfile`](examples/taxfile) — shared `BEFORE-EACH` mocks that individual cases override.
+- [`nist-cobol85`](examples/nist-cobol85) — unmodified programs from the public-domain NIST COBOL-85 validation suite.
+- [`real-world`](examples/real-world) — four production-shaped programs: an IMS DL/I batch purge, an IMS MPP deposit transaction (also the coverage-reporting worked example), and an MQ producer/consumer pair with two-phase DB2 commit.
+
 ## Development
 
 ```bash
@@ -100,6 +130,7 @@ npm run package      # builds the .vsix
 ```
 
 Press F5 to launch the Extension Development Host against
-`../mocky-mock/examples/invupdt`. Distribution is a locally built `.vsix`
-(`code --install-extension mockymock-vscode-<version>.vsix`) — not the
-Marketplace.
+`examples/invupdt` (one of the examples above — no sibling `mocky-mock`
+checkout needed for this anymore). Distribution is a locally built
+`.vsix` (`code --install-extension mockymock-vscode-<version>.vsix`) —
+not the Marketplace.
