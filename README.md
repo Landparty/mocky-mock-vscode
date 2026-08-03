@@ -118,3 +118,9 @@ flag too; see that example's own README.)
 - [`taxfile`](examples/taxfile) — shared `BEFORE-EACH` mocks that individual cases override.
 - [`nist-cobol85`](examples/nist-cobol85) — unmodified programs from the public-domain NIST COBOL-85 validation suite.
 - [`real-world`](examples/real-world) — four production-shaped programs: an IMS DL/I batch purge, an IMS MPP deposit transaction (also the coverage-reporting worked example), and an MQ producer/consumer pair with two-phase DB2 commit.
+
+## License
+
+[GPL-3.0](LICENSE). This covers this extension repo (the `.cut` language
+tooling, examples, and docs here) — the `mockymock` CLI itself lives in a
+separate, private repository and is not covered by this license.
