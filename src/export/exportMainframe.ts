@@ -14,8 +14,8 @@ function defaultOutputPath(cblPath: string): string {
 // into the Testing API tree: it produces one artifact per program/cut
 // pair, not a per-test-case result. v1 requires an active .cbl or .cut
 // editor -- no quick-pick fallback across every discovered suite, kept
-// deliberately out of scope (see docs/2026-08-03-mainframe-export-
-// command-design.md's Alternatives Considered).
+// deliberately out of scope (see the mocky-mock repo's docs/2026-08-03-
+// mainframe-export-command-design.md's Alternatives Considered).
 export function activateExportMainframeCommand(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.exportMainframe', async () => {
