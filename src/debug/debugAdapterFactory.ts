@@ -7,6 +7,8 @@ import { buildDebugArgs, MockymockDebugConfiguration } from './debugArgs';
 // MockymockDebugConfiguration shape from debugArgs.ts is a safe narrowing, not
 // an unrelated-types cast.
 export class MockymockDebugAdapterDescriptorFactory implements vscode.DebugAdapterDescriptorFactory {
+  constructor(private readonly extensionPath: string) {}
+
   createDebugAdapterDescriptor(
     session: vscode.DebugSession,
     _executable: vscode.DebugAdapterExecutable | undefined
@@ -16,7 +18,7 @@ export class MockymockDebugAdapterDescriptorFactory implements vscode.DebugAdapt
     const configuredPath = workspaceUri
       ? vscode.workspace.getConfiguration('mockymock', workspaceUri).get<string>('executablePath')
       : vscode.workspace.getConfiguration('mockymock').get<string>('executablePath');
-    const executablePath = resolveExecutablePath(config.executablePath ?? configuredPath);
+    const executablePath = resolveExecutablePath(config.executablePath ?? configuredPath, this.extensionPath);
     return new vscode.DebugAdapterExecutable(executablePath, buildDebugArgs(config));
   }
 }

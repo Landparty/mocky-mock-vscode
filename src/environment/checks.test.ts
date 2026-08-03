@@ -1,5 +1,9 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import {
+  bundledBinaryName,
   checkCommandAvailable,
   checkDocker,
   resolveExecutablePath,
@@ -100,15 +104,51 @@ describe('supportsDebugCommand', () => {
   });
 });
 
-describe('resolveExecutablePath', () => {
-  it('returns "mockymock" when unconfigured', () => {
-    assert.strictEqual(resolveExecutablePath(undefined), 'mockymock');
-    assert.strictEqual(resolveExecutablePath(''), 'mockymock');
-    assert.strictEqual(resolveExecutablePath('   '), 'mockymock');
+describe('bundledBinaryName', () => {
+  it('returns mockymock.exe on win32', () => {
+    assert.strictEqual(bundledBinaryName('win32'), 'mockymock.exe');
   });
 
-  it('returns the configured path when set', () => {
-    assert.strictEqual(resolveExecutablePath('/opt/mockymock/bin/mockymock'), '/opt/mockymock/bin/mockymock');
+  it('returns mockymock on non-win32 platforms', () => {
+    assert.strictEqual(bundledBinaryName('linux'), 'mockymock');
+    assert.strictEqual(bundledBinaryName('darwin'), 'mockymock');
+  });
+});
+
+describe('resolveExecutablePath', () => {
+  let tempDir: string;
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mockymock-checks-test-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('returns "mockymock" when unconfigured and no bundled binary exists', () => {
+    assert.strictEqual(resolveExecutablePath(undefined, tempDir), 'mockymock');
+    assert.strictEqual(resolveExecutablePath('', tempDir), 'mockymock');
+    assert.strictEqual(resolveExecutablePath('   ', tempDir), 'mockymock');
+  });
+
+  it('returns the configured path when set, even if a bundled binary exists', () => {
+    const binDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(binDir);
+    fs.writeFileSync(path.join(binDir, process.platform === 'win32' ? 'mockymock.exe' : 'mockymock'), '');
+    assert.strictEqual(resolveExecutablePath('/opt/mockymock/bin/mockymock', tempDir), '/opt/mockymock/bin/mockymock');
+  });
+
+  it('returns the bundled binary path when present and nothing is configured', () => {
+    const binDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(binDir);
+    const bundledName = process.platform === 'win32' ? 'mockymock.exe' : 'mockymock';
+    fs.writeFileSync(path.join(binDir, bundledName), '');
+    assert.strictEqual(resolveExecutablePath(undefined, tempDir), path.join(binDir, bundledName));
+  });
+
+  it('falls back to "mockymock" when the extension has no bin directory at all', () => {
+    assert.strictEqual(resolveExecutablePath(undefined, path.join(tempDir, 'does-not-exist')), 'mockymock');
   });
 });
 

@@ -3,6 +3,7 @@
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
   "version": "0.1.0",
+  "mockymockCliVersion": "v0.1.1",
   "publisher": "legacylens",
   "private": true,
   "engines": {
@@ -72,7 +73,7 @@
         "mockymock.executablePath": {
           "type": "string",
           "default": "",
-          "description": "Path to the mockymock executable. Leave empty to resolve 'mockymock' from PATH."
+          "description": "Path to the mockymock executable. Leave empty to use the CLI binary bundled in this extension (if present), otherwise resolve 'mockymock' from PATH."
         },
         "mockymock.copybookPaths": {
           "type": "array",

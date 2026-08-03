@@ -46,7 +46,8 @@ export class EnvironmentManager {
   // click command invokes.
   async refreshStatus(): Promise<void> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath')
+      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      this.context.extensionPath
     );
     const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
     if (!mockymockOk) {
@@ -65,7 +66,8 @@ export class EnvironmentManager {
 
   async ensureReady(): Promise<ReadyResult> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath')
+      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      this.context.extensionPath
     );
 
     const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);

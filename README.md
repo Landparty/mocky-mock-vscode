@@ -56,36 +56,62 @@ in terms of GitHub access.
 - **`.cut` language support**: syntax highlighting, `*>` comment toggling,
   MOCK/END-MOCK folding, and snippets (`testcase`, `mock-call`,
   `mock-sql-rows`, `verify`, ...).
-- **Environment bootstrap**: a missing `mockymock` CLI is installed via
-  `uv` automatically; a stopped Docker Desktop is launched and polled; a
-  missing Docker install gets a one-click download prompt. A status bar
-  item shows the current phase — click it (or run **mockymock: Check
-  Environment Status** from the Command Palette) to check readiness or
-  retry a fix on demand, without waiting for a test run.
+- **Environment bootstrap**: a CLI binary bundled in the extension is used
+  automatically when present for your platform; otherwise a missing
+  `mockymock` CLI is installed via `uv` automatically; a stopped Docker
+  Desktop is launched and polled; a missing Docker install gets a one-click
+  download prompt. A status bar item shows the current phase — click it (or
+  run **mockymock: Check Environment Status** from the Command Palette) to
+  check readiness or retry a fix on demand, without waiting for a test run.
 - **Unattributed failures are never silently dropped.** A FAIL mockymock
   can't tie to any known test case (a `MOCK`/`VERIFY` firing after its case
   already ended, a framework/binary mismatch) still errors the file in Test
   Explorer with the raw detail, instead of the run just looking all-green.
 
+## Install
+
+Download the `.vsix` matching your OS from this repo's
+[Releases page](https://github.com/samdion1994/mocky-mock-vscode/releases),
+then install it:
+
+```bash
+code --install-extension mockymock-vscode-<platform>-<version>.vsix
+```
+
+| OS | File to download |
+|---|---|
+| Windows (x64) | `mockymock-vscode-win32-x64-<version>.vsix` |
+| Linux (x64) | `mockymock-vscode-linux-x64-<version>.vsix` |
+| macOS (Apple Silicon) | `mockymock-vscode-darwin-arm64-<version>.vsix` |
+
+Each package bundles a matching `mockymock` CLI binary — no separate CLI
+install step needed. Docker Desktop is still required at runtime (see
+Requirements below). Intel Macs and any other platform without a bundled
+binary fall back to installing the CLI via `uv` on first run, same as
+before.
+
 ## Settings
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (PATH otherwise) |
+| `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
 | `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder) |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |
 
 ## Requirements
 
-- The `mockymock` CLI (auto-installed via `uv` on first run if missing).
-  Single-test runs, tags, lint, JSON reports, and coverage mapping need a
-  CLI new enough to have `collect`/`lint`/`--case`/`--json-report`/
-  `--coverage-json`; older CLIs degrade gracefully (whole-file runs, JUnit
-  results, regex discovery). Debug (Execution Trace) additionally needs
-  `--trace-json`; Debug (Interactive) needs the `debug` subcommand. An
-  older CLI degrades to a clear message on the one profile it affects
-  rather than failing anything else.
+- The `mockymock` CLI. Official release `.vsix` packages (see Install
+  above) already bundle a matching binary — nothing to install. Otherwise
+  (running from source, or on a platform with no bundled binary) it's
+  auto-installed via `uv` on first run if missing. Single-test runs, tags,
+  lint, JSON reports, and coverage mapping need a CLI new enough to have
+  `collect`/`lint`/`--case`/`--json-report`/`--coverage-json`; older CLIs
+  degrade gracefully (whole-file runs, JUnit results, regex discovery).
+  Debug (Execution Trace) additionally needs `--trace-json`; Debug
+  (Interactive) needs the `debug` subcommand. An older CLI degrades to a
+  clear message on the one profile it affects rather than failing anything
+  else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container).
 - VS Code ≥ 1.88.
@@ -131,6 +157,9 @@ npm run package      # builds the .vsix
 
 Press F5 to launch the Extension Development Host against
 `examples/invupdt` (one of the examples above — no sibling `mocky-mock`
-checkout needed for this anymore). Distribution is a locally built
-`.vsix` (`code --install-extension mockymock-vscode-<version>.vsix`) —
-not the Marketplace.
+checkout needed for this anymore). A `.vsix` built locally via `npm run
+package` does **not** bundle a CLI binary (nothing populates `bin/`
+outside of the release CI workflow) — it falls back to the CLI on PATH /
+`uv`-install, same as the dev host. Official, CLI-bundled releases are
+built by `.github/workflows/release.yml` and published to this repo's
+GitHub Releases (see Install above) — not the Marketplace.
