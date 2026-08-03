@@ -6,6 +6,10 @@
   "mockymockCliVersion": "v0.1.1",
   "publisher": "legacylens",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/samdion1994/mocky-mock-vscode.git"
+  },
   "engines": {
     "vscode": "^1.88.0"
   },
