@@ -4,6 +4,7 @@ out/
 bin/
 .superpowers/
 docs/
+.claude/worktrees/
 .vscode/
 .PUBLISHING.md
 .vscodeignore
