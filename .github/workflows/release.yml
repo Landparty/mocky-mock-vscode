@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION" >&2
+            exit 1
+          fi
+
+      - name: Prepare staging and output directories
+        run: mkdir -p staging dist
+
+      - name: Download mockymock CLI release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CLI_VERSION="$(node -p "require('./package.json').mockymockCliVersion")"
+          gh release download "$CLI_VERSION" -R samdion1994/cobol-mocky-mock -D staging --clobber
+
+      - name: Package win32-x64
+        run: |
+          rm -rf bin && mkdir bin
+          cp staging/mockymock-windows-amd64.exe bin/mockymock.exe
+          cp staging/LICENSE bin/LICENSE-mockymock
+          npx vsce package --target win32-x64 -o dist/
+
+      - name: Package linux-x64
+        run: |
+          rm -rf bin && mkdir bin
+          cp staging/mockymock-linux-x86_64 bin/mockymock
+          chmod +x bin/mockymock
+          cp staging/LICENSE bin/LICENSE-mockymock
+          npx vsce package --target linux-x64 -o dist/
+
+      - name: Package darwin-arm64
+        run: |
+          rm -rf bin && mkdir bin
+          cp staging/mockymock-macos-arm64 bin/mockymock
+          chmod +x bin/mockymock
+          cp staging/LICENSE bin/LICENSE-mockymock
+          npx vsce package --target darwin-arm64 -o dist/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.vsix --generate-notes
