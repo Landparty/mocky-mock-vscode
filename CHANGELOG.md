@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.2.0...v0.3.0) (2026-08-03)
+
+
+### Features
+
+* add CI-bundled mockymock CLI binary and update documentation ([2c2fd53](https://github.com/samdion1994/mocky-mock-vscode/commit/2c2fd53f8c0583eb054716f8bf045da2d7e5e28b))
+
+
+### Bug Fixes
+
+* add missing repository field in package.json ([443598a](https://github.com/samdion1994/mocky-mock-vscode/commit/443598a01788906912efae5745a41a23ca7bcbf0))
+* correct typo in .gitignore for docs/ entry ([1e656a0](https://github.com/samdion1994/mocky-mock-vscode/commit/1e656a096da3ba6128235d8a02df146539a0e5bf))
+* remove duplicate entry for docs/ in .gitignore ([b1cddde](https://github.com/samdion1994/mocky-mock-vscode/commit/b1cddde5167858afb19a68aeb709128ebc70b84d))
+
 ## [0.2.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.1.0...v0.2.0) (2026-08-03)
 
 
