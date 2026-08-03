@@ -4,8 +4,12 @@ src/**
 .mocharc.json
 tsconfig.json
 docs/**
+**/*.map
 .gitignore
 .superpowers/**
+staging/**
+dist/**
+.github/**
 # Claude Code session/worktree state (e.g. .claude/worktrees/<branch>/,
 # a full nested checkout with its own node_modules and docs) has no
 # business in the package -- exclude the whole directory rather than

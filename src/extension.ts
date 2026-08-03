@@ -16,7 +16,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
       MOCKYMOCK_DEBUG_TYPE,
-      new MockymockDebugAdapterDescriptorFactory()
+      new MockymockDebugAdapterDescriptorFactory(context.extensionPath)
     ),
     vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider())
   );
