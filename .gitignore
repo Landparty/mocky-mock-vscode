@@ -3,7 +3,7 @@ out/
 *.vsix
 bin/
 .superpowers/
-.docs/
+docs/
 .vscode/
 .PUBLISHING.md
 .vscodeignore
