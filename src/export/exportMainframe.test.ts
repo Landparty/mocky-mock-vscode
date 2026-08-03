@@ -41,13 +41,16 @@ describe('runExport', () => {
   });
 
   it('surfaces a refusal on nonzero exit', async () => {
+    // The real CLI print()s refusal text to stdout, not stderr (confirmed
+    // against mockymock's own tests, which assert on capsys.readouterr().out
+    // for refusal text) -- this fixture mirrors that real contract.
     const fakeRun: CommandRunner = async () => ({
       code: 1,
-      stdout: '',
-      stderr: 'mockymock export: refused (COLUMN_OVERFLOW): line 42 ...\n',
+      stdout: 'mockymock export: refused (COLUMN_OVERFLOW): line 42 ...\n',
+      stderr: '',
     });
     const result = await runExport('mockymock', '/p/PROG.cbl', '/p/PROG.cut', [], '/p/PROG.mainframe.cbl', fakeRun);
     assert.strictEqual(result.exitCode, 1);
-    assert.match(result.stderr, /COLUMN_OVERFLOW/);
+    assert.match(result.stdout, /COLUMN_OVERFLOW/);
   });
 });

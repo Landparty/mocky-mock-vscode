@@ -36,6 +36,9 @@ it does and how to use it.
 - **Cancellation** that actually kills the in-flight run.
 - **Live linting** on open/save, zero Docker needed.
 - **`.cut` language support** — syntax highlighting, folding, snippets.
+- **Export Mainframe-Ready COBOL** — write the instrumented build to a
+  real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
+  compiler instead of GnuCOBOL, zero Docker needed.
 - **Environment bootstrap** — auto-installs the CLI and starts Docker
   Desktop for you, with a status bar item to check or retry.
 - **No silent failures** — anything mockymock can't attribute to a test
@@ -82,9 +85,9 @@ before.
   `collect`/`lint`/`--case`/`--json-report`/`--coverage-json`; older CLIs
   degrade gracefully (whole-file runs, JUnit results, regex discovery).
   Debug (Execution Trace) additionally needs `--trace-json`; Debug
-  (Interactive) needs the `debug` subcommand. An older CLI degrades to a
-  clear message on the one profile it affects rather than failing anything
-  else.
+  (Interactive) needs the `debug` subcommand; Export Mainframe-Ready COBOL
+  needs the `export` subcommand. An older CLI degrades to a clear message
+  on the one feature it affects rather than failing anything else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container).
 - VS Code ≥ 1.88.

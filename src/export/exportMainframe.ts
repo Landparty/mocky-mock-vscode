@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath } from '../environment/checks';
+import { resolveExecutablePath, supportsExportCommand } from '../environment/checks';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
 import { runExport } from './exportRunner';
 
@@ -12,10 +13,11 @@ function defaultOutputPath(cblPath: string): string {
 
 // One-shot palette action (like mockymock.checkEnvironment), not wired
 // into the Testing API tree: it produces one artifact per program/cut
-// pair, not a per-test-case result. v1 requires an active .cbl or .cut
-// editor -- no quick-pick fallback across every discovered suite, kept
-// deliberately out of scope (see the mocky-mock repo's docs/2026-08-03-
-// mainframe-export-command-design.md's Alternatives Considered).
+// pair, not a per-test-case result. v1 deliberately requires an active
+// .cbl/.cut editor; the design doc's `### VS Code command` step 1
+// sketches a quick-pick fallback across discovered suites, deferred for
+// now (see the mocky-mock repo's docs/2026-08-03-mainframe-export-
+// command-design.md).
 export function activateExportMainframeCommand(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.exportMainframe', async () => {
@@ -29,6 +31,21 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
       } else if (activePath?.endsWith('.cbl')) {
         cblPath = activePath;
         cutPath = resolveCutPath(activePath);
+        // A successful export opens PROG.mainframe.cbl as the new active
+        // editor -- an immediate re-run would otherwise resolve a
+        // nonexistent PROG.mainframe.cut and PROG.mainframe.mainframe.cbl
+        // and fail confusingly. Checking that the paired .cut actually
+        // exists (rather than string-matching the filename) catches that
+        // case AND the more general "this .cbl never had a suite" case.
+        try {
+          await fs.access(cutPath);
+        } catch {
+          const message = activePath.endsWith('.mainframe.cbl')
+            ? `mockymock: "${path.basename(activePath)}" looks like an already-exported file. Open the original .cbl or .cut to export again.`
+            : `mockymock: no ${path.basename(cutPath)} found next to "${path.basename(activePath)}". Open the program's .cut suite and try again.`;
+          vscode.window.showErrorMessage(message);
+          return;
+        }
       } else {
         vscode.window.showErrorMessage(
           'mockymock: open a .cbl or .cut file first, then run "Export Mainframe-Ready COBOL".'
@@ -39,12 +56,25 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
       const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
       const config = vscode.workspace.getConfiguration('mockymock', editor!.document.uri);
       const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
+
+      const supportsExport = await supportsExportCommand(runCommand, executablePath);
+      if (!supportsExport) {
+        vscode.window.showErrorMessage(
+          `mockymock at "${executablePath}" is too old to support exporting mainframe-ready COBOL ` +
+            '(needs the export subcommand). Upgrade mockymock and try again.'
+        );
+        return;
+      }
+
       const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
         workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
       );
       const outputPath = defaultOutputPath(cblPath);
 
-      const result = await runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommand);
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'Exporting mainframe-ready COBOL...' },
+        () => runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommand)
+      );
       if (result.exitCode !== 0) {
         vscode.window.showErrorMessage(`mockymock export failed:\n${result.stdout}${result.stderr}`);
         return;

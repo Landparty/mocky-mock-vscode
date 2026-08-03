@@ -3,7 +3,9 @@
 // debug/debugArgs.ts) so it's unit-testable under mocha, which cannot
 // resolve the 'vscode' module outside a running Extension Host.
 // exportMainframe.ts (vscode-touching command registration) is the only
-// consumer.
+// production consumer; exportMainframe.test.ts imports these functions
+// directly too -- the entire reason this file exists as a separate,
+// vscode-free module.
 import { CommandRunner } from '../environment/commandRunner';
 
 export function buildExportArgs(
