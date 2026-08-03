@@ -46,7 +46,7 @@ export function activateLintDiagnostics(context: vscode.ExtensionContext): void 
       }
 
       const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-      const executablePath = resolveExecutablePath(config.get<string>('executablePath'));
+      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
       const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
         workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
       );

@@ -15,8 +15,10 @@ export interface ReadyResult {
 
 export class EnvironmentManager {
   private statusBarItem: vscode.StatusBarItem;
+  private readonly extensionPath: string;
 
   constructor(context: vscode.ExtensionContext) {
+    this.extensionPath = context.extensionPath;
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.statusBarItem.name = 'mockymock';
     this.statusBarItem.command = 'mockymock.checkEnvironment';
@@ -42,7 +44,8 @@ export class EnvironmentManager {
   // click command invokes.
   async refreshStatus(): Promise<void> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath')
+      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      this.extensionPath
     );
     const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
     if (!mockymockOk) {
@@ -61,7 +64,8 @@ export class EnvironmentManager {
 
   async ensureReady(): Promise<ReadyResult> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath')
+      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      this.extensionPath
     );
 
     const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);

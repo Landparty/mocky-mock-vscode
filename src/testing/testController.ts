@@ -70,7 +70,8 @@ export function activateTestController(
 
   function resolveConfiguredExecutable(uri: vscode.Uri): string {
     return resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock', uri).get<string>('executablePath')
+      vscode.workspace.getConfiguration('mockymock', uri).get<string>('executablePath'),
+      context.extensionPath
     );
   }
 
@@ -296,7 +297,7 @@ export function activateTestController(
     const coverageJsonPath = withCoverage ? path.join(os.tmpdir(), `${stamp}-coverage.json`) : undefined;
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(fileItem.uri!);
     const config = vscode.workspace.getConfiguration('mockymock', fileItem.uri);
-    const executablePath = resolveExecutablePath(config.get<string>('executablePath'));
+    const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
     const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
       workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
     );
