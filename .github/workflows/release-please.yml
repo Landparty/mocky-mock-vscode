@@ -1,0 +1,74 @@
+name: release-please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      # `releases_created` is the aggregate flag for manifest mode: true on the
+      # run where the "chore: release X" PR is merged and the release is cut.
+      releases_created: ${{ steps.release.outputs.releases_created }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          # GITHUB_TOKEN works out of the box. Releases it creates do NOT
+          # trigger other workflows -- that's why the build/publish jobs
+          # below live in THIS same workflow (gated on the output) instead
+          # of a separate release-triggered workflow, which would never fire.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Package the extension as a .vsix -- source-free by construction (see
+  # PUBLISHING.md): esbuild bundles+minifies everything into one
+  # out/extension.js, and .vscodeignore keeps src/**/*.ts and every other
+  # out/ file out of the package. Pure JS/TS, no native modules, so one OS
+  # is enough (unlike the sibling Python repos' per-OS Nuitka builds).
+  build-vsix:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-vsix
+          path: "*.vsix"
+
+  # Attach the .vsix to the GitHub Release.
+  publish:
+    needs: [release-please, build-vsix]
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-vsix
+          path: dist/
+      - name: Resolve the release tag from the manifest
+        id: tag
+        # The merge commit that triggered this run already bumped the
+        # manifest to the released version; tags use the v<version> format
+        # (include-component-in-tag: false), matching the sibling
+        # cobol-parser / mocky-mock repos' release-please.yml.
+        run: echo "tag=v$(jq -r '.["."]' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Attach the .vsix to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber

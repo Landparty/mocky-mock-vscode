@@ -8,7 +8,9 @@
   "engines": {
     "vscode": "^1.88.0"
   },
-  "categories": ["Testing"],
+  "categories": [
+    "Testing"
+  ],
   "activationEvents": [
     "workspaceContains:**/*.cut"
   ],
@@ -25,14 +27,21 @@
       {
         "type": "mockymock-cobol",
         "label": "mockymock COBOL",
-        "languages": ["cut"]
+        "languages": [
+          "cut"
+        ]
       }
     ],
     "languages": [
       {
         "id": "cut",
-        "aliases": ["mockymock .cut", "cut"],
-        "extensions": [".cut"],
+        "aliases": [
+          "mockymock .cut",
+          "cut"
+        ],
+        "extensions": [
+          ".cut"
+        ],
         "configuration": "./language/cut-language-configuration.json"
       }
     ],
@@ -59,7 +68,9 @@
         },
         "mockymock.copybookPaths": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "scope": "resource",
           "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json."
@@ -81,9 +92,11 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
+    "check-types": "tsc --noEmit -p ./",
+    "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",
+    "vscode:prepublish": "npm run check-types && node esbuild.js --production",
     "package": "vsce package"
   },
   "devDependencies": {
@@ -91,6 +104,7 @@
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.88.0",
     "@vscode/vsce": "^2.24.0",
+    "esbuild": "^0.28.1",
     "mocha": "^10.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
