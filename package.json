@@ -28,9 +28,7 @@
       {
         "type": "mockymock-cobol",
         "label": "mockymock COBOL",
-        "languages": [
-          "cut"
-        ]
+        "languages": ["cut", "cobol"]
       }
     ],
     "languages": [
@@ -44,6 +42,16 @@
           ".cut"
         ],
         "configuration": "./language/cut-language-configuration.json"
+      },
+      {
+        "id": "cobol",
+        "aliases": ["COBOL", "cobol"],
+        "extensions": [".cbl", ".cob", ".cobol"]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "cobol"
       }
     ],
     "grammars": [

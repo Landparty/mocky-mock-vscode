@@ -10,6 +10,11 @@ docs/**
 staging/**
 dist/**
 .github/**
+# Claude Code session/worktree state (e.g. .claude/worktrees/<branch>/,
+# a full nested checkout with its own node_modules and docs) has no
+# business in the package -- exclude the whole directory rather than
+# trust whatever happens to be under it on the packaging machine.
+.claude/**
 node_modules/**
 esbuild.js
 PUBLISHING.md

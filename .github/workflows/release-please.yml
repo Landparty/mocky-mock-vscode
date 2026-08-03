@@ -4,6 +4,12 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish to the Marketplace (must match an existing vX.Y.Z release, no leading v)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,6 +18,7 @@ permissions:
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     outputs:
       # `releases_created` is the aggregate flag for manifest mode: true on the
@@ -72,3 +79,58 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
+
+  # Manually-triggered: push an already-released .vsix to the Visual Studio
+  # Marketplace. Reuses the vsix already attached to the GitHub Release
+  # (built and verified above) instead of rebuilding, so what gets published
+  # is exactly what was tagged.
+  publish-marketplace:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release exists with a vsix asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ASSET_COUNT="$(gh release view "v$VERSION" --json assets -q '[.assets[].name | select(endswith(".vsix"))] | length')" || {
+            echo "No GitHub release found for tag v$VERSION" >&2
+            exit 1
+          }
+          if [ "$ASSET_COUNT" -eq 0 ]; then
+            echo "Release v$VERSION has no .vsix asset to publish" >&2
+            exit 1
+          fi
+
+      - name: Download the vsix asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p dist
+          gh release download "v$VERSION" --pattern '*.vsix' -D dist/ --clobber
+
+      - name: Publish to the Visual Studio Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          shopt -s nullglob
+          files=(dist/*.vsix)
+          if [ ${#files[@]} -ne 1 ]; then
+            echo "Expected exactly one .vsix in dist/, found ${#files[@]}" >&2
+            exit 1
+          fi
+          npx @vscode/vsce publish --packagePath "${files[0]}" -p "$VSCE_PAT"
