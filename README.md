@@ -64,6 +64,28 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
   already ended, a framework/binary mismatch) still errors the file in Test
   Explorer with the raw detail, instead of the run just looking all-green.
 
+## Install
+
+Download the `.vsix` matching your OS from this repo's
+[Releases page](https://github.com/samdion1994/mocky-mock-vscode/releases),
+then install it:
+
+```bash
+code --install-extension mockymock-vscode-<version>-<platform>.vsix
+```
+
+| OS | File to download |
+|---|---|
+| Windows (x64) | `mockymock-vscode-<version>-win32-x64.vsix` |
+| Linux (x64) | `mockymock-vscode-<version>-linux-x64.vsix` |
+| macOS (Apple Silicon) | `mockymock-vscode-<version>-darwin-arm64.vsix` |
+
+Each package bundles a matching `mockymock` CLI binary — no separate CLI
+install step needed. Docker Desktop is still required at runtime (see
+Requirements below). Intel Macs and any other platform without a bundled
+binary fall back to installing the CLI via `uv` on first run, same as
+before.
+
 ## Settings
 
 | Setting | Default | Purpose |
@@ -75,14 +97,17 @@ stopped Docker Desktop), so the day-to-day loop never needs a terminal.
 
 ## Requirements
 
-- The `mockymock` CLI (auto-installed via `uv` on first run if missing).
-  Single-test runs, tags, lint, JSON reports, and coverage mapping need a
-  CLI new enough to have `collect`/`lint`/`--case`/`--json-report`/
-  `--coverage-json`; older CLIs degrade gracefully (whole-file runs, JUnit
-  results, regex discovery). Debug (Execution Trace) additionally needs
-  `--trace-json`; Debug (Interactive) needs the `debug` subcommand. An
-  older CLI degrades to a clear message on the one profile it affects
-  rather than failing anything else.
+- The `mockymock` CLI. Official release `.vsix` packages (see Install
+  above) already bundle a matching binary — nothing to install. Otherwise
+  (running from source, or on a platform with no bundled binary) it's
+  auto-installed via `uv` on first run if missing. Single-test runs, tags,
+  lint, JSON reports, and coverage mapping need a CLI new enough to have
+  `collect`/`lint`/`--case`/`--json-report`/`--coverage-json`; older CLIs
+  degrade gracefully (whole-file runs, JUnit results, regex discovery).
+  Debug (Execution Trace) additionally needs `--trace-json`; Debug
+  (Interactive) needs the `debug` subcommand. An older CLI degrades to a
+  clear message on the one profile it affects rather than failing anything
+  else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container).
 - VS Code ≥ 1.88.
@@ -97,6 +122,9 @@ npm run package      # builds the .vsix
 ```
 
 Press F5 to launch the Extension Development Host against
-`../mocky-mock/examples/invupdt`. Distribution is a locally built `.vsix`
-(`code --install-extension mockymock-vscode-<version>.vsix`) — not the
-Marketplace.
+`../mocky-mock/examples/invupdt`. A `.vsix` built locally via `npm run
+package` does **not** bundle a CLI binary (nothing populates `bin/`
+outside of the release CI workflow) — it falls back to the CLI on PATH /
+`uv`-install, same as the dev host. Official, CLI-bundled releases are
+built by `.github/workflows/release.yml` and published to this repo's
+GitHub Releases (see Install above) — not the Marketplace.
