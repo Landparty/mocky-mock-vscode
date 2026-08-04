@@ -69,6 +69,19 @@ jobs:
             exit 0
           fi
 
+          # release.yml hard-depends on these four exact asset names existing
+          # on the release it downloads from; without this check, a bump PR
+          # could pass check-types/test:unit (nothing under src/ reads
+          # mockymockCliVersion) and merge, only to break release.yml later.
+          ASSETS="$(gh release view "$LATEST" --repo samdion1994/cobol-mocky-mock --json assets -q '.assets[].name')"
+          for want in mockymock-windows-amd64.exe mockymock-linux-x86_64 mockymock-macos-arm64 LICENSE; do
+            if ! printf '%s\n' "$ASSETS" | grep -qx "$want"; then
+              echo "Release $LATEST is missing asset $want -- not proposing."
+              echo "proceed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
           echo "New release to propose: $CURRENT -> $LATEST"
           echo "proceed=true" >> "$GITHUB_OUTPUT"
           echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
