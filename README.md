@@ -10,10 +10,10 @@ COBOL today — see you on the *wildside*.
 Unit testing and debugging COBOL is normally gated behind provisioning a
 z/OS environment — infrastructure that can run into the hundreds of
 thousands of dollars for something that's standard, free tooling in every
-other language. mockymock's goal is to close that gap: a fast, local
-unit-testing and debugging loop for COBOL — write a `.cut` suite, mock out
-the file I/O, CICS, DB2, IMS, and MQ boundaries, then run and step through
-it under GnuCOBOL in Docker, no mainframe access required, *good vibration* guaranteed.
+other language *thank you IBM*. mockymock's goal is to close that gap: a fast, local
+and simple unit-testing and debugging loop for COBOL — write a `.cut` suite, mock out
+the file I/O, CICS, DB2, IMS, and MQ boundaries, vola you're good to go. 
+No mainframe access required and no hassel, *good vibration* guaranteed.
 
 The idea started from [cobol-check](https://github.com/openmainframeproject/cobol-check),
 the open-source COBOL unit-testing framework, but mockymock was rebuilt from
@@ -41,6 +41,19 @@ it does and how to use it.
 - **No silent failures** — anything mockymock can't attribute to a test
   case still surfaces as an error, not a false green.
 
+## Compiler
+
+mockymock compiles and runs your COBOL with [GnuCOBOL](https://gnucobol.sourceforge.io/),
+**not** an IBM Enterprise COBOL compiler. GnuCOBOL is close enough for most
+day-to-day unit testing, but it's a different compiler with its own dialect
+quirks, extensions, and gaps versus IBM's mainframe compiler — some IBM-only
+syntax or behavior may not compile or may behave differently under
+mockymock. Treat green tests here as strong local signal, not a guarantee
+that the same source will compile and behave identically on z/OS.
+
+Compiling and running tests directly against a mainframe/IBM COBOL compiler
+is on the roadmap.
+
 ## Install
 
 Download the `.vsix` matching your OS from this repo's
@@ -51,17 +64,7 @@ then install it:
 code --install-extension mockymock-vscode-<platform>-<version>.vsix
 ```
 
-| OS | File to download |
-|---|---|
-| Windows (x64) | `mockymock-vscode-win32-x64-<version>.vsix` |
-| Linux (x64) | `mockymock-vscode-linux-x64-<version>.vsix` |
-| macOS (Apple Silicon) | `mockymock-vscode-darwin-arm64-<version>.vsix` |
-
-Each package bundles a matching `mockymock` CLI binary — no separate CLI
-install step needed. Docker Desktop is still required at runtime (see
-Requirements below). Intel Macs and any other platform without a bundled
-binary fall back to installing the CLI via `uv` on first run, same as
-before.
+Or download from the microsoft extension store (currently worked on)
 
 ## Settings
 
@@ -86,7 +89,10 @@ before.
   clear message on the one profile it affects rather than failing anything
   else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
-  container).
+  container). If Docker Desktop is installed but not running, the extension
+  starts it automatically before your first run/lint and waits for it to
+  become ready — no need to launch it yourself. If Docker isn't installed at
+  all, you'll get a prompt linking to the Docker Desktop download page.
 - VS Code ≥ 1.88.
 
 ## Examples
