@@ -1,0 +1,104 @@
+name: Check mockymock CLI release
+
+on:
+  schedule:
+    - cron: '0 12 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  check-and-propose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for a new release to propose
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LATEST="$(gh release view --repo samdion1994/cobol-mocky-mock --json tagName -q .tagName 2>/dev/null || true)"
+          if [ -z "$LATEST" ]; then
+            echo "No cobol-mocky-mock releases found (or the API call failed) -- nothing to propose."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CURRENT="$(node -p "require('./package.json').mockymockCliVersion")"
+          if [ "$LATEST" = "$CURRENT" ]; then
+            echo "Already on the latest release ($CURRENT)."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          BRANCH="deps/mockymock-cli-$LATEST"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            echo "Branch $BRANCH already exists -- already proposed, skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          EXISTING_PR_COUNT="$(gh pr list --state all --head "$BRANCH" --json number -q 'length')"
+          if [ "$EXISTING_PR_COUNT" -gt 0 ]; then
+            echo "A PR from $BRANCH already exists (open or closed) -- skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "New release to propose: $CURRENT -> $LATEST"
+          echo "proceed=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Bump mockymockCliVersion
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          TAG: ${{ steps.check.outputs.tag }}
+        run: npm pkg set mockymockCliVersion="$TAG"
+
+      - name: Install dependencies
+        if: steps.check.outputs.proceed == 'true'
+        run: npm ci
+
+      - name: Type-check
+        if: steps.check.outputs.proceed == 'true'
+        run: npm run check-types
+
+      - name: Unit tests
+        if: steps.check.outputs.proceed == 'true'
+        run: npm run test:unit
+
+      - name: Open the bump PR
+        if: steps.check.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.check.outputs.tag }}
+          BRANCH: ${{ steps.check.outputs.branch }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add package.json
+          git commit -m "fix(deps): bump mockymock CLI to $TAG"
+          git push origin "$BRANCH"
+
+          gh label create dependencies --color 0366d6 --description "Dependency updates" 2>/dev/null || true
+
+          BODY="New mockymock CLI release available: $TAG (https://github.com/samdion1994/cobol-mocky-mock/releases/tag/$TAG). \`npm run check-types\` and \`npm run test:unit\` both still pass with this bump. Merging this PR lets release-please propose the next mockymock-vscode release."
+
+          gh pr create \
+            --title "fix(deps): bump mockymock CLI to $TAG" \
+            --body "$BODY" \
+            --label dependencies \
+            --head "$BRANCH" \
+            --base main
