@@ -73,6 +73,9 @@ jobs:
           # on the release it downloads from; without this check, a bump PR
           # could pass check-types/test:unit (nothing under src/ reads
           # mockymockCliVersion) and merge, only to break release.yml later.
+          # Unguarded (no `|| true`), same reasoning as the PR-list check
+          # above: a failed lookup here should fail the run loudly, not be
+          # misread as "assets are fine".
           ASSETS="$(gh release view "$LATEST" --repo samdion1994/cobol-mocky-mock --json assets -q '.assets[].name')"
           for want in mockymock-windows-amd64.exe mockymock-linux-x86_64 mockymock-macos-arm64 LICENSE; do
             if ! printf '%s\n' "$ASSETS" | grep -qx "$want"; then
