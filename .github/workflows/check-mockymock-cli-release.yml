@@ -1,3 +1,9 @@
+# Daily check for a new cobol-mocky-mock CLI release; if the latest release
+# differs from the mockymockCliVersion pinned in package.json, opens a PR
+# bumping the pin. Narrower sibling to release.yml (bundles the pinned CLI
+# into the extension) and release-please.yml (proposes/cuts extension
+# releases from conventional commits) -- this workflow only proposes the
+# version bump, nothing else.
 name: Check mockymock CLI release
 
 on:
@@ -8,6 +14,8 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # gh label create (below) is a labels/Issues-API operation even though
+  # the label ends up applied to a PR, so this needs issues: write too.
   issues: write
 
 jobs:
@@ -27,6 +35,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # `|| true`: no releases published yet (or a transient API error)
+          # should be a quiet no-op here, not a failed workflow run.
           LATEST="$(gh release view --repo samdion1994/cobol-mocky-mock --json tagName -q .tagName 2>/dev/null || true)"
           if [ -z "$LATEST" ]; then
             echo "No cobol-mocky-mock releases found (or the API call failed) -- nothing to propose."
@@ -48,6 +58,10 @@ jobs:
             exit 0
           fi
 
+          # Deliberately NOT guarded with `|| true`, unlike the release-view
+          # call above: a transient failure here should fail the run loudly
+          # rather than be misread as "no existing PR", which risks opening
+          # a duplicate.
           EXISTING_PR_COUNT="$(gh pr list --state all --head "$BRANCH" --json number -q 'length')"
           if [ "$EXISTING_PR_COUNT" -gt 0 ]; then
             echo "A PR from $BRANCH already exists (open or closed) -- skipping."
@@ -66,6 +80,10 @@ jobs:
           TAG: ${{ steps.check.outputs.tag }}
         run: npm pkg set mockymockCliVersion="$TAG"
 
+      # A PR opened with the default GITHUB_TOKEN does not trigger other
+      # workflows (GitHub's anti-recursion rule for GITHUB_TOKEN-authored
+      # refs), so ci.yml never runs against this bump PR. Re-run the same
+      # checks here as a stand-in.
       - name: Install dependencies
         if: steps.check.outputs.proceed == 'true'
         run: npm ci
@@ -89,6 +107,10 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -b "$BRANCH"
           git add package.json
+          # fix(deps), not chore(deps): release-please-config.json uses
+          # release-please's default section config, where fix/feat trigger
+          # a release and chore does not. chore(deps) here would merge
+          # silently with no version bump.
           git commit -m "fix(deps): bump mockymock CLI to $TAG"
           git push origin "$BRANCH"
 
