@@ -27,6 +27,11 @@
         "command": "mockymock.checkEnvironment",
         "title": "Check Environment Status",
         "category": "mockymock"
+      },
+      {
+        "command": "mockymock.exportMainframe",
+        "title": "Export Mainframe-Ready COBOL",
+        "category": "mockymock"
       }
     ],
     "debuggers": [

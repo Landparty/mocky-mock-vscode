@@ -35,6 +35,20 @@ export async function supportsDebugCommand(run: CommandRunner, executablePath: s
   return result.code === 0 && result.stdout.includes('--dap-stdio');
 }
 
+// Same "check first, degrade gracefully" pattern as supportsDebugCommand,
+// but for the `export` subcommand: an installed CLI that predates
+// `mockymock export` exits 2 (argparse's "invalid choice" for an unknown
+// subcommand) on `export --help`. Checking for `--output` specifically
+// (rather than just a zero exit code) also catches the unlikely case of
+// an `export` subcommand existing without the exact flag this extension
+// needs -- `--output` is the flag buildExportArgs actually passes, and
+// argparse lists a flag in --help even with no help= text of its own
+// (only help=SUPPRESS would hide it).
+export async function supportsExportCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  const result = await run(executablePath, ['export', '--help']);
+  return result.code === 0 && result.stdout.includes('--output');
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable
