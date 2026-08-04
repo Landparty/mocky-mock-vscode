@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.3.0...v0.4.0) (2026-08-04)
+
+
+### Features
+
+* add Export Mainframe-Ready COBOL command ([5093b2c](https://github.com/samdion1994/mocky-mock-vscode/commit/5093b2c77dbb5c636735085a97a8b57bcd661e6a))
+* add mockymock.exportMainframe command ([b874c7f](https://github.com/samdion1994/mocky-mock-vscode/commit/b874c7fff6f62e4d3bab632f3906ce3edd685d9e))
+* register Export Mainframe-Ready COBOL in the command palette ([4931239](https://github.com/samdion1994/mocky-mock-vscode/commit/49312393f918c8572904a04ae1ae3dd2c9b70211))
+
+
+### Bug Fixes
+
+* add cacheSeconds parameter to download badge in README ([396fca8](https://github.com/samdion1994/mocky-mock-vscode/commit/396fca89e44e1357662379ff7ea0d09b4ab79b10))
+* address final whole-branch review findings for mainframe export command ([e72c827](https://github.com/samdion1994/mocky-mock-vscode/commit/e72c8275b80bfaa703526174a63331c8aafd5fac))
+
 ## [0.3.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.2.0...v0.3.0) (2026-08-03)
 
 
