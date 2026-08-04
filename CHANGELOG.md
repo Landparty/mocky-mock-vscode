@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.0...v0.4.1) (2026-08-04)
+
+
+### Bug Fixes
+
+* verify pinned CLI release has release.yml's required assets ([acd189c](https://github.com/samdion1994/mocky-mock-vscode/commit/acd189c5a80463c2cbbd893e0416786ce2087447))
+
 ## [0.4.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.3.0...v0.4.0) (2026-08-04)
 
 
