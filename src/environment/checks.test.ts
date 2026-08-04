@@ -11,6 +11,7 @@ import {
   getDockerDesktopLaunchCommand,
   supportsTraceFlag,
   supportsDebugCommand,
+  supportsExportCommand,
 } from './checks';
 import { CommandResult, CommandRunner } from './commandRunner';
 
@@ -100,6 +101,29 @@ describe('supportsDebugCommand', () => {
 
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsDebugCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
+    assert.strictEqual(ok, false);
+  });
+});
+
+describe('supportsExportCommand', () => {
+  it('returns true when export --help lists --output', async () => {
+    const ok = await supportsExportCommand(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock export ...\n  -o OUTPUT, --output OUTPUT  ...\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the export subcommand', async () => {
+    const ok = await supportsExportCommand(
+      fakeRunner({ code: 2, stdout: '', stderr: "argument command: invalid choice: 'export'" }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsExportCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
     assert.strictEqual(ok, false);
   });
 });

@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { parseCutFile, resolveCblPath, isExcludedCutPath } from './cutDiscovery';
+import { parseCutFile, resolveCblPath, resolveCutPath, isExcludedCutPath } from './cutDiscovery';
 
 describe('parseCutFile', () => {
   it('parses a single suite with multiple cases', () => {
@@ -53,6 +53,20 @@ describe('resolveCblPath', () => {
     const cutPath = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cut');
     const expected = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cbl');
     assert.strictEqual(resolveCblPath(cutPath), expected);
+  });
+});
+
+describe('resolveCutPath', () => {
+  // Built with path.join (like the resolveCblPath test above) rather than a
+  // literal '/p/PROG.cbl' string: resolveCutPath's own path.parse/path.join
+  // round-trip normalizes to the platform separator, so a hardcoded
+  // forward-slash expectation fails on win32 even though the swap is
+  // correct (verified empirically on this machine: path.join('/p',
+  // 'PROG.cut') -> '\p\PROG.cut').
+  it('swaps a .cbl path for its sibling .cut', () => {
+    const cblPath = path.join('/p', 'PROG.cbl');
+    const expected = path.join('/p', 'PROG.cut');
+    assert.strictEqual(resolveCutPath(cblPath), expected);
   });
 });
 

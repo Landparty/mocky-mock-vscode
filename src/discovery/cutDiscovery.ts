@@ -159,6 +159,11 @@ export function resolveCblPath(cutFilePath: string): string {
   return path.join(parsed.dir, `${parsed.name}.cbl`);
 }
 
+export function resolveCutPath(cblFilePath: string): string {
+  const parsed = path.parse(cblFilePath);
+  return path.join(parsed.dir, `${parsed.name}.cut`);
+}
+
 // Directory names that mark a path as generated/vendored/scratch, not a real
 // source location for .cut suites -- most notably git worktrees (Claude Code's
 // own `.claude/worktrees/<name>/` convention and the plain `.worktrees/<name>/`

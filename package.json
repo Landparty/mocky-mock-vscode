@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "mockymockCliVersion": "v0.1.1",
   "publisher": "legacylens",
   "private": true,
@@ -26,6 +26,11 @@
       {
         "command": "mockymock.checkEnvironment",
         "title": "Check Environment Status",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.exportMainframe",
+        "title": "Export Mainframe-Ready COBOL",
         "category": "mockymock"
       }
     ],

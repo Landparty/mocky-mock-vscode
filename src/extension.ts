@@ -5,6 +5,7 @@ import { activateTestController } from './testing/testController';
 import { activateLintDiagnostics } from './linting/lintDiagnostics';
 import { MockymockDebugAdapterDescriptorFactory } from './debug/debugAdapterFactory';
 import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationProvider';
+import { activateExportMainframeCommand } from './export/exportMainframe';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
@@ -12,6 +13,7 @@ export function activate(context: vscode.ExtensionContext) {
   const environmentManager = new EnvironmentManager(context);
   activateTestController(context, environmentManager);
   activateLintDiagnostics(context);
+  activateExportMainframeCommand(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
