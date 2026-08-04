@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.1...v0.4.2) (2026-08-04)
+
+
+### Bug Fixes
+
+* update publisher name from 'legacylens' to 'lanparty' in package.json ([74b5693](https://github.com/samdion1994/mocky-mock-vscode/commit/74b5693d839745588ef02860b4e440bcccf5db1f))
+
 ## [0.4.1](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.0...v0.4.1) (2026-08-04)
 
 
