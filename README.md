@@ -25,6 +25,10 @@ it does and how to use it.
 
 ## Features
 
+- **COBOL Boundaries view** — a sidebar tree of every external boundary
+  (CALL, SQL/CICS/IMS DL/I, file I/O, ACCEPT) the active `.cbl` touches, with
+  seed/placeholder checkboxes and one-click generation of a runnable, seeded
+  `.cut` scaffold via `mockymock generate --with-data`.
 - **Test Explorer tree** for every `.cut` file, with tag filtering.
 - **Run single tests or subsets**, including "rerun failed."
 - **Failures land on the failing line**, with an expected/actual diff.
@@ -97,6 +101,90 @@ Or download from the microsoft extension store (currently worked on)
   become ready — no need to launch it yourself. If Docker isn't installed at
   all, you'll get a prompt linking to the Docker Desktop download page.
 - VS Code ≥ 1.88.
+
+## COBOL Boundaries view
+
+A sidebar tree view (Explorer panel, "COBOL Boundaries") that lists every
+external boundary the active `.cbl` file touches — CALLs to other programs,
+SQL/CICS/IMS DL/I, file I/O (OPEN/READ/WRITE/...), and console ACCEPT —
+grouped by the paragraph that touches them, each with its data direction
+(`→ IN` / `← OUT` / `↔ BIDI` / `STATUS`) and resolved record layout. Check
+which boundaries should get realistic generated data, then run **Generate
+.cut** (play icon, view title bar) to produce a runnable, seeded test
+scaffold.
+
+**Data source.** The view is driven entirely by `mockymock fixtures
+<file.cbl> --scenarios <mode> [--seed N] [--copybook-path ...]`, which prints
+a `FixtureBundle` (JSON) describing every scenario's mocked boundaries. The
+extension owns no COBOL knowledge of its own — it renders exactly what the
+bundle says, verbatim. Only `bundle_version 1` is understood; anything else
+(an older or newer CLI) shows an error node instead of a guessed tree.
+
+**Checkbox = seed vs. placeholder.** Every boundary in a generated `.cut` is
+always mocked — the scaffold is runnable by construction — the checkbox only
+decides the mock's *body*:
+
+- **Checked** (default): the mock body is filled with the bundle's own
+  generated data (realistic values, read sequences, `AT END` handling).
+- **Unchecked**: the mock gets the ordinary placeholder body instead
+  (passed as `--placeholder CATEGORY:KEY` to `generate --with-data`) — still
+  mocked, just without generated data. Anything downstream that depended on
+  the boundary's full data sequence is recomputed accordingly — for example
+  a `VERIFY ... WAS CALLED N TIMES` count on a multi-row `READ` loop
+  collapses to a single terminal call once that `READ` is downgraded.
+
+A checkbox is linked by `CATEGORY:KEY` across every paragraph the same
+boundary recurs in — unchecking one occurrence unchecks all of them,
+matching the granularity `--placeholder` itself uses. Checkbox state
+persists per `.cbl` file across sessions.
+
+**Output-only (not seeded).** A boundary the program only ever produces
+output to — a `WRITE`/`REWRITE`, or an SQL `INSERT`/`UPDATE`/`DELETE` — has
+nothing to mock (the program supplies that value, so it's asserted on
+instead), so it never gets a checkbox row under a paragraph. These still
+list under a separate "Output-only (not seeded)" node at the bottom of the
+tree, so the view stays an inventory of everything the program touches, not
+just what it can seed. One known gap: a `CALL`/`DYNCALL` whose arguments are
+*all* `OUT`-direction has the same "nothing to mock" shape but isn't listed
+here — the CLI doesn't emit a boundary-level marker for that case, only
+per-argument ones the extension can't yet attribute back to a category/key.
+
+**Scenario mode.** The gear icon in the view's title bar opens a picker for
+which scenario set to fetch:
+
+- `happy` (default) — one unconstrained, layout-valid scenario.
+- `branches` — one scenario per reachable, satisfiable branch arm.
+- `all` — `branches` plus fixed empty-input / error-status / boundary-value
+  families.
+
+Changing the mode re-fetches the bundle and rebuilds the tree.
+
+**Generate .cut.** The play icon prompts for an optional integer seed
+(leave blank to let the CLI draw one — no `--seed` flag is sent in that
+case, and the seed the CLI drew is shown in an information message
+afterward so the run is replayable) and writes `<stem>.cut` next to the
+`.cbl`. If that file already
+exists you're asked to **Overwrite**, **Write `<stem>.generated.cut`**
+instead, or **Cancel**. A successful generate refreshes the tree, opens the
+new file, and — depending on what the CLI printed — surfaces two different
+kinds of message: a *warning* for anything that went sideways with the
+invocation itself (e.g. an unmatched `--placeholder` that didn't correspond
+to any fixture), and an *informational* note for routine facts about the
+program's own shape (e.g. a boundary point the CLI can't mock, or a
+`STOP RUN`/`GOBACK` site). Full detail for both — plus anything a failing
+run printed — lands in the "mockymock boundaries" output channel (View →
+Output).
+
+**When it's not available.** A non-`.cbl`/`.cob` active editor shows a
+welcome node ("Open a .cbl file to list its boundaries"). If `mockymock`
+can't produce a bundle (parse failure, missing copybook, or a CLI too old to
+have the `fixtures` subcommand), the view shows an error node with the CLI's
+own message instead of an empty or guessed tree, plus a "Show output" child
+with the full stderr.
+
+Requires a `mockymock` CLI new enough to have the `fixtures` subcommand and
+`generate --with-data`; an older CLI shows the error node with the CLI's own
+"invalid choice: 'fixtures'" message rather than a blank view.
 
 ## Examples
 

@@ -32,8 +32,60 @@
         "command": "mockymock.exportMainframe",
         "title": "Export Mainframe-Ready COBOL",
         "category": "mockymock"
+      },
+      {
+        "command": "mockymock.boundaries.refresh",
+        "title": "Refresh",
+        "category": "mockymock",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "mockymock.boundaries.setScenarioMode",
+        "title": "Scenario Mode…",
+        "category": "mockymock",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "mockymock.boundaries.generateCut",
+        "title": "Generate .cut",
+        "category": "mockymock",
+        "icon": "$(play)"
       }
     ],
+    "views": {
+      "explorer": [
+        {
+          "id": "mockymock.boundaries",
+          "name": "COBOL Boundaries",
+          "icon": "$(symbol-interface)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "mockymock.boundaries",
+        "contents": "Open a .cbl file to list its boundaries."
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "mockymock.boundaries.generateCut",
+          "when": "view == mockymock.boundaries",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.boundaries.refresh",
+          "when": "view == mockymock.boundaries",
+          "group": "navigation@2"
+        },
+        {
+          "command": "mockymock.boundaries.setScenarioMode",
+          "when": "view == mockymock.boundaries",
+          "group": "navigation@3"
+        }
+      ]
+    },
     "debuggers": [
       {
         "type": "mockymock-cobol",
@@ -125,6 +177,7 @@
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",
+    "test:integration": "node scripts/run-integration-tests.js",
     "vscode:prepublish": "npm run check-types && node esbuild.js --production",
     "package": "vsce package"
   },
