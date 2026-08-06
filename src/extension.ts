@@ -14,6 +14,7 @@ import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundarie
 import { placeholderArgs } from './boundaries/boundariesModel';
 import { runGenerate, resolveOutPath, GenerateOptions, GenerateResult } from './boundaries/generateCut';
 import { BundleError } from './boundaries/bundleClient';
+import { shouldClearOnEditorChange } from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
@@ -153,15 +154,16 @@ async function runGenerateCutCommand(
     return;
   }
 
-  // Refresh BEFORE opening the generated file: showTextDocument below makes
-  // the .cut the active editor, which fires onDidChangeActiveTextEditor and
-  // (300ms later, debounced) resolveActiveCblPath() -> undefined for a
-  // .cut -- the same welcome-state refresh any non-.cbl active editor
-  // triggers (Task 3). Refreshing on cblPath first, synchronously ahead of
-  // that debounce, is what actually lands the regenerated boundaries in the
-  // tree; doing it after would just be overwritten by the debounced one.
-  await provider.refresh(cblPath);
-
+  // No refresh here (final review, Task 2): `generate` only ever WRITES the
+  // .cut file -- it never touches cblPath itself (see generateCut.ts's
+  // buildGenerateArgs) -- so the boundaries model already showing in the
+  // tree is still accurate; refetching it via `mockymock fixtures` would
+  // just reproduce the same data for an extra CLI round-trip. The
+  // showTextDocument() call below makes the .cut the active editor, which
+  // fires onDidChangeActiveTextEditor for a non-.cbl file; the editor-change
+  // handler now PINS the tree in that case instead of clearing it to the
+  // welcome state (shouldClearOnEditorChange), so nothing here needs to
+  // re-land the model ahead of that debounce.
   const doc = await vscode.workspace.openTextDocument(outPath);
   await vscode.window.showTextDocument(doc);
   if (result.warnings.length > 0) {
@@ -190,6 +192,10 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
   const view = vscode.window.createTreeView<BoundaryTreeNode>('mockymock.boundaries', {
     treeDataProvider: provider,
   });
+  // Task 1 (final review): the spec requires scenario mode be "shown in the
+  // view description" -- the view title bar's subtitle. Set at creation and
+  // kept in sync inside the setScenarioMode command handler below.
+  view.description = provider.scenarioMode;
   context.subscriptions.push(view);
 
   context.subscriptions.push(
@@ -206,10 +212,41 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
     })
   );
 
+  // Task 3 (final review): a hidden Boundaries view was still refetching on
+  // every active-editor change -- a `mockymock fixtures` CLI invocation for
+  // a view the user cannot currently see. Gated on view.visible below;
+  // onDidChangeVisibility's handler (registered further down) catches up
+  // once the view is shown again. Explicit user actions -- the Refresh
+  // command and Generate .cut -- call provider.refresh() directly rather
+  // than through this debounce, so they are never gated.
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => void provider.refresh(resolveActiveCblPath()), BOUNDARIES_REFRESH_DEBOUNCE_MS);
+    refreshTimer = setTimeout(() => {
+      if (!view.visible) return;
+      const activeCblPath = resolveActiveCblPath();
+      const newEditorIsCobol = activeCblPath !== undefined;
+      if (newEditorIsCobol) {
+        // Same dedup the visibility handler below applies: "until a
+        // DIFFERENT .cbl becomes active" (controller decision) also means a
+        // round-trip back to the SAME already-committed .cbl (e.g.
+        // FOO.cbl -> its freshly generated FOO.cut -> back to FOO.cbl)
+        // shouldn't re-run `mockymock fixtures` for data that hasn't
+        // changed. After an errored refresh provider.cblPath is undefined
+        // (see BoundariesTreeProvider.refresh()'s error path), so returning
+        // to the same file still retries.
+        if (activeCblPath !== provider.cblPath) {
+          void provider.refresh(activeCblPath);
+        }
+      } else if (shouldClearOnEditorChange(provider.model !== undefined, newEditorIsCobol)) {
+        // Task 2 (final review): only clear to the welcome state when there
+        // is genuinely nothing left to show -- otherwise PIN the tree on
+        // the last .cbl's boundaries (e.g. the extension's own
+        // showTextDocument() on a freshly generated .cut must not blank it).
+        void provider.refresh(undefined);
+      }
+      // else: pin -- keep showing the last committed .cbl's boundaries.
+    }, BOUNDARIES_REFRESH_DEBOUNCE_MS);
   }
   context.subscriptions.push({
     dispose: () => {
@@ -218,6 +255,20 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
   });
 
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => scheduleRefresh()));
+  context.subscriptions.push(
+    view.onDidChangeVisibility((e) => {
+      // Catch-up for whatever the visibility gate above skipped while
+      // hidden: only fetch when there's a real active .cbl that the
+      // committed model doesn't already match -- never clears to the
+      // welcome state on its own (that would break the Task 2 pinning rule
+      // for a non-.cbl active editor).
+      if (!e.visible) return;
+      const activeCblPath = resolveActiveCblPath();
+      if (activeCblPath !== undefined && activeCblPath !== provider.cblPath) {
+        void provider.refresh(activeCblPath);
+      }
+    })
+  );
   scheduleRefresh();
 
   context.subscriptions.push(
@@ -234,6 +285,10 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
         { placeHolder: 'mockymock boundaries: scenario mode' }
       );
       if (!picked) return;
+      // Task 1: assign before the await -- provider.setScenarioMode()
+      // internally awaits a full refresh, so setting this after it would
+      // leave the title bar showing the stale mode for that CLI round-trip.
+      view.description = picked.label;
       await provider.setScenarioMode(picked.label);
     }),
     vscode.commands.registerCommand('mockymock.boundaries.generateCut', async () =>

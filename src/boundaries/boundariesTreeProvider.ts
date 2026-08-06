@@ -2,7 +2,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath } from '../environment/checks';
+import { resolveExecutablePath, describeRefreshError } from '../environment/checks';
 import { fetchBundle, BundleError } from './bundleClient';
 import {
   buildViewModel,
@@ -158,7 +158,11 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       nextModel = buildViewModel(bundle, overrides);
     } catch (err) {
       if (err instanceof BundleError) {
-        nextError = { message: err.message, stderr: err.stderr };
+        // describeRefreshError swaps commandRunner's raw ENOENT sentinel
+        // ("command not found") for an actionable bootstrap-style message;
+        // `stderr` is kept as-is so the "Show output" child still surfaces
+        // whatever the CLI actually printed.
+        nextError = { message: describeRefreshError(err.message, err.stderr), stderr: err.stderr };
       } else {
         nextError = { message: err instanceof Error ? err.message : String(err) };
       }

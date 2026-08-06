@@ -12,6 +12,8 @@ import {
   supportsTraceFlag,
   supportsDebugCommand,
   supportsExportCommand,
+  describeRefreshError,
+  CLI_NOT_FOUND_MESSAGE,
 } from './checks';
 import { CommandResult, CommandRunner } from './commandRunner';
 
@@ -125,6 +127,35 @@ describe('supportsExportCommand', () => {
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsExportCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
     assert.strictEqual(ok, false);
+  });
+});
+
+describe('describeRefreshError', () => {
+  it('maps the exact ENOENT sentinel to the actionable CLI-not-found message', () => {
+    // The precise shape commandRunner.ts produces when spawn() can't find
+    // the executable, carried through unchanged onto BundleError.stderr.
+    assert.strictEqual(describeRefreshError('command not found', 'command not found'), CLI_NOT_FOUND_MESSAGE);
+  });
+
+  it('maps a realistic Windows shell:true "not recognized" stderr the same way', () => {
+    assert.strictEqual(
+      describeRefreshError(
+        "'mockymock' is not recognized as an internal or external command,\r\noperable program or batch file.",
+        "'mockymock' is not recognized as an internal or external command,\r\noperable program or batch file."
+      ),
+      CLI_NOT_FOUND_MESSAGE
+    );
+  });
+
+  it('leaves an unrelated failure message untouched', () => {
+    assert.strictEqual(
+      describeRefreshError('refused (unresolved-copybook): COPY ORDER-CPY not found', 'some other stderr'),
+      'refused (unresolved-copybook): COPY ORDER-CPY not found'
+    );
+  });
+
+  it('leaves the message untouched when stderr is undefined', () => {
+    assert.strictEqual(describeRefreshError('bundle_version 2 is not supported', undefined), 'bundle_version 2 is not supported');
   });
 });
 

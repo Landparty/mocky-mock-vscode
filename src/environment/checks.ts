@@ -64,6 +64,27 @@ export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
   return 'daemon-down';
 }
 
+export const CLI_NOT_FOUND_MESSAGE =
+  "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Environment Status'.";
+
+// Maps commandRunner's ENOENT sentinel -- a CommandResult of
+// `{ code: -1, stdout: '', stderr: 'command not found' }`, produced when
+// spawn() itself can't find the executable (see commandRunner.ts's
+// synchronous try/catch and its 'error' listener) -- to an actionable
+// label instead of surfacing that raw sentinel string verbatim in a Boundaries
+// view error node. bundleClient.fetchBundle carries `result.stderr` straight
+// through onto BundleError.stderr, so it reaches here unchanged. Reuses
+// COMMAND_NOT_FOUND_PATTERN (not just the exact sentinel string) so the
+// Windows shell:true "'mockymock' is not recognized ..." shape -- the same
+// one checkDocker's own 'not-installed' branch already recognizes -- is
+// caught too. Pure string logic: no vscode import, directly unit-testable.
+export function describeRefreshError(message: string, stderr: string | undefined): string {
+  if (stderr !== undefined && COMMAND_NOT_FOUND_PATTERN.test(stderr)) {
+    return CLI_NOT_FOUND_MESSAGE;
+  }
+  return message;
+}
+
 export function bundledBinaryName(platform: NodeJS.Platform): string {
   return platform === 'win32' ? 'mockymock.exe' : 'mockymock';
 }
