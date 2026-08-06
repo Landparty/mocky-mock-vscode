@@ -6,10 +6,12 @@
 // see that test file's own header comment for why) so this only runs when
 // explicitly asked for via `npm run test:integration`.
 //
-// Locates the CLI checkout via MOCKYMOCK_REAL_CLI_DIR if already set,
-// otherwise defaults to the sibling mocky-mock worktree this task was
-// developed against (adjust DEFAULT_CLI_DIR, or just set the env var
-// yourself, if your checkout layout differs).
+// Locates the CLI checkout via MOCKYMOCK_REAL_CLI_DIR if already set;
+// otherwise tries a short list of candidate sibling checkouts (see
+// CLI_DIR_CANDIDATES below) and uses the first one that actually contains
+// mockymock/cli/main.py -- the module that gained the `fixtures` /
+// `generate --with-data` subcommands this suite exercises. Set the env var
+// yourself if your checkout layout matches none of them.
 //
 // Spawns node directly against mocha's own bin script rather than
 // node_modules/.bin/mocha(.cmd): since Node's CVE-2024-27980 fix, spawning
@@ -21,16 +23,39 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.join(__dirname, '..');
-const DEFAULT_CLI_DIR = path.resolve(
-  __dirname, '..', '..', '..', '..', 'mocky-mock', '.worktrees', 'unify-with-data'
-);
+
+// Final review (Task 4): the original DEFAULT_CLI_DIR only resolved
+// correctly when THIS repo is itself checked out as a nested worktree under
+// .worktrees/<branch>/ (how this task was developed -- 4 hops up from
+// scripts/ lands on the legacylens/ workspace root). Running the very same
+// script from mocky-mock-vscode-extension's own PRIMARY checkout overshoots
+// by one directory. Try a small list instead, in order:
+//   1. the nested-worktree hop (original behavior)
+//   2. the same target, but hopping from REPO_ROOT -- correct when REPO_ROOT
+//      IS the primary checkout and mocky-mock's CLI changes still live on
+//      its own unify-with-data worktree
+//   3. plain sibling mocky-mock/ -- correct once unify-with-data has been
+//      merged into mocky-mock's own primary checkout
+const CLI_DIR_CANDIDATES = [
+  path.resolve(__dirname, '..', '..', '..', '..', 'mocky-mock', '.worktrees', 'unify-with-data'),
+  path.resolve(REPO_ROOT, '..', 'mocky-mock', '.worktrees', 'unify-with-data'),
+  path.resolve(REPO_ROOT, '..', 'mocky-mock'),
+];
+
+function hasMockymockCli(dir) {
+  return fs.existsSync(path.join(dir, 'mockymock', 'cli', 'main.py'));
+}
+
+const DEFAULT_CLI_DIR = CLI_DIR_CANDIDATES.find(hasMockymockCli);
 
 const cliDir = process.env.MOCKYMOCK_REAL_CLI_DIR || DEFAULT_CLI_DIR;
 
-if (!fs.existsSync(cliDir)) {
+if (!cliDir || !fs.existsSync(cliDir)) {
   console.error(
-    `mockymock CLI checkout not found at:\n  ${cliDir}\n\n` +
-      'Set MOCKYMOCK_REAL_CLI_DIR to a mocky-mock checkout new enough to have the ' +
+    'mockymock CLI checkout not found. Tried:\n' +
+      CLI_DIR_CANDIDATES.map((dir) => `  ${dir}`).join('\n') +
+      (process.env.MOCKYMOCK_REAL_CLI_DIR ? `\n  ${process.env.MOCKYMOCK_REAL_CLI_DIR} (MOCKYMOCK_REAL_CLI_DIR)` : '') +
+      '\n\nSet MOCKYMOCK_REAL_CLI_DIR to a mocky-mock checkout new enough to have the ' +
       '`fixtures` subcommand before running `npm run test:integration`.'
   );
   process.exit(1);
