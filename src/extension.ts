@@ -175,6 +175,14 @@ async function runGenerateCutCommand(
     // with the --placeholder-mismatch warnings above.
     vscode.window.showInformationMessage(`mockymock generate: ${result.notes.join('\n')}`);
   }
+  if (seed === undefined && result.seed !== null) {
+    // The user left the seed prompt blank, so the CLI drew one; surface it
+    // so the run is replayable (design spec 2026-08-04). When they typed a
+    // seed themselves there is nothing to tell them.
+    vscode.window.showInformationMessage(
+      `mockymock generate: seed ${result.seed} (enter it in the seed prompt to replay this run).`
+    );
+  }
 }
 
 function activateBoundariesView(context: vscode.ExtensionContext, environmentManager: EnvironmentManager): void {

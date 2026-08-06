@@ -164,6 +164,27 @@ describe('runGenerate', () => {
     ]);
   });
 
+  it('parses the drawn seed out of the stdout banner', async () => {
+    // Confirmed shape from a real run without --seed:
+    //   mockymock generate: data-driven from a fixture bundle (seed=958313668)
+    // The CLI prints this whether or not --seed was passed explicitly.
+    const stdout = [
+      'mockymock generate: data-driven from a fixture bundle (seed=958313668)',
+      'mockymock generate: wrote 3 test case(s) -> P.cut',
+    ].join('\n') + '\n';
+    const r = await runGenerate(async () => ({ code: 0, stdout, stderr: '' }), 'mockymock', baseOpts);
+    assert.equal(r.seed, 958313668);
+  });
+
+  it('reports a null seed when stdout has no (seed=N) line', async () => {
+    const r = await runGenerate(
+      async () => ({ code: 0, stdout: 'mockymock generate: wrote P.cut\n', stderr: '' }),
+      'mockymock',
+      baseOpts
+    );
+    assert.equal(r.seed, null);
+  });
+
   it('throws on non-zero exit', async () => {
     await assert.rejects(
       runGenerate(async () => ({ code: 1, stdout: '', stderr: 'boom' }), 'mockymock', baseOpts),

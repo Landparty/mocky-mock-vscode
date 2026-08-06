@@ -22,6 +22,10 @@ export interface GenerateOptions {
 export interface GenerateResult {
   warnings: string[];
   notes: string[];
+  // The seed the CLI actually drew (or echoed back), from stdout's
+  // "... (seed=N)" banner -- null if the banner wasn't found. Lets the
+  // caller surface a replayable seed when the user didn't fix one.
+  seed: number | null;
 }
 
 function firstNonEmptyLine(text: string): string | undefined {
@@ -97,6 +101,15 @@ function extractUnsupportedBoundaryNotes(stdout: string): string[] {
   return notes;
 }
 
+// A data-driven generate always announces its seed on stdout in this exact
+// shape, whether --seed was passed or the CLI drew one itself (confirmed
+// against a real run):
+//   mockymock generate: data-driven from a fixture bundle (seed=958313668)
+function extractDrawnSeed(stdout: string): number | null {
+  const match = /\(seed=(\d+)\)/.exec(stdout);
+  return match ? Number(match[1]) : null;
+}
+
 // placeholderArgs(model) links a boundary's checkbox by (category, key)
 // across every paragraph it recurs in (Task 2/3 review decision: mirrors the
 // CLI's --placeholder granularity), so unchecking one boundary that appears
@@ -145,6 +158,8 @@ export function buildGenerateArgs(o: GenerateOptions): string[] {
 //    --placeholder) that still produced a usable .cut file.
 //  - `notes`: the unsupported-boundaries report, if any, from stdout (see
 //    extractUnsupportedBoundaryNotes).
+//  - `seed`: the seed from stdout's "(seed=N)" banner, null if absent (see
+//    extractDrawnSeed).
 //
 // On a non-zero exit, throws BundleError (the same type bundleClient's
 // fetchBundle throws) with `.message` chosen by pickErrorMessage (stdout's
@@ -172,7 +187,7 @@ export async function runGenerate(
     .map((line) => line.trim())
     .filter((line) => line.includes('warning:'));
   const notes = extractUnsupportedBoundaryNotes(result.stdout);
-  return { warnings, notes };
+  return { warnings, notes, seed: extractDrawnSeed(result.stdout) };
 }
 
 // Sibling <stem>.cut next to the source -- the exact pairing convention

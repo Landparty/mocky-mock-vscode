@@ -150,7 +150,9 @@ Changing the mode re-fetches the bundle and rebuilds the tree.
 
 **Generate .cut.** The play icon prompts for an optional integer seed
 (leave blank to let the CLI draw one — no `--seed` flag is sent in that
-case) and writes `<stem>.cut` next to the `.cbl`. If that file already
+case, and the seed the CLI drew is shown in an information message
+afterward so the run is replayable) and writes `<stem>.cut` next to the
+`.cbl`. If that file already
 exists you're asked to **Overwrite**, **Write `<stem>.generated.cut`**
 instead, or **Cancel**. A successful generate refreshes the tree, opens the
 new file, and — depending on what the CLI printed — surfaces two different
