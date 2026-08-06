@@ -97,6 +97,16 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
     return this.modelGuard.model;
   }
 
+  // The cblPath paired with the currently COMMITTED model -- never the
+  // merely-requested `currentCblPath`, which can be ahead of it while a
+  // refresh is still in flight (see modelGuard's doc comment, and
+  // setSeeded() above, which reads it for the same reason). Consumers that
+  // need "the .cbl the visible tree actually reflects" -- e.g. generateCut's
+  // command handler -- must read this, not the active editor's path.
+  get cblPath(): string | undefined {
+    return this.modelGuard.cblPath;
+  }
+
   private seededOverridesKey(cblPath: string): string {
     return `${SEEDED_KEY_PREFIX}${cblPath}`;
   }
