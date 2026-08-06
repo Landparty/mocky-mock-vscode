@@ -36,6 +36,41 @@ describe('buildViewModel', () => {
   });
 });
 
+describe('buildViewModel paragraph grouping', () => {
+  it('groups a null-paragraph fixture under \'(program)\', keeping BoundaryNode.paragraph as null', () => {
+    const withProgramLevel: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [
+          { category: 'CALL', key: 'SUBPROG', paragraph: null, line: 5,
+            direction: 'IN', layout: [], sequence: [], terminal: null, status: {}, unresolved: [] },
+        ] },
+      ],
+    };
+    const m = buildViewModel(withProgramLevel, {});
+    assert.equal(m.groups.length, 1);
+    assert.equal(m.groups[0].paragraph, '(program)');
+    assert.equal(m.groups[0].boundaries[0].id, '(program)/CALL:SUBPROG');
+    assert.equal(m.groups[0].boundaries[0].paragraph, null);
+  });
+
+  it('creates one group per distinct paragraph, in first-seen order', () => {
+    const twoParagraphs: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [
+          { category: 'READ', key: 'ORDER-FILE', paragraph: 'MAIN-PARA', line: 19,
+            direction: 'IN', layout: [], sequence: [], terminal: null, status: {}, unresolved: [] },
+          { category: 'WRITE', key: 'LOG-FILE', paragraph: 'CLEANUP-PARA', line: 40,
+            direction: 'OUT', layout: [], sequence: [], terminal: null, status: {}, unresolved: [] },
+        ] },
+      ],
+    };
+    const m = buildViewModel(twoParagraphs, {});
+    assert.deepEqual(m.groups.map((g) => g.paragraph), ['MAIN-PARA', 'CLEANUP-PARA']);
+  });
+});
+
 describe('placeholderArgs / toSeededOverrides', () => {
   it('emits one --placeholder per unseeded boundary', () => {
     const m = buildViewModel(bundle, { 'MAIN-PARA/READ:ORDER-FILE': false });
