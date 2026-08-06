@@ -16,7 +16,11 @@ export interface BundleFixture {
   key: string;
   paragraph: string | null;
   line: number | null;
-  direction: 'IN' | 'OUT' | 'BIDIRECTIONAL' | 'STATUS_ONLY';
+  // '' on CALL/DYNCALL boundaries: cobol-parser's boundary_inventory emits no
+  // statement-level direction for them — a CALL's direction is per-argument
+  // (in `call_args`, deliberately not modeled here; see the design spec's
+  // out-of-scope list).
+  direction: 'IN' | 'OUT' | 'BIDIRECTIONAL' | 'STATUS_ONLY' | '';
   layout: BundleFieldSpec[];
   sequence: Record<string, string>[];
   terminal: Record<string, string> | null;

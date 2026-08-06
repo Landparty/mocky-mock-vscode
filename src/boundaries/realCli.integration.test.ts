@@ -108,12 +108,9 @@ describeReal('realCli integration (mockymock fixtures / generate --with-data)', 
     // direction="" on every CALL/DYNCALL Boundary ("per-arg; no single
     // statement-level direction" -- that statement's real direction lives
     // per-argument in `call_args`, which bundleTypes.ts's BundleFixture
-    // deliberately doesn't model -- out of scope per the design spec). The
-    // extension's own BundleFixture['direction'] TS union (IN/OUT/
-    // BIDIRECTIONAL/STATUS_ONLY only) is therefore narrower than what the
-    // live CLI actually emits; see the flagged follow-up in the task report
-    // for boundariesTreeProvider.ts's DIRECTION_BADGES lookup, which has no
-    // fallback for this value.
+    // deliberately doesn't model -- out of scope per the design spec).
+    // BundleFixture['direction'] includes '' for exactly this case, and
+    // boundariesModel's boundaryDescription() renders it badge-less.
     const knownDirections = new Set(['IN', 'OUT', 'BIDIRECTIONAL', 'STATUS_ONLY', '']);
     for (const b of allBoundaries) {
       assert.ok(knownDirections.has(b.direction), `unexpected direction "${b.direction}" on ${b.id}`);

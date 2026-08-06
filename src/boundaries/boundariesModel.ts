@@ -77,6 +77,26 @@ export function buildViewModel(
   };
 }
 
+const DIRECTION_BADGES: Record<BoundaryNode['direction'], string> = {
+  IN: '→ IN',
+  OUT: '← OUT',
+  BIDIRECTIONAL: '↔ BIDI',
+  STATUS_ONLY: 'STATUS',
+  '': '', // CALL/DYNCALL: no statement-level direction (see bundleTypes.ts)
+};
+
+// The tree row's description: direction badge plus the first layout field.
+// fetchBundle casts the CLI's JSON without runtime validation, so a direction
+// outside the declared union degrades to "no badge" rather than rendering
+// the literal string "undefined".
+export function boundaryDescription(boundary: BoundaryNode): string {
+  const badge = DIRECTION_BADGES[boundary.direction] ?? '';
+  const first = boundary.layout[0];
+  if (!first) return badge;
+  const picture = first.picture ? ` PIC ${first.picture}` : '';
+  return badge ? `${badge} · ${first.name}${picture}` : `${first.name}${picture}`;
+}
+
 // One '--placeholder' 'CATEGORY:KEY' pair per unseeded boundary, in view-model order.
 export function placeholderArgs(model: BoundariesViewModel): string[] {
   const args: string[] = [];

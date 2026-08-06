@@ -4,7 +4,13 @@ import * as path from 'path';
 import { runCommand } from '../environment/commandRunner';
 import { resolveExecutablePath } from '../environment/checks';
 import { fetchBundle, BundleError } from './bundleClient';
-import { buildViewModel, toSeededOverrides, BoundariesViewModel, BoundaryNode } from './boundariesModel';
+import {
+  buildViewModel,
+  boundaryDescription,
+  toSeededOverrides,
+  BoundariesViewModel,
+  BoundaryNode,
+} from './boundariesModel';
 import { RefreshGuard } from './refreshGuard';
 import { fieldNodeId, groupNodeId, unresolvedItemNodeId } from './treeNodeIds';
 import type { BundleFieldSpec, ScenarioMode } from './bundleTypes';
@@ -37,21 +43,6 @@ function iconForCategory(category: string): vscode.ThemeIcon {
   if (FILE_CATEGORIES.has(category)) return new vscode.ThemeIcon('file');
   if (category === 'ACCEPT') return new vscode.ThemeIcon('keyboard');
   return new vscode.ThemeIcon('symbol-interface');
-}
-
-const DIRECTION_BADGES: Record<BoundaryNode['direction'], string> = {
-  IN: '→ IN',
-  OUT: '← OUT',
-  BIDIRECTIONAL: '↔ BIDI',
-  STATUS_ONLY: 'STATUS',
-};
-
-function boundaryDescription(boundary: BoundaryNode): string {
-  const badge = DIRECTION_BADGES[boundary.direction];
-  const first = boundary.layout[0];
-  if (!first) return badge;
-  const picture = first.picture ? ` PIC ${first.picture}` : '';
-  return `${badge} · ${first.name}${picture}`;
 }
 
 interface ErrorState {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { buildViewModel, placeholderArgs, toSeededOverrides } from './boundariesModel';
+import { buildViewModel, boundaryDescription, placeholderArgs, toSeededOverrides } from './boundariesModel';
+import type { BoundaryNode } from './boundariesModel';
 import type { FixtureBundle } from './bundleTypes';
 
 const bundle: FixtureBundle = {
@@ -68,6 +69,44 @@ describe('buildViewModel paragraph grouping', () => {
     };
     const m = buildViewModel(twoParagraphs, {});
     assert.deepEqual(m.groups.map((g) => g.paragraph), ['MAIN-PARA', 'CLEANUP-PARA']);
+  });
+});
+
+describe('boundaryDescription', () => {
+  const node = (overrides: Partial<BoundaryNode>): BoundaryNode => ({
+    id: 'MAIN-PARA/READ:ORDER-FILE', category: 'READ', key: 'ORDER-FILE',
+    paragraph: 'MAIN-PARA', line: 19, direction: 'IN',
+    layout: [{ name: 'ORDER-QTY', column: 'ORDER-QTY', picture: '9(3)', usage: 'DISPLAY', category: 'numeric' }],
+    seeded: true,
+    ...overrides,
+  });
+
+  it('renders the direction badge and the first layout field', () => {
+    assert.equal(boundaryDescription(node({})), '→ IN · ORDER-QTY PIC 9(3)');
+  });
+
+  it('renders just the badge when the boundary has no layout', () => {
+    assert.equal(boundaryDescription(node({ layout: [] })), '→ IN');
+  });
+
+  // Real CLI behavior: CALL/DYNCALL boundaries carry direction "" (the
+  // direction lives per-argument upstream; boundary_inventory.py emits no
+  // statement-level direction). The row must not render "undefined".
+  it('renders a CALL boundary with empty direction as the field alone, badge omitted', () => {
+    const call = node({
+      id: '(program)/CALL:LOGALERT', category: 'CALL', key: 'LOGALERT',
+      paragraph: null, line: 12, direction: '',
+      layout: [{ name: 'WS-ALERT-STATUS', column: 'WS-ALERT-STATUS', picture: 'X(2)', usage: 'DISPLAY', category: 'alphanumeric' }],
+    });
+    assert.equal(boundaryDescription(call), 'WS-ALERT-STATUS PIC X(2)');
+  });
+
+  it('renders an empty description for an empty-direction boundary with no layout', () => {
+    const call = node({
+      id: '(program)/CALL:LOGALERT', category: 'CALL', key: 'LOGALERT',
+      paragraph: null, direction: '', layout: [],
+    });
+    assert.equal(boundaryDescription(call), '');
   });
 });
 
