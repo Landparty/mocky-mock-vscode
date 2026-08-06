@@ -5,6 +5,8 @@ import { runCommand } from '../environment/commandRunner';
 import { resolveExecutablePath } from '../environment/checks';
 import { fetchBundle, BundleError } from './bundleClient';
 import { buildViewModel, toSeededOverrides, BoundariesViewModel, BoundaryNode } from './boundariesModel';
+import { RefreshGuard } from './refreshGuard';
+import { fieldNodeId, groupNodeId, unresolvedItemNodeId } from './treeNodeIds';
 import type { BundleFieldSpec, ScenarioMode } from './bundleTypes';
 
 const SEEDED_KEY_PREFIX = 'mockymock.boundaries.seeded:';
@@ -68,19 +70,21 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
 
   private readonly outputChannel: vscode.OutputChannel;
 
-  private _model: BoundariesViewModel | undefined;
+  // Tracks the (cblPath, model) pair actually committed by a landed
+  // refresh() -- see refreshGuard.ts. setSeeded() persists against THIS,
+  // never against `currentCblPath` below, which only records the target of
+  // the most recently *requested* refresh and can be ahead of it while a
+  // fetch is still in flight.
+  private readonly modelGuard = new RefreshGuard<BoundariesViewModel>();
   private currentCblPath: string | undefined;
   private errorState: ErrorState | undefined;
-  // Monotonic guard against out-of-order completions: if refresh(B) is
-  // triggered while refresh(A) is still in flight, A's late result must not
-  // clobber B's once B has already landed.
-  private refreshSeq = 0;
 
   scenarioMode: ScenarioMode;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     this.outputChannel = vscode.window.createOutputChannel('mockymock boundaries');
     context.subscriptions.push(this.outputChannel);
+    context.subscriptions.push(this._onDidChangeTreeData);
     // Internal-only command backing the error node's "Show output" child --
     // not declared in package.json (never surfaced in the command palette).
     context.subscriptions.push(
@@ -90,7 +94,7 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
   }
 
   get model(): BoundariesViewModel | undefined {
-    return this._model;
+    return this.modelGuard.model;
   }
 
   private seededOverridesKey(cblPath: string): string {
@@ -108,11 +112,13 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
   // cblPath === undefined renders the welcome state (an empty root, which
   // triggers the viewsWelcome contribution).
   async refresh(cblPath: string | undefined): Promise<void> {
-    const seq = ++this.refreshSeq;
+    const token = this.modelGuard.begin();
     this.currentCblPath = cblPath;
 
     if (!cblPath) {
-      this._model = undefined;
+      // Synchronous: nothing awaited yet, so this token is still current --
+      // commit always succeeds.
+      this.modelGuard.commit(token, undefined, undefined);
       this.errorState = undefined;
       this._onDidChangeTreeData.fire();
       return;
@@ -147,12 +153,16 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       }
     }
 
-    if (seq !== this.refreshSeq) {
-      // A newer refresh() call already landed; this result is stale.
+    // Only ever pair a committed cblPath with an actual live model -- an
+    // error result commits (undefined, undefined), matching the invariant
+    // "modelGuard.cblPath is defined iff modelGuard.model is defined".
+    const committed = this.modelGuard.commit(token, nextModel ? cblPath : undefined, nextModel);
+    if (!committed) {
+      // A newer refresh() call already landed; this result is stale -- drop
+      // it rather than clobbering what that newer call committed.
       return;
     }
 
-    this._model = nextModel;
     this.errorState = nextError;
     if (nextError?.stderr) {
       this.outputChannel.appendLine(nextError.stderr);
@@ -163,11 +173,14 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
   // Applies a checkbox toggle to every node sharing (category, key) -- the
   // link is deliberately paragraph-agnostic (Task 2 review decision: mirrors
   // the CLI's --placeholder granularity) -- then persists the resulting
-  // override set.
+  // override set under the currently COMMITTED model's cblPath (never the
+  // merely-requested `currentCblPath`; see modelGuard's doc comment).
   async setSeeded(category: string, key: string, seeded: boolean): Promise<void> {
-    if (!this._model || !this.currentCblPath) return;
+    const model = this.modelGuard.model;
+    const cblPath = this.modelGuard.cblPath;
+    if (!model || !cblPath) return;
     let changed = false;
-    for (const group of this._model.groups) {
+    for (const group of model.groups) {
       for (const boundary of group.boundaries) {
         if (boundary.category === category && boundary.key === key && boundary.seeded !== seeded) {
           boundary.seeded = seeded;
@@ -176,10 +189,7 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       }
     }
     if (!changed) return;
-    await this.context.workspaceState.update(
-      this.seededOverridesKey(this.currentCblPath),
-      toSeededOverrides(this._model)
-    );
+    await this.context.workspaceState.update(this.seededOverridesKey(cblPath), toSeededOverrides(model));
     this._onDidChangeTreeData.fire();
   }
 
@@ -187,7 +197,7 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
     switch (element.kind) {
       case 'group': {
         const item = new vscode.TreeItem(element.paragraph, vscode.TreeItemCollapsibleState.Expanded);
-        item.id = `group:${element.paragraph}`;
+        item.id = groupNodeId(element.paragraph);
         item.contextValue = 'boundaryGroup';
         item.iconPath = new vscode.ThemeIcon('symbol-namespace');
         return item;
@@ -207,7 +217,9 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       }
       case 'field': {
         const item = new vscode.TreeItem(element.field.name, vscode.TreeItemCollapsibleState.None);
-        item.id = `${element.boundaryId}#field:${element.field.name}`;
+        // column, not name: name repeats across OCCURS occurrences, column
+        // is cobol-parser's guaranteed-unique-per-occurrence disambiguator.
+        item.id = fieldNodeId(element.boundaryId, element.field.column);
         item.description = `PIC ${element.field.picture ?? '—'}`;
         item.contextValue = 'boundaryField';
         return item;
@@ -221,7 +233,7 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       }
       case 'unresolvedItem': {
         const item = new vscode.TreeItem(element.text, vscode.TreeItemCollapsibleState.None);
-        item.id = `unresolved:${element.index}`;
+        item.id = unresolvedItemNodeId(element.index);
         item.iconPath = new vscode.ThemeIcon('warning');
         item.contextValue = 'unresolvedItem';
         return item;
@@ -251,16 +263,17 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
       if (this.errorState) {
         return [{ kind: 'error', message: this.errorState.message, stderr: this.errorState.stderr }];
       }
-      if (!this._model) {
+      const model = this.modelGuard.model;
+      if (!model) {
         return [];
       }
-      const nodes: BoundaryTreeNode[] = this._model.groups.map((group) => ({
+      const nodes: BoundaryTreeNode[] = model.groups.map((group) => ({
         kind: 'group',
         paragraph: group.paragraph,
         boundaries: group.boundaries,
       }));
-      if (this._model.unresolved.length > 0) {
-        nodes.push({ kind: 'unresolvedRoot', items: this._model.unresolved });
+      if (model.unresolved.length > 0) {
+        nodes.push({ kind: 'unresolvedRoot', items: model.unresolved });
       }
       return nodes;
     }
