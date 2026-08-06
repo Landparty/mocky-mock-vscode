@@ -56,6 +56,12 @@ describe('buildViewModel paragraph grouping', () => {
   });
 
   it('creates one group per distinct paragraph, in first-seen order', () => {
+    // The WRITE fixture below is synthetic for this grouping test only --
+    // in a real bundle, cobol-parser never emits a BoundaryFixture at all
+    // for an OUT-direction boundary (see the 'output-only boundaries'
+    // describe block below), so this exact shape can't occur from a real
+    // `mockymock fixtures` run. buildViewModel must still group whatever
+    // fixtures it's given, defensively.
     const twoParagraphs: FixtureBundle = {
       bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
       scenarios: [
@@ -69,6 +75,83 @@ describe('buildViewModel paragraph grouping', () => {
     };
     const m = buildViewModel(twoParagraphs, {});
     assert.deepEqual(m.groups.map((g) => g.paragraph), ['MAIN-PARA', 'CLEANUP-PARA']);
+  });
+});
+
+describe('buildViewModel output-only boundaries', () => {
+  // Real shape: cobol-parser's ProgramFixtureGenerator never emits a
+  // BoundaryFixture for an OUT-direction boundary (WRITE/REWRITE, an SQL
+  // INSERT/UPDATE/DELETE) -- it emits a kind="stub" Expectation with
+  // ref="CATEGORY:KEY" instead, and no fixture at all. This is how those
+  // boundaries actually reach the extension.
+  it('recovers a WRITE boundary that has no fixture, from its stub expectation', () => {
+    const writeOnly: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [],
+          expectations: [
+            { kind: 'stub', ref: 'WRITE:LOG-FILE', value: null, note: 'value produced by the program under test' },
+          ] },
+      ],
+    };
+    const m = buildViewModel(writeOnly, {});
+    assert.equal(m.groups.length, 0);
+    assert.deepEqual(m.outputOnly, [
+      { id: 'output:WRITE:LOG-FILE', category: 'WRITE', key: 'LOG-FILE', note: 'value produced by the program under test' },
+    ]);
+  });
+
+  it('dedupes the same stub ref repeated across scenarios', () => {
+    const repeated: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [],
+          expectations: [{ kind: 'stub', ref: 'WRITE:LOG-FILE', value: null, note: null }] },
+        { name: 'CHECK: THEN', intent: '', entry: 'MAIN-PARA', fixtures: [],
+          expectations: [{ kind: 'stub', ref: 'WRITE:LOG-FILE', value: null, note: null }] },
+      ],
+    };
+    assert.equal(buildViewModel(repeated, {}).outputOnly.length, 1);
+  });
+
+  it('excludes a stub ref that already has a real, fixture-derived boundary (a BIDIRECTIONAL "OUT aspect" stub)', () => {
+    const bidi: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [
+            { category: 'CICS', key: 'ORDER-MAP', paragraph: 'MAIN-PARA', line: 30,
+              direction: 'BIDIRECTIONAL', layout: [], sequence: [], terminal: null, status: {}, unresolved: [] },
+          ],
+          expectations: [
+            { kind: 'stub', ref: 'CICS:ORDER-MAP', value: null, note: 'bidirectional: OUT aspect not asserted in v1' },
+          ] },
+      ],
+    };
+    const m = buildViewModel(bidi, {});
+    assert.equal(m.groups[0].boundaries.length, 1);
+    assert.deepEqual(m.outputOnly, []);
+  });
+
+  it('ignores a bare CALL-argument stub ref (no colon) and a non-stub expectation kind', () => {
+    const notBoundaryLevel: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [
+        { name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [],
+          expectations: [
+            { kind: 'stub', ref: 'WS-RESULT', value: null, note: 'value supplied by the program under test' },
+            { kind: 'call_count', ref: 'READ:ORDER-FILE', value: 1, note: null },
+          ] },
+      ],
+    };
+    assert.deepEqual(buildViewModel(notBoundaryLevel, {}).outputOnly, []);
+  });
+
+  it('treats a bundle with no expectations field at all the same as an empty array (older-CLI compatibility)', () => {
+    const noExpectations: FixtureBundle = {
+      bundle_version: 1, program_name: 'WDTEST', seed: 7, unresolved: [],
+      scenarios: [{ name: 'happy path', intent: '', entry: 'MAIN-PARA', fixtures: [] }],
+    };
+    assert.deepEqual(buildViewModel(noExpectations, {}).outputOnly, []);
   });
 });
 

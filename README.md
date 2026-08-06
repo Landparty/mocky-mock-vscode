@@ -138,6 +138,17 @@ boundary recurs in — unchecking one occurrence unchecks all of them,
 matching the granularity `--placeholder` itself uses. Checkbox state
 persists per `.cbl` file across sessions.
 
+**Output-only (not seeded).** A boundary the program only ever produces
+output to — a `WRITE`/`REWRITE`, or an SQL `INSERT`/`UPDATE`/`DELETE` — has
+nothing to mock (the program supplies that value, so it's asserted on
+instead), so it never gets a checkbox row under a paragraph. These still
+list under a separate "Output-only (not seeded)" node at the bottom of the
+tree, so the view stays an inventory of everything the program touches, not
+just what it can seed. One known gap: a `CALL`/`DYNCALL` whose arguments are
+*all* `OUT`-direction has the same "nothing to mock" shape but isn't listed
+here — the CLI doesn't emit a boundary-level marker for that case, only
+per-argument ones the extension can't yet attribute back to a category/key.
+
 **Scenario mode.** The gear icon in the view's title bar opens a picker for
 which scenario set to fetch:
 

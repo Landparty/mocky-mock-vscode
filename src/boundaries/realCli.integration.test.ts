@@ -242,4 +242,33 @@ describeReal('realCli integration (mockymock fixtures / generate --with-data)', 
       ['ORD-AMOUNT', 'WS-DISCOUNT-PCT']
     );
   });
+
+  it('(g) buildViewModel recovers WRITE and SQL-mutation boundaries from a real bundle as output-only, and leaves a bare CALL-arg stub alone', async () => {
+    // examples/invupdt/INVUPDT.cbl writes a report record and issues a SQL
+    // UPDATE -- both OUT-direction, so (confirmed against a real run) they
+    // never appear in `fixtures` at all; each surfaces only as a
+    // kind="stub" Expectation with ref="CATEGORY:KEY". It also CALLs MQPUT
+    // with a bidirectional MQ-COMPCODE argument, whose own stub is keyed by
+    // the bare argument name (no colon) -- that one must NOT become an
+    // outputOnly entry, since there's no category/key to attribute it to.
+    const invupdtBundle = await fetchBundle(runner, 'mockymock', 'examples/invupdt/INVUPDT.cbl', {
+      scenarios: 'happy',
+      copybookPaths: [],
+      seed: 7,
+    });
+    const fixtureKeys = invupdtBundle.scenarios.flatMap((s) => s.fixtures).map((f) => `${f.category}:${f.key}`);
+    assert.ok(!fixtureKeys.includes('WRITE:RPT-REC'), 'WRITE:RPT-REC must not appear as a fixture');
+    assert.ok(!fixtureKeys.includes('SQL:UPDATE'), 'SQL:UPDATE must not appear as a fixture');
+
+    const model = buildViewModel(invupdtBundle, {});
+    const outputOnlyIds = model.outputOnly.map((b) => b.id);
+    assert.ok(outputOnlyIds.includes('output:WRITE:RPT-REC'), 'expected WRITE:RPT-REC recovered as output-only');
+    assert.ok(outputOnlyIds.includes('output:SQL:UPDATE'), 'expected SQL:UPDATE recovered as output-only');
+    // The bidirectional CALL:MQPUT boundary itself IS a real fixture (it has
+    // other, non-OUT arguments) -- confirm it's a normal checkbox node, not
+    // also duplicated into outputOnly.
+    assert.ok(fixtureKeys.includes('CALL:MQPUT'), 'expected CALL:MQPUT as a real fixture');
+    assert.ok(!outputOnlyIds.some((id) => id.includes('MQPUT')), 'CALL:MQPUT must not also appear in outputOnly');
+    assert.equal(model.outputOnly.length, 2, `expected exactly 2 output-only entries, got: ${outputOnlyIds}`);
+  });
 });

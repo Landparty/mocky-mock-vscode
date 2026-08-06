@@ -9,7 +9,7 @@ import { MockymockDebugAdapterDescriptorFactory } from './debug/debugAdapterFact
 import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationProvider';
 import { activateExportMainframeCommand } from './export/exportMainframe';
 import { runCommand } from './environment/commandRunner';
-import { resolveExecutablePath } from './environment/checks';
+import { resolveInvocationConfig } from './environment/invocationConfig';
 import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundariesTreeProvider';
 import { placeholderArgs } from './boundaries/boundariesModel';
 import { runGenerate, resolveOutPath, GenerateOptions, GenerateResult } from './boundaries/generateCut';
@@ -50,7 +50,14 @@ async function fileExists(fsPath: string): Promise<boolean> {
 function validateSeedInput(value: string): string | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) return undefined;
-  return /^\d+$/.test(trimmed) ? undefined : 'Enter a whole number (0 or greater), or leave blank for no fixed seed.';
+  if (!/^\d+$/.test(trimmed)) {
+    return 'Enter a whole number (0 or greater), or leave blank for no fixed seed.';
+  }
+  // A digit string this long round-trips through Number() with silent
+  // precision loss (e.g. two different 20-digit seeds could collapse to the
+  // same forwarded --seed value) -- reject before that happens rather than
+  // send a --seed the user didn't actually type.
+  return Number.isSafeInteger(Number(trimmed)) ? undefined : 'Seed is too large — enter a smaller whole number.';
 }
 
 // The "Generate .cut" command handler: assembles a `mockymock generate
@@ -113,12 +120,7 @@ async function runGenerateCutCommand(
   }
 
   const uri = vscode.Uri.file(cblPath);
-  const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-  const config = vscode.workspace.getConfiguration('mockymock', uri);
-  const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
-  const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
-    workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
-  );
+  const { executablePath, copybookPaths } = resolveInvocationConfig(context, uri);
 
   const options: GenerateOptions = {
     cblPath,
@@ -143,8 +145,13 @@ async function runGenerateCutCommand(
     // one line that decided the failure; log the rest so nothing a failing
     // run printed is lost, same channel the tree's own error node's "Show
     // output" already points at.
+    // Always log SOMETHING before offering "Show output" below -- a prior
+    // version only logged here when `err` was a BundleError carrying
+    // stderr, so any other failure (e.g. an exception from resolving
+    // config, or from withProgress itself) left "Show output" pointing at
+    // stale or empty content.
+    provider.appendOutput(`mockymock generate failed: ${message}`);
     if (err instanceof BundleError && err.stderr) {
-      provider.appendOutput(`mockymock generate failed: ${message}`);
       provider.appendOutput(err.stderr);
     }
     const choice = await vscode.window.showErrorMessage(`mockymock generate failed: ${message}`, 'Show output');

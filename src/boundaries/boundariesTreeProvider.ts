@@ -1,8 +1,8 @@
 // src/boundaries/boundariesTreeProvider.ts
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath, describeRefreshError } from '../environment/checks';
+import { describeRefreshError } from '../environment/checks';
+import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { fetchBundle, BundleError } from './bundleClient';
 import {
   buildViewModel,
@@ -10,6 +10,7 @@ import {
   toSeededOverrides,
   BoundariesViewModel,
   BoundaryNode,
+  OutputOnlyBoundary,
 } from './boundariesModel';
 import { RefreshGuard } from './refreshGuard';
 import { fieldNodeId, groupNodeId, unresolvedItemNodeId } from './treeNodeIds';
@@ -19,13 +20,17 @@ const SEEDED_KEY_PREFIX = 'mockymock.boundaries.seeded:';
 const MODE_KEY = 'mockymock.boundaries.mode';
 
 // Discriminated union of every row this tree can render: paragraph groups,
-// the boundaries within them, their layout fields, the bundle-level
+// the boundaries within them, their layout fields, the read-only
+// "output-only" group + its entries (boundaries that only ever produce
+// output -- see OutputOnlyBoundary's doc comment), the bundle-level
 // "unresolved" advisory group + its entries, and the single-node error state
 // (with an optional "Show output" child for stderr).
 export type BoundaryTreeNode =
   | { kind: 'group'; paragraph: string; boundaries: BoundaryNode[] }
   | { kind: 'boundary'; boundary: BoundaryNode }
   | { kind: 'field'; boundaryId: string; field: BundleFieldSpec }
+  | { kind: 'outputOnlyRoot'; items: OutputOnlyBoundary[] }
+  | { kind: 'outputOnlyItem'; item: OutputOnlyBoundary }
   | { kind: 'unresolvedRoot'; items: string[] }
   | { kind: 'unresolvedItem'; text: string; index: number }
   | { kind: 'error'; message: string; stderr?: string }
@@ -139,12 +144,7 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
     let nextError: ErrorState | undefined;
     try {
       const uri = vscode.Uri.file(cblPath);
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
-      const config = vscode.workspace.getConfiguration('mockymock', uri);
-      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), this.context.extensionPath);
-      const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
-        workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
-      );
+      const { executablePath, copybookPaths } = resolveInvocationConfig(this.context, uri);
 
       const bundle = await fetchBundle(runCommand, executablePath, cblPath, {
         scenarios: this.scenarioMode,
@@ -239,6 +239,26 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
         item.contextValue = 'boundaryField';
         return item;
       }
+      case 'outputOnlyRoot': {
+        const item = new vscode.TreeItem('Output-only (not seeded)', vscode.TreeItemCollapsibleState.Collapsed);
+        item.id = 'outputOnly';
+        item.iconPath = new vscode.ThemeIcon('arrow-right');
+        item.contextValue = 'outputOnlyRoot';
+        item.tooltip =
+          'Boundaries the program only produces output to (WRITE/REWRITE, an SQL INSERT/UPDATE/DELETE) — ' +
+          'asserted on, not mocked, so there is nothing to seed.';
+        return item;
+      }
+      case 'outputOnlyItem': {
+        const b = element.item;
+        const item = new vscode.TreeItem(`${b.category} ${b.key}`, vscode.TreeItemCollapsibleState.None);
+        item.id = b.id;
+        item.description = 'output — not mocked';
+        item.iconPath = iconForCategory(b.category);
+        item.contextValue = 'outputOnlyBoundary';
+        item.tooltip = b.note ?? `${b.category} ${b.key}`;
+        return item;
+      }
       case 'unresolvedRoot': {
         const item = new vscode.TreeItem('Unresolved', vscode.TreeItemCollapsibleState.Collapsed);
         item.id = 'unresolved';
@@ -287,6 +307,9 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
         paragraph: group.paragraph,
         boundaries: group.boundaries,
       }));
+      if (model.outputOnly.length > 0) {
+        nodes.push({ kind: 'outputOnlyRoot', items: model.outputOnly });
+      }
       if (model.unresolved.length > 0) {
         nodes.push({ kind: 'unresolvedRoot', items: model.unresolved });
       }
@@ -298,6 +321,8 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
         return element.boundaries.map((boundary) => ({ kind: 'boundary', boundary }));
       case 'boundary':
         return element.boundary.layout.map((field) => ({ kind: 'field', boundaryId: element.boundary.id, field }));
+      case 'outputOnlyRoot':
+        return element.items.map((item) => ({ kind: 'outputOnlyItem', item }));
       case 'unresolvedRoot':
         return element.items.map((text, index) => ({ kind: 'unresolvedItem', text, index }));
       case 'error':

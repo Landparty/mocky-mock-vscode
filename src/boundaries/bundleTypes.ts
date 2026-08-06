@@ -28,11 +28,24 @@ export interface BundleFixture {
   unresolved: string[];
 }
 
+// A subset of Expectation.kind: "stub" is the only kind this extension reads
+// (see boundariesModel.ts's outputOnly derivation) -- "call_count" and
+// "field_equals" are live assertions the tree doesn't need to render.
+export interface BundleExpectation {
+  kind: string;
+  ref: string;
+  value: string | number | null;
+  note: string | null;
+}
+
 export interface BundleScenario {
   name: string;
   intent: string;
   entry: string | null;
   fixtures: BundleFixture[];
+  // Optional: older CLI output (pre-Phase 7) may omit this entirely --
+  // boundariesModel.ts falls back to [] when absent.
+  expectations?: BundleExpectation[];
 }
 
 export interface FixtureBundle {
