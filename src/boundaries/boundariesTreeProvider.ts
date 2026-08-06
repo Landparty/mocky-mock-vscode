@@ -107,6 +107,16 @@ export class BoundariesTreeProvider implements vscode.TreeDataProvider<BoundaryT
     return this.modelGuard.cblPath;
   }
 
+  // Lets other Boundaries-view commands (e.g. generateCut's handler on a
+  // failing `mockymock generate`) log full failure detail into this SAME
+  // "mockymock boundaries" output channel instead of each opening its own
+  // -- one place a user checks for anything a message box couldn't fit.
+  // Pair with the existing internal 'mockymock.boundaries.showOutput'
+  // command (registered below) to actually reveal the channel.
+  appendOutput(text: string): void {
+    this.outputChannel.appendLine(text);
+  }
+
   private seededOverridesKey(cblPath: string): string {
     return `${SEEDED_KEY_PREFIX}${cblPath}`;
   }

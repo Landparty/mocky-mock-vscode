@@ -19,8 +19,82 @@ export interface GenerateOptions {
   placeholders: string[]; // from placeholderArgs(model) -- may contain duplicate pairs, see dedupePlaceholderPairs
 }
 
+export interface GenerateResult {
+  warnings: string[];
+  notes: string[];
+}
+
 function firstNonEmptyLine(text: string): string | undefined {
   return text.split('\n').map((line) => line.trim()).find((line) => line.length > 0);
+}
+
+function nonEmptyLines(text: string): string[] {
+  return text.split('\n').map((line) => line.trim()).filter((line) => line.length > 0);
+}
+
+function isWarningLine(line: string): boolean {
+  return line.includes('warning:');
+}
+
+// Most of `_cmd_generate`'s fail-closed gates (copybook expansion,
+// whole-program, unresolved-copybook, linkage-layout) print
+// "refused (CODE): ..."; a raw parse failure (`not result.success`) prints
+// a differently-shaped "N parse error(s):" header instead (confirmed
+// against mockymock's cli/main.py -- it returns before ever reaching the
+// refused(...) formatting for that case). Both are STDOUT-only failure
+// lines this picker must recognize as authoritative.
+function firstStdoutFailureLine(stdout: string): string | undefined {
+  return nonEmptyLines(stdout).find(
+    (line) => line.includes('refused (') || /\d+ parse error\(s\):/.test(line)
+  );
+}
+
+// `mockymock generate`'s fail-closed refusal/parse-error messages print to
+// STDOUT via plain print(); only the --placeholder-matched-no-fixture
+// advisory goes to stderr, and it's the one line there explicitly labeled
+// "warning:". Both can land on the SAME failing run -- the placeholder
+// check runs before any of the refusal gates, so one or more harmless
+// mismatch warnings can sit in stderr while the real failure reason sits in
+// stdout underneath them. A naive "stderr's first line is the error" rule
+// picks a warning and discards the actual cause -- this prefers a stdout
+// failure line over stderr ONLY when EVERY stderr line is a warning (not
+// just the first: a program with two unmatched --placeholder pairs prints
+// two warning lines, and the second must not un-mask a real stderr error
+// either -- there just isn't one, in that case). Exported for its own
+// focused test.
+export function pickErrorMessage(stdout: string, stderr: string): string {
+  const stderrLines = nonEmptyLines(stderr);
+  const stdoutFailure = firstStdoutFailureLine(stdout);
+  const stderrIsOnlyWarnings = stderrLines.length > 0 && stderrLines.every(isWarningLine);
+  if (stderrIsOnlyWarnings && stdoutFailure !== undefined) {
+    return stdoutFailure;
+  }
+  return stderrLines[0] ?? firstNonEmptyLine(stdout) ?? 'mockymock generate failed';
+}
+
+// `_report_unsupported_boundaries` prints a summary line ("N boundary
+// point(s) detected that are not mockable ..." or "N STOP RUN/GOBACK
+// site(s) detected ...") followed by one indented "  - " bullet per site,
+// all to STDOUT, on an otherwise-successful generate. Kept separate from
+// stderr's --placeholder warnings deliberately: this is routine
+// information about the program's own unmockable shape (almost every real
+// program has a STOP RUN site), not something wrong with the invocation,
+// so a caller can choose to show it less alarmingly than a warning.
+function extractUnsupportedBoundaryNotes(stdout: string): string[] {
+  const notes: string[] = [];
+  let capturing = false;
+  for (const rawLine of stdout.split('\n')) {
+    const line = rawLine.replace(/\r$/, '');
+    if (/boundary point\(s\) detected|STOP RUN\/GOBACK site\(s\) detected/.test(line)) {
+      capturing = true;
+      notes.push(line.trim());
+    } else if (capturing && /^\s*-\s/.test(line)) {
+      notes.push(line.trim());
+    } else {
+      capturing = false;
+    }
+  }
+  return notes;
 }
 
 // placeholderArgs(model) links a boundary's checkbox by (category, key)
@@ -47,7 +121,9 @@ function dedupePlaceholderPairs(placeholders: string[]): string[] {
 // --seed, one --copybook-path per configured search dir, one --placeholder
 // per unseeded boundary (deduped), then -o <outPath>. Unlike `fixtures`
 // there is no bundle JSON on stdout here -- the CLI writes the .cut file
-// straight to outPath and reports progress/warnings on stderr.
+// straight to outPath and reports on BOTH streams: refusals/progress/the
+// unsupported-boundaries summary on stdout, --placeholder-mismatch
+// warnings on stderr (see pickErrorMessage / extractUnsupportedBoundaryNotes).
 export function buildGenerateArgs(o: GenerateOptions): string[] {
   const args = ['generate', o.cblPath, '--with-data', '--scenarios', o.scenarios];
   if (o.seed !== undefined) {
@@ -61,26 +137,42 @@ export function buildGenerateArgs(o: GenerateOptions): string[] {
   return args;
 }
 
-// Runs `mockymock generate --with-data`. On success, returns every stderr
-// line containing "warning:" (trimmed) -- the CLI's convention for
-// non-fatal advisories (e.g. a boundary key mismatch) that still produced a
-// usable .cut file. On a non-zero exit, throws BundleError (the same type
-// bundleClient's fetchBundle throws) carrying the first non-empty stderr
-// line as its message and the full stderr as detail.
+// Runs `mockymock generate --with-data`.
+//
+// On success, returns:
+//  - `warnings`: every stderr line containing "warning:" (trimmed) -- the
+//    CLI's convention for non-fatal advisories (e.g. an unmatched
+//    --placeholder) that still produced a usable .cut file.
+//  - `notes`: the unsupported-boundaries report, if any, from stdout (see
+//    extractUnsupportedBoundaryNotes).
+//
+// On a non-zero exit, throws BundleError (the same type bundleClient's
+// fetchBundle throws) with `.message` chosen by pickErrorMessage (stdout's
+// refusal reason when stderr held only a warning; stderr's own line
+// otherwise) and `.stderr` set to BOTH streams concatenated -- despite the
+// property's bundleClient-inherited name, this is deliberately not
+// stderr-only here, so a caller logging it (e.g. to an output channel)
+// shows everything a failing run printed, not just the one line already
+// surfaced as the message.
 export async function runGenerate(
   run: CommandRunner,
   executable: string,
   o: GenerateOptions
-): Promise<{ warnings: string[] }> {
+): Promise<GenerateResult> {
   const result = await run(executable, buildGenerateArgs(o));
   if (result.code !== 0) {
-    throw new BundleError(firstNonEmptyLine(result.stderr) ?? 'mockymock generate failed', result.stderr);
+    const detail = [result.stdout, result.stderr]
+      .map((s) => s.trimEnd())
+      .filter((s) => s.length > 0)
+      .join('\n');
+    throw new BundleError(pickErrorMessage(result.stdout, result.stderr), detail);
   }
   const warnings = result.stderr
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.includes('warning:'));
-  return { warnings };
+  const notes = extractUnsupportedBoundaryNotes(result.stdout);
+  return { warnings, notes };
 }
 
 // Sibling <stem>.cut next to the source -- the exact pairing convention

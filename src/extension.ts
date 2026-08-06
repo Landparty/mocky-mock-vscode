@@ -12,7 +12,8 @@ import { runCommand } from './environment/commandRunner';
 import { resolveExecutablePath } from './environment/checks';
 import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundariesTreeProvider';
 import { placeholderArgs } from './boundaries/boundariesModel';
-import { runGenerate, resolveOutPath, GenerateOptions } from './boundaries/generateCut';
+import { runGenerate, resolveOutPath, GenerateOptions, GenerateResult } from './boundaries/generateCut';
+import { BundleError } from './boundaries/bundleClient';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
@@ -127,7 +128,7 @@ async function runGenerateCutCommand(
     placeholders: placeholderArgs(model),
   };
 
-  let result: { warnings: string[] };
+  let result: GenerateResult;
   try {
     result = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'mockymock: generating .cut with data…' },
@@ -135,7 +136,20 @@ async function runGenerateCutCommand(
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`mockymock generate failed: ${message}`);
+    // BundleError.stderr here is BOTH streams concatenated (see
+    // generateCut.ts's runGenerate) -- e.g. an unmatched --placeholder
+    // warning plus the actual refusal underneath it. `message` is only the
+    // one line that decided the failure; log the rest so nothing a failing
+    // run printed is lost, same channel the tree's own error node's "Show
+    // output" already points at.
+    if (err instanceof BundleError && err.stderr) {
+      provider.appendOutput(`mockymock generate failed: ${message}`);
+      provider.appendOutput(err.stderr);
+    }
+    const choice = await vscode.window.showErrorMessage(`mockymock generate failed: ${message}`, 'Show output');
+    if (choice === 'Show output') {
+      await vscode.commands.executeCommand('mockymock.boundaries.showOutput');
+    }
     return;
   }
 
@@ -152,6 +166,14 @@ async function runGenerateCutCommand(
   await vscode.window.showTextDocument(doc);
   if (result.warnings.length > 0) {
     vscode.window.showWarningMessage(`mockymock generate: ${result.warnings.join('\n')}`);
+  }
+  if (result.notes.length > 0) {
+    // Informational, not actionable -- "N boundary point(s) ... not
+    // mockable" (or a STOP RUN/GOBACK site) is routine for most real
+    // programs, not a sign this invocation did anything wrong, so it
+    // doesn't share showWarningMessage's implied "something's off" tone
+    // with the --placeholder-mismatch warnings above.
+    vscode.window.showInformationMessage(`mockymock generate: ${result.notes.join('\n')}`);
   }
 }
 
