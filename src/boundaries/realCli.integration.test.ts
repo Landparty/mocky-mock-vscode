@@ -217,4 +217,32 @@ describeReal('realCli integration (mockymock fixtures / generate --with-data)', 
       }
     );
   });
+
+  it('(f) fetchBundle accepts a real --copybook-path and actually resolves the COPY, not just tolerates the flag', async () => {
+    // FIXTUREDEMO.cbl above needs no --copybook-path (its only EXEC SQL
+    // INCLUDE resolves to nothing this program reads a layout from), so it
+    // can't prove copybookPaths actually gets threaded through and used by
+    // the real CLI -- every other case in this file passes copybookPaths:
+    // []. mocky-mock's own examples/cpyproc/ is a COPY-based program whose
+    // README says it needs exactly this flag.
+    const cpyprocBundle = await fetchBundle(runner, 'mockymock', 'examples/cpyproc/CPYPROC.cbl', {
+      scenarios: 'happy',
+      copybookPaths: ['examples/cpyproc/copybooks'],
+      seed: 7,
+    });
+    assert.equal(cpyprocBundle.bundle_version, 1);
+    assert.equal(cpyprocBundle.program_name, 'CPYPROC');
+    // If the copybook path were wrong or ignored, the COPY'd fields
+    // wouldn't resolve and would show up here instead of silently
+    // vanishing -- an empty list is the CLI actually having found and
+    // expanded the copybook, not merely accepting the flag.
+    assert.deepEqual(cpyprocBundle.unresolved, []);
+    const callFixture = cpyprocBundle.scenarios.flatMap((s) => s.fixtures).find((f) => f.category === 'CALL');
+    assert.ok(callFixture, 'expected a CALL fixture in CPYPROC');
+    // The copybook-defined fields actually made it into the resolved layout.
+    assert.deepEqual(
+      callFixture!.layout.map((f) => f.name),
+      ['ORD-AMOUNT', 'WS-DISCOUNT-PCT']
+    );
+  });
 });
