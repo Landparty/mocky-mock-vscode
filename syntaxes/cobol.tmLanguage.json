@@ -28,8 +28,8 @@
     { "include": "#statement-verbs" },
     { "include": "#logical-operators" },
     { "include": "#relational-words" },
-    { "include": "#operators" },
-    { "include": "#numbers" }
+    { "include": "#numbers" },
+    { "include": "#operators" }
   ],
   "repository": {
     "comment-fixed": {
@@ -45,7 +45,7 @@
     "strings": {
       "patterns": [
         {
-          "comment": "Double-quoted literal, '' doubling for embedded quotes",
+          "comment": "Double-quoted literal, \"\" doubling for embedded quotes",
           "match": "\"(?:[^\"]|\"\")*\"",
           "name": "string.quoted.double.cobol"
         },
