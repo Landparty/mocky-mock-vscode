@@ -46,10 +46,9 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
         return;
       }
 
-      const executablePath = resolveExecutablePath(
-        vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
-        context.extensionPath
-      );
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
+      const config = vscode.workspace.getConfiguration('mockymock', editor!.document.uri);
+      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
@@ -72,8 +71,6 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
         return;
       }
 
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
-      const config = vscode.workspace.getConfiguration('mockymock', editor!.document.uri);
       const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
         workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
       );
