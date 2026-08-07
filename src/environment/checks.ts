@@ -49,19 +49,6 @@ export async function supportsExportCommand(run: CommandRunner, executablePath: 
   return result.code === 0 && result.stdout.includes('--output');
 }
 
-// Same "check first, degrade gracefully" pattern as supportsDebugCommand/
-// supportsExportCommand, but for the `analyze` subcommand: an installed
-// CLI that predates `mockymock analyze` exits 2 (argparse's "invalid
-// choice" for an unknown subcommand) on `analyze --help`. Checking for
-// `COBOL_PARSER_ARGS` specifically -- the explicit metavar on the
-// passthrough's REMAINDER argument -- rather than just a zero exit code
-// also catches the unlikely case of an `analyze` subcommand existing
-// without the expected passthrough argument.
-export async function supportsAnalyzeCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['analyze', '--help']);
-  return result.code === 0 && result.stdout.includes('COBOL_PARSER_ARGS');
-}
-
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable

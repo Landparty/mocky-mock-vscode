@@ -34,11 +34,6 @@
         "category": "mockymock"
       },
       {
-        "command": "mockymock.analyzeCobol",
-        "title": "Analyze COBOL File...",
-        "category": "mockymock"
-      },
-      {
         "command": "mockymock.boundaries.refresh",
         "title": "Refresh",
         "category": "mockymock",
