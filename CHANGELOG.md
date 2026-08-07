@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.2...v0.5.0) (2026-08-07)
+
+
+### Features
+
+* **boundaries:** bundleClient fetches and validates FixtureBundle JSON ([4841d17](https://github.com/samdion1994/mocky-mock-vscode/commit/4841d17d25e3378f64ad0f792439b60d34b41552))
+* **boundaries:** Generate .cut action wired to generate --with-data ([0ef7c9a](https://github.com/samdion1994/mocky-mock-vscode/commit/0ef7c9ac1860ca524e48986e5f377d153dff1c6b))
+* **boundaries:** surface the CLI-drawn seed for replayable runs ([802fe1a](https://github.com/samdion1994/mocky-mock-vscode/commit/802fe1ac3e2cc86b34929bd6ad3018998ef7c85a))
+* **boundaries:** tree view over mockymock fixtures bundle ([0904063](https://github.com/samdion1994/mocky-mock-vscode/commit/09040631ffc7e4a73f87f1602aa821545dbc2434))
+* **boundaries:** view model with checkbox state and placeholder derivation ([4d01970](https://github.com/samdion1994/mocky-mock-vscode/commit/4d019707895295f8f42f2a63f973b109f1dfcd09))
+* **syntax:** add TextMate grammar for IBM Enterprise COBOL ([5c85dde](https://github.com/samdion1994/mocky-mock-vscode/commit/5c85dde1936106cd34343a8a22d66eda0e234635))
+* **syntax:** add TextMate grammar for IBM Enterprise COBOL ([d8548d7](https://github.com/samdion1994/mocky-mock-vscode/commit/d8548d77e4f263fa0e6d6496050c851b5869e7d6))
+
+
+### Bug Fixes
+
+* **boundaries:** close persistence-key race and OCCURS field-id collision ([481dc1d](https://github.com/samdion1994/mocky-mock-vscode/commit/481dc1d4fba7960e00101043bcb56fc29d3c3006))
+* **boundaries:** don't let a --placeholder warning mask a generate refusal ([37dca59](https://github.com/samdion1994/mocky-mock-vscode/commit/37dca59da03a02535e0f2407b795747dc449fbd4))
+* **boundaries:** fix final-review findings (view state, pinning, error label) ([f7c5768](https://github.com/samdion1994/mocky-mock-vscode/commit/f7c5768b6e6763bbc346eaef29132db5606c3d04))
+* **boundaries:** render CALL/DYNCALL rows without a badge instead of "undefined" ([15d74ad](https://github.com/samdion1994/mocky-mock-vscode/commit/15d74ad611b84b00f01bfea0f0833ab62cdcd053))
+* **boundaries:** surface OUT-only boundaries, close review nits ([e4b07f7](https://github.com/samdion1994/mocky-mock-vscode/commit/e4b07f72ef9b52eab96e5f80048f5849fa743e30))
+* **deps:** bump mockymock CLI to v0.3.0 ([819d4d3](https://github.com/samdion1994/mocky-mock-vscode/commit/819d4d3197dfdfcaf30f92d6e8a55006daf80c31))
+* **deps:** bump mockymock CLI to v0.3.0 ([59241ed](https://github.com/samdion1994/mocky-mock-vscode/commit/59241ed85df8e5047fdb417775eea9ceac1733a9))
+* **deps:** bump mockymock CLI to v0.4.0 ([ea21daa](https://github.com/samdion1994/mocky-mock-vscode/commit/ea21daa4cc11bf340b1406b4d0558a464f9b23d2))
+* **deps:** bump mockymock CLI to v0.4.0 ([65af5c5](https://github.com/samdion1994/mocky-mock-vscode/commit/65af5c53d1500861460e5ae3d3ed78f9c7c8c26c))
+* **scripts:** try multiple mocky-mock CLI checkout candidates for integration tests ([5435bcf](https://github.com/samdion1994/mocky-mock-vscode/commit/5435bcfeced439d245e373f4bf4e055fb246a4f8))
+* **syntax:** tokenize signed numeric literals, fix stale comment ([2d7ee69](https://github.com/samdion1994/mocky-mock-vscode/commit/2d7ee69167f334381eeacfd8e9e830f7fe3397ae))
+
 ## [0.4.2](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.1...v0.4.2) (2026-08-04)
 
 
