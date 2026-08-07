@@ -8,6 +8,7 @@ import { activateLintDiagnostics } from './linting/lintDiagnostics';
 import { MockymockDebugAdapterDescriptorFactory } from './debug/debugAdapterFactory';
 import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationProvider';
 import { activateExportMainframeCommand } from './export/exportMainframe';
+import { activateAnalyzeCobolCommand } from './analysis/analyzeCobol';
 import { runCommand } from './environment/commandRunner';
 import { resolveInvocationConfig } from './environment/invocationConfig';
 import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundariesTreeProvider';
@@ -309,6 +310,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateTestController(context, environmentManager);
   activateLintDiagnostics(context);
   activateExportMainframeCommand(context);
+  activateAnalyzeCobolCommand(context);
   activateBoundariesView(context, environmentManager);
 
   context.subscriptions.push(
