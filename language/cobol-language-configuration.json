@@ -1,0 +1,23 @@
+{
+  "comments": {
+    "lineComment": "*>"
+  },
+  "brackets": [["(", ")"]],
+  "autoClosingPairs": [
+    { "open": "(", "close": ")" },
+    { "open": "\"", "close": "\"", "notIn": ["string"] },
+    { "open": "'", "close": "'", "notIn": ["string"] }
+  ],
+  "surroundingPairs": [
+    ["(", ")"],
+    ["\"", "\""],
+    ["'", "'"]
+  ],
+  "folding": {
+    "markers": {
+      "start": "^\\s*(IDENTIFICATION|ENVIRONMENT|DATA|PROCEDURE)\\s+DIVISION\\b|^\\s*[A-Za-z0-9][A-Za-z0-9-]*\\s+SECTION\\b|^\\s*(IF|EVALUATE|PERFORM)\\b",
+      "end": "^\\s*END-(IF|EVALUATE|PERFORM)\\b"
+    }
+  },
+  "wordPattern": "[A-Za-z0-9][A-Za-z0-9-]*"
+}
