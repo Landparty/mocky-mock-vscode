@@ -80,22 +80,22 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
         () => runAnalyze(executablePath, picked.analyzer, activePath, copybookPaths, runCommand)
       );
 
-      if (result.exitCode !== 0) {
-        vscode.window.showErrorMessage(
-          `mockymock analyze ${picked.analyzer} failed:\n${result.stdout}${result.stderr}`
-        );
-        return;
-      }
-
       const channel = getOutputChannel();
       channel.clear();
       try {
-        const parsed = JSON.parse(result.stdout);
-        channel.appendLine(JSON.stringify(parsed, null, 2));
+        channel.appendLine(JSON.stringify(JSON.parse(result.stdout), null, 2));
       } catch {
+        channel.appendLine('--- raw output (not valid JSON) ---');
         channel.appendLine(result.stdout);
       }
+      if (result.stderr.trim()) {
+        channel.appendLine('--- stderr ---');
+        channel.appendLine(result.stderr);
+      }
       channel.show();
+      if (result.exitCode !== 0) {
+        vscode.window.showErrorMessage(`mockymock analyze ${picked.analyzer} failed — see the "mockymock: Analysis" output.`);
+      }
     })
   );
 }
