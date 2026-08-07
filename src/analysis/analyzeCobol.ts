@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath, supportsAnalyzeCommand } from '../environment/checks';
+import { describeRefreshError, resolveExecutablePath, supportsAnalyzeCommand } from '../environment/checks';
 import { CobolAnalyzer, runAnalyze } from './analysisRunner';
 
 interface AnalyzerOption {
@@ -35,6 +35,18 @@ function getOutputChannel(): vscode.OutputChannel {
 // v1 is deliberately "run one analyzer, show its JSON" -- no diagnostics,
 // no per-analyzer UI (see the design doc's "explicitly out of scope").
 export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): void {
+  // analysisOutputChannel is a module-level singleton (see getOutputChannel),
+  // so disposing it can't be a plain `context.subscriptions.push(channel)` --
+  // that would leave the module variable pointing at a disposed object after
+  // deactivation, silently no-op-ing appendLine on a later activate() in the
+  // same host. Null it out alongside disposal instead.
+  context.subscriptions.push({
+    dispose: () => {
+      analysisOutputChannel?.dispose();
+      analysisOutputChannel = undefined;
+    },
+  });
+
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.analyzeCobol', async () => {
       const editor = vscode.window.activeTextEditor;
@@ -52,10 +64,18 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
-        vscode.window.showErrorMessage(
+        // supportsAnalyzeCommand's false could mean "found but too old" or
+        // "not found at all" -- a second, cheap probe distinguishes them so
+        // a missing binary doesn't get told to "upgrade" (there's nothing to
+        // upgrade). Reuses the same CLI_NOT_FOUND_MESSAGE/describeRefreshError
+        // pattern the Boundaries view already uses for this exact ambiguity.
+        const probe = await runCommand(executablePath, ['--version']);
+        const message = describeRefreshError(
           `mockymock at "${executablePath}" is too old to support COBOL analysis ` +
-            '(needs the analyze subcommand). Upgrade mockymock and try again.'
+            '(needs the analyze subcommand). Upgrade mockymock and try again.',
+          probe.stderr
         );
+        vscode.window.showErrorMessage(message);
         return;
       }
 
