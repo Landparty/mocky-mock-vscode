@@ -12,6 +12,7 @@ import {
   supportsTraceFlag,
   supportsDebugCommand,
   supportsExportCommand,
+  supportsAnalyzeCommand,
   describeRefreshError,
   CLI_NOT_FOUND_MESSAGE,
 } from './checks';
@@ -126,6 +127,33 @@ describe('supportsExportCommand', () => {
 
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsExportCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
+    assert.strictEqual(ok, false);
+  });
+});
+
+describe('supportsAnalyzeCommand', () => {
+  it('returns true when analyze --help lists the COBOL_PARSER_ARGS passthrough', async () => {
+    const ok = await supportsAnalyzeCommand(
+      fakeRunner({
+        code: 0,
+        stdout: 'usage: mockymock analyze [-h] ...\n\npositional arguments:\n  COBOL_PARSER_ARGS  ...\n',
+        stderr: '',
+      }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the analyze subcommand', async () => {
+    const ok = await supportsAnalyzeCommand(
+      fakeRunner({ code: 2, stdout: '', stderr: "argument command: invalid choice: 'analyze'" }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsAnalyzeCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
     assert.strictEqual(ok, false);
   });
 });
