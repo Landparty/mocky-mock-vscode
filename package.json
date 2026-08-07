@@ -118,7 +118,8 @@
           ".cbl",
           ".cob",
           ".cobol"
-        ]
+        ],
+        "configuration": "./language/cobol-language-configuration.json"
       }
     ],
     "breakpoints": [
@@ -131,6 +132,11 @@
         "language": "cut",
         "scopeName": "source.cut",
         "path": "./syntaxes/cut.tmLanguage.json"
+      },
+      {
+        "language": "cobol",
+        "scopeName": "source.cobol",
+        "path": "./syntaxes/cobol.tmLanguage.json"
       }
     ],
     "snippets": [
