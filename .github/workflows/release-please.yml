@@ -4,12 +4,6 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version to publish to the Marketplace (must match an existing vX.Y.Z release, no leading v)'
-        required: true
-        type: string
 
 permissions:
   contents: write
@@ -18,119 +12,11 @@ permissions:
 
 jobs:
   release-please:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    outputs:
-      # `releases_created` is the aggregate flag for manifest mode: true on the
-      # run where the "chore: release X" PR is merged and the release is cut.
-      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
         with:
-          # GITHUB_TOKEN works out of the box. Releases it creates do NOT
-          # trigger other workflows -- that's why the build/publish jobs
-          # below live in THIS same workflow (gated on the output) instead
-          # of a separate release-triggered workflow, which would never fire.
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-
-  # Package the extension as a .vsix -- source-free by construction (see
-  # PUBLISHING.md): esbuild bundles+minifies everything into one
-  # out/extension.js, and .vscodeignore keeps src/**/*.ts and every other
-  # out/ file out of the package. Pure JS/TS, no native modules, so one OS
-  # is enough (unlike the sibling Python repos' per-OS Nuitka builds).
-  build-vsix:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: npm ci
-      - run: npm run package
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dist-vsix
-          path: "*.vsix"
-
-  # Attach the .vsix to the GitHub Release.
-  publish:
-    needs: [release-please, build-vsix]
-    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: dist-vsix
-          path: dist/
-      - name: Resolve the release tag from the manifest
-        id: tag
-        # The merge commit that triggered this run already bumped the
-        # manifest to the released version; tags use the v<version> format
-        # (include-component-in-tag: false), matching the sibling
-        # cobol-parser / mocky-mock repos' release-please.yml.
-        run: echo "tag=v$(jq -r '.["."]' .release-please-manifest.json)" >> "$GITHUB_OUTPUT"
-      - name: Attach the .vsix to the GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
-
-  # Manually-triggered: push an already-released .vsix to the Visual Studio
-  # Marketplace. Reuses the vsix already attached to the GitHub Release
-  # (built and verified above) instead of rebuilding, so what gets published
-  # is exactly what was tagged.
-  publish-marketplace:
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    env:
-      VERSION: ${{ github.event.inputs.version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Verify release exists with a vsix asset
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          ASSET_COUNT="$(gh release view "v$VERSION" --json assets -q '[.assets[].name | select(endswith(".vsix"))] | length')" || {
-            echo "No GitHub release found for tag v$VERSION" >&2
-            exit 1
-          }
-          if [ "$ASSET_COUNT" -eq 0 ]; then
-            echo "Release v$VERSION has no .vsix asset to publish" >&2
-            exit 1
-          fi
-
-      - name: Download the vsix asset
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mkdir -p dist
-          gh release download "v$VERSION" --pattern '*.vsix' -D dist/ --clobber
-
-      - name: Publish to the Visual Studio Marketplace
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-        run: |
-          shopt -s nullglob
-          files=(dist/*.vsix)
-          if [ ${#files[@]} -ne 1 ]; then
-            echo "Expected exactly one .vsix in dist/, found ${#files[@]}" >&2
-            exit 1
-          fi
-          npx @vscode/vsce publish --packagePath "${files[0]}" -p "$VSCE_PAT"
