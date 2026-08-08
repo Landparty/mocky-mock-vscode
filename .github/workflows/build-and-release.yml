@@ -150,10 +150,12 @@ jobs:
         with:
           node-version: "22"
       - run: npm ci
+      - name: Create the vsce output directory
+        run: mkdir -p dist
       - name: Package win32-x64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/mockymock-windows-amd64.exe" bin/mockymock.exe
+          cp "$STAGING_DIR/build/mockymock-windows-amd64.exe" bin/mockymock.exe
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target win32-x64 -o dist/
           unzip -l dist/*win32-x64*.vsix | grep -q 'extension/bin/mockymock.exe' || { echo "win32-x64 package missing bundled binary" >&2; exit 1; }
@@ -164,7 +166,7 @@ jobs:
       - name: Package linux-x64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/mockymock-linux-x86_64" bin/mockymock
+          cp "$STAGING_DIR/build/mockymock-linux-x86_64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target linux-x64 -o dist/
@@ -176,7 +178,7 @@ jobs:
       - name: Package darwin-arm64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/mockymock-macos-arm64" bin/mockymock
+          cp "$STAGING_DIR/build/mockymock-macos-arm64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target darwin-arm64 -o dist/
