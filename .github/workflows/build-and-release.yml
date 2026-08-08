@@ -1,0 +1,241 @@
+name: build-and-release
+
+# Manually-triggered only. Pulls mocky-mock's source (private repo, latest
+# release tag) and this repo's own source, builds the 3 Nuitka mockymock
+# executables from scratch, packages them into the 3 platform-specific
+# vsix files, attaches them to a GitHub Release on this repo, and
+# optionally publishes to the VS Code Marketplace -- all in one dispatch.
+# Replaces the old three-piece pipeline (mocky-mock's build-executables.yml
+# + publish-public.yml relaying through the public cobol-mocky-mock repo,
+# plus this repo's old release.yml pulling a pinned version from it). See
+# docs/superpowers/specs/2026-08-07-cross-repo-dispatch-build-design.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_marketplace:
+        description: 'Also publish the built vsix to the VS Code Marketplace'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      mockymock_tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - name: Resolve mocky-mock's latest release tag
+        id: tag
+        env:
+          GH_TOKEN: ${{ secrets.MOCKYMOCK_REPO_PAT }}
+        run: |
+          TAG="$(gh release view --repo Landparty/mocky-mock --json tagName -q .tagName)"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::mocky-mock's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  build-cli:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: mockymock-linux-x86_64
+          - os: macos-latest
+            artifact: mockymock-macos-arm64
+          - os: windows-latest
+            artifact: mockymock-windows-amd64.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out mocky-mock at its latest release tag
+        uses: actions/checkout@v4
+        with:
+          repository: Landparty/mocky-mock
+          ref: ${{ needs.resolve.outputs.mockymock_tag }}
+          token: ${{ secrets.MOCKYMOCK_REPO_PAT }}
+          path: mockymock-src
+
+      # cobolparser is a private repo; mockymock-src/pyproject.toml pins it
+      # via git+https, which pip/git can only resolve here with
+      # COBOL_PARSER_PAT (a PAT/deploy key with read access) configured as
+      # an org secret. shell: bash is required on every OS -- run: steps
+      # default to pwsh on windows-latest, and pwsh parses ${TOKEN} as an
+      # (unset) PowerShell variable rather than expanding the env var,
+      # silently embedding an empty token in the rewritten URL. Mirrors
+      # mocky-mock's own (now-deleted) build-executables.yml step.
+      - name: Configure git credentials for the private cobolparser dependency
+        shell: bash
+        run: |
+          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          TOKEN: ${{ secrets.COBOL_PARSER_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install patchelf (required by Nuitka onefile mode on Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y patchelf
+      - name: Install mockymock (pulls in the pinned cobolparser dependency)
+        run: pip install ./mockymock-src
+      - name: Install Nuitka
+        run: pip install nuitka
+      - name: Build onefile executable
+        shell: bash
+        working-directory: mockymock-src
+        run: scripts/build_executable.sh "${{ matrix.artifact }}"
+      - name: Smoke-test the executable
+        shell: bash
+        working-directory: mockymock-src
+        run: |
+          BIN="build/${{ matrix.artifact }}"
+          chmod +x "$BIN" || true
+          "$BIN" --help
+      - name: Analyze subcommand bundles cobolparser's CLI
+        shell: bash
+        working-directory: mockymock-src
+        run: |
+          BIN="build/${{ matrix.artifact }}"
+          "$BIN" analyze dead-code examples/custinq/CUSTINQ.cbl --compact | head -c 200
+      - name: End-to-end smoke test against a real example (Docker required)
+        if: runner.os == 'Linux'
+        shell: bash
+        working-directory: mockymock-src
+        run: |
+          BIN="build/${{ matrix.artifact }}"
+          "$BIN" setup
+          "$BIN" run examples/custinq/CUSTINQ.cbl --cut examples/custinq/CUSTINQ.cut
+      - name: Dashboard serves its bundled static assets
+        shell: bash
+        working-directory: mockymock-src
+        run: |
+          BIN="build/${{ matrix.artifact }}"
+          "$BIN" dashboard --port 8765 --no-browser &
+          DASH=$!
+          for _ in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8765/ >/dev/null 2>&1 && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/ | grep -q "toolchain status"
+          curl -fsS http://127.0.0.1:8765/style.css >/dev/null
+          curl -fsS http://127.0.0.1:8765/app.js >/dev/null
+          curl -fsS http://127.0.0.1:8765/api/status | grep -q '"checks"'
+          kill "$DASH" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-exe-${{ matrix.os }}
+          path: |
+            mockymock-src/build/${{ matrix.artifact }}
+            mockymock-src/LICENSE
+
+  build-vsix:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    env:
+      STAGING_DIR: ${{ runner.temp }}/staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-exe-*
+          path: ${{ env.STAGING_DIR }}
+          merge-multiple: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - name: Package win32-x64
+        run: |
+          rm -rf bin && mkdir bin
+          cp "$STAGING_DIR/mockymock-windows-amd64.exe" bin/mockymock.exe
+          cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          npx @vscode/vsce package --target win32-x64 -o dist/
+          unzip -l dist/*win32-x64*.vsix | grep -q 'extension/bin/mockymock.exe' || { echo "win32-x64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*win32-x64*.vsix | grep -qE 'extension/bin/mockymock$|extension/staging/'; then
+            echo "win32-x64 package contains a foreign-platform binary or staging leakage" >&2
+            exit 1
+          fi
+      - name: Package linux-x64
+        run: |
+          rm -rf bin && mkdir bin
+          cp "$STAGING_DIR/mockymock-linux-x86_64" bin/mockymock
+          chmod +x bin/mockymock
+          cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          npx @vscode/vsce package --target linux-x64 -o dist/
+          unzip -l dist/*linux-x64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "linux-x64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*linux-x64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
+            echo "linux-x64 package contains a foreign-platform binary or staging leakage" >&2
+            exit 1
+          fi
+      - name: Package darwin-arm64
+        run: |
+          rm -rf bin && mkdir bin
+          cp "$STAGING_DIR/mockymock-macos-arm64" bin/mockymock
+          chmod +x bin/mockymock
+          cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          npx @vscode/vsce package --target darwin-arm64 -o dist/
+          unzip -l dist/*darwin-arm64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "darwin-arm64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*darwin-arm64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
+            echo "darwin-arm64 package contains a foreign-platform binary or staging leakage" >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-vsix
+          path: dist/*.vsix
+
+  release:
+    needs: build-vsix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-vsix
+          path: dist/
+      - name: Resolve the release tag from this repo's own package.json
+        id: tag
+        run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Create the release if it doesn't exist yet
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --generate-notes
+      - name: Upload the vsix files (clobber lets a re-dispatch replace a bad build)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
+
+  publish-marketplace:
+    needs: release
+    if: ${{ inputs.publish_marketplace }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist-vsix
+          path: dist/
+      - name: Publish each platform vsix to the Marketplace
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          shopt -s nullglob
+          for f in dist/*.vsix; do
+            echo "Publishing $f"
+            npx @vscode/vsce publish --packagePath "$f" -p "$VSCE_PAT"
+          done
