@@ -7,8 +7,7 @@ name: build-and-release
 # optionally publishes to the VS Code Marketplace -- all in one dispatch.
 # Replaces the old three-piece pipeline (mocky-mock's build-executables.yml
 # + publish-public.yml relaying through the public cobol-mocky-mock repo,
-# plus this repo's old release.yml pulling a pinned version from it). See
-# docs/superpowers/specs/2026-08-07-cross-repo-dispatch-build-design.md.
+# plus this repo's old release.yml pulling a pinned version from it).
 
 on:
   workflow_dispatch:
@@ -21,6 +20,10 @@ on:
 
 permissions:
   contents: write
+
+concurrency:
+  group: build-and-release
+  cancel-in-progress: false
 
 jobs:
   resolve:
@@ -71,6 +74,7 @@ jobs:
       - name: Configure git credentials for the private cobolparser dependency
         shell: bash
         run: |
+          [ -n "$TOKEN" ] || { echo "::error::COBOL_PARSER_PAT is not set (needs an org-level secret with read access to Landparty/cobol-parser)"; exit 1; }
           git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
         env:
           TOKEN: ${{ secrets.COBOL_PARSER_PAT }}
@@ -193,7 +197,7 @@ jobs:
           path: dist/*.vsix
 
   release:
-    needs: build-vsix
+    needs: [build-vsix, resolve]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -204,6 +208,15 @@ jobs:
       - name: Resolve the release tag from this repo's own package.json
         id: tag
         run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Verify HEAD is exactly tagged with the resolved release tag
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          git fetch --tags --force
+          ACTUAL="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
+          if [ "$ACTUAL" != "$TAG" ]; then
+            echo "::error::HEAD is not tagged $TAG (git describe says '${ACTUAL:-<none>}'). Dispatch this workflow with 'Use workflow from' set to the $TAG tag, not a branch — release-please must have already cut that tag."
+            exit 1
+          fi
       - name: Create the release if it doesn't exist yet
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -215,6 +228,18 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
+      - name: Record the mocky-mock CLI tag this vsix was built from
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          MOCKYMOCK_TAG="${{ needs.resolve.outputs.mockymock_tag }}"
+          LINE="Built from mocky-mock ${MOCKYMOCK_TAG}."
+          BODY="$(gh release view "$TAG" --json body -q .body)"
+          [ "$BODY" = "null" ] && BODY=""
+          if [ "${BODY#*"$LINE"}" = "$BODY" ]; then
+            printf '%s\n\n%s\n' "$BODY" "$LINE" | gh release edit "$TAG" --notes-file -
+          fi
 
   publish-marketplace:
     needs: release
@@ -239,5 +264,5 @@ jobs:
           shopt -s nullglob
           for f in dist/*.vsix; do
             echo "Publishing $f"
-            npx @vscode/vsce publish --packagePath "$f" -p "$VSCE_PAT"
+            npx @vscode/vsce publish --packagePath "$f"
           done

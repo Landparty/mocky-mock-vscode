@@ -35,7 +35,7 @@ Now `out/extension.js` is produced by `esbuild.js`, which bundles
 rename class/method/property names (only local variables) — safe default,
 since this codebase reads/writes plenty of properties whose names have to
 stay real (the `vscode` API surface itself, JSON field names in parsed
-JUnit/trace reports). So method names like `installMockymockViaGhRelease`
+JUnit/trace reports). So method names like `installMockymock`
 remain fully readable in the shipped bundle even after minification; only
 comments, local variable names, and the raw `.ts` files are gone. This is
 minification, not obfuscation. Going further (property mangling, control-flow
