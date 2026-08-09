@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.7.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.6.0...v0.7.0) (2026-08-09)
+
+
+### Features
+
+* add Paragraph Tree webview ([80c4213](https://github.com/Landparty/mocky-mock-vscode/commit/80c4213a9a99be98114326e156f150ff432337c1))
+
+
+### Bug Fixes
+
+* address final review findings on Paragraph Tree (PR [#22](https://github.com/Landparty/mocky-mock-vscode/issues/22)) ([5c6c25f](https://github.com/Landparty/mocky-mock-vscode/commit/5c6c25fd87855c56d4605bc6153a56b5596041e1))
+* drop invalid runner-context reference in build-vsix's job-level env ([7ef0cc0](https://github.com/Landparty/mocky-mock-vscode/commit/7ef0cc0d53a06c7877ddffed014e8efefe3585f9))
+* update CI packaging guard for the paragraph-tree webview bundle ([31e59c7](https://github.com/Landparty/mocky-mock-vscode/commit/31e59c7a5bd9719b0e2ec4185e9562d270563dc3))
+
 ## [0.6.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.5.0...v0.6.0) (2026-08-09)
 
 
