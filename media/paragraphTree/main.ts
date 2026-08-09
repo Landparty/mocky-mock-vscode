@@ -17,6 +17,12 @@ let currentTree: ParagraphTreeResult | undefined;
 let searchQuery = '';
 let depthCap = 4;
 let hoverRequestId = 0;
+// Tracked across renders so a re-render triggered by typing in the search
+// box (renderTree() rebuilds the whole #root, including a brand-new <input>
+// each time) can restore focus and caret position on the new element --
+// without this, every keystroke would blur the field and the next
+// keystroke would be lost.
+let searchBoxEl: HTMLInputElement | undefined;
 
 const root = document.getElementById('root')!;
 
@@ -146,6 +152,12 @@ function hideHoverPreview(): void {
 }
 
 function renderTree(): void {
+  // Capture the outgoing search box's focus/caret state before it (and the
+  // rest of #root) gets torn down -- see the searchBoxEl comment above.
+  const searchHadFocus = !!searchBoxEl && document.activeElement === searchBoxEl;
+  const searchCaret = searchBoxEl?.selectionStart ?? null;
+
+  hideHoverPreview(); // a popup from the row under the old content would otherwise be orphaned
   root.innerHTML = '';
   if (!currentTree) return;
 
@@ -160,6 +172,12 @@ function renderTree(): void {
     renderTree();
   });
   root.appendChild(searchBox);
+  searchBoxEl = searchBox;
+  if (searchHadFocus) {
+    searchBox.focus();
+    const caret = searchCaret ?? searchBox.value.length;
+    searchBox.setSelectionRange(caret, caret);
+  }
 
   const depthRow = el('div', 'depth-chips');
   for (let d = 1; d <= 4; d++) {
@@ -200,6 +218,8 @@ function renderTree(): void {
 }
 
 function renderEmptyState(): void {
+  hideHoverPreview();
+  searchBoxEl = undefined;
   root.innerHTML = '';
   root.appendChild(el('div', 'empty-state-title', 'Open a .cbl file to draw its paragraph tree.'));
   root.appendChild(
@@ -215,6 +235,8 @@ function renderEmptyState(): void {
 }
 
 function renderErrorState(message: string): void {
+  hideHoverPreview();
+  searchBoxEl = undefined;
   root.innerHTML = '';
   root.appendChild(el('div', 'error-state', message));
 }
