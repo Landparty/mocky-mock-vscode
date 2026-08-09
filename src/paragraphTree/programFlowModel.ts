@@ -256,7 +256,23 @@ export function buildParagraphTree(
   for (const entryName of report.entry_points) {
     const node = nodesByName.get(entryName);
     if (!node) {
-      throw new ParagraphTreeError(`entry point "${entryName}" is not a known paragraph`);
+      // Not fail-closed here (unlike a dangling PERFORM edge, which does
+      // indicate a genuinely broken graph): cobol-parser's entry_points[]
+      // legitimately mixes two different things. The implicit first
+      // paragraph is always validated against nodes[] before being added
+      // (cobolparser/analysis/program_flow/analyzer.py's "if first in
+      // self._nodes" check), but ENTRY statement names
+      // (collect_entry_points in scanner.py) are appended unconditionally,
+      // with no corresponding paragraph -- an ENTRY statement is a
+      // secondary linkage-time entry point (common in IMS DL/I programs,
+      // e.g. ENTRY 'DLITCBL' USING ...), not a paragraph boundary;
+      // execution just falls into whatever code follows it. Skipping it
+      // here is correct, not a guess: it has no location/statements/badges
+      // of its own to render, and the real paragraph tree is unaffected --
+      // verified against a real ENTRY-bearing fixture, where entry_points
+      // was ["0000-MAIN-PROCESS", "DLITCBL"] with only the former in
+      // nodes[].
+      continue;
     }
     if (placed.has(entryName)) continue;
     placed.add(entryName);

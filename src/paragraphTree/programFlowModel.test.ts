@@ -230,6 +230,28 @@ describe('buildParagraphTree', () => {
     assert.equal(result.unreachable[0].children.length, 0);
   });
 
+  it('does not fail-close on an ENTRY-statement pseudo-entry-point absent from nodes[]', () => {
+    // Real shape reproduced against cobol-parser directly from a file with
+    // `ENTRY 'DLITCBL' USING LOAN-PCB-LNK.` (a secondary linkage-time entry
+    // point, common in IMS DL/I programs): entry_points was
+    // ["0000-MAIN-PROCESS", "DLITCBL"], but only 0000-MAIN-PROCESS ever
+    // appears in nodes[] -- ENTRY statements aren't paragraph boundaries.
+    const report: ProgramFlowReport = {
+      program_name: 'ENTRYTEST',
+      entry_points: ['0000-MAIN-PROCESS', 'DLITCBL'],
+      unreachable_nodes: [],
+      nodes: [
+        { name: '0000-MAIN-PROCESS', type: 'PARAGRAPH', location: { line: 11, column: 1 }, calls: { perform_count: 1, goto_count: 0, call_count: 0 }, statement_types: {} },
+      ],
+      edges: [],
+    };
+    const result = buildParagraphTree(report, undefined);
+    assert.equal(result.roots.length, 1);
+    assert.equal(result.roots[0].kind, 'paragraph');
+    if (result.roots[0].kind !== 'paragraph') return;
+    assert.equal(result.roots[0].name, '0000-MAIN-PROCESS');
+  });
+
   it('throws ParagraphTreeError when a PERFORM edge targets an unknown paragraph', () => {
     const report: ProgramFlowReport = {
       program_name: 'P',
