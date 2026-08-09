@@ -45,9 +45,28 @@ describe('extractLoopAnnotation', () => {
   });
 
   it('stops scanning after a safety cap of lines with no terminating period', () => {
-    const sourceLines = Array.from({ length: 20 }, (_, i) => `      CONTINUE-LINE-${i}`);
-    // No period anywhere in range -- must not scan the whole file.
+    // Verify that keywords beyond the 6-line cap are not found
+    const sourceLines = [
+      '      PERFORM SOME-PARA',
+      '          AND MORE',
+      '          AND MORE',
+      '          AND MORE',
+      '          AND MORE',
+      '          AND MORE',
+      '          UNTIL WS-EOF = "Y"', // Line 7 - beyond the 6-line cap, will not be scanned
+    ];
     assert.equal(extractLoopAnnotation(sourceLines, 1, 'UNTIL'), undefined);
+
+    // Verify that keywords at the cap boundary (line 6) ARE found
+    const sourceLines2 = [
+      '      PERFORM SOME-PARA',
+      '          AND MORE',
+      '          AND MORE',
+      '          AND MORE',
+      '          AND MORE',
+      '          UNTIL WS-EOF = "Y"', // Line 6 - at the cap boundary, will be scanned
+    ];
+    assert.equal(extractLoopAnnotation(sourceLines2, 1, 'UNTIL'), 'UNTIL WS-EOF = "Y"');
   });
 });
 
