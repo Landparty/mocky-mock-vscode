@@ -6,6 +6,7 @@
 // vscode-importing files, see checks.ts vs environmentManager.ts). No
 // `vscode` import here.
 import type { CommandRunner } from '../environment/commandRunner';
+import { firstNonEmptyLine } from '../environment/textUtils';
 import type { ScenarioMode } from './bundleTypes';
 import { BundleError } from './bundleClient';
 import { resolveCutPath } from '../discovery/cutDiscovery';
@@ -26,10 +27,6 @@ export interface GenerateResult {
   // "... (seed=N)" banner -- null if the banner wasn't found. Lets the
   // caller surface a replayable seed when the user didn't fix one.
   seed: number | null;
-}
-
-function firstNonEmptyLine(text: string): string | undefined {
-  return text.split('\n').map((line) => line.trim()).find((line) => line.length > 0);
 }
 
 function nonEmptyLines(text: string): string[] {

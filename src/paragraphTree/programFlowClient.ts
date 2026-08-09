@@ -1,4 +1,5 @@
 import type { CommandRunner } from '../environment/commandRunner';
+import { firstNonEmptyLine } from '../environment/textUtils';
 import { runAnalyze } from '../analysis/analysisRunner';
 import type { ProgramFlowReport } from './programFlowModel';
 
@@ -7,13 +8,6 @@ export class ProgramFlowFetchError extends Error {
     super(message);
     this.name = 'ProgramFlowFetchError';
   }
-}
-
-function firstNonEmptyLine(text: string): string | undefined {
-  return text
-    .split('\n')
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
 }
 
 export async function fetchProgramFlow(
