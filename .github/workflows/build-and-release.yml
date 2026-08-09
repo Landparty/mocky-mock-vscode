@@ -144,7 +144,11 @@ jobs:
     needs: build-cli
     runs-on: ubuntu-latest
     env:
-      STAGING_DIR: ${{ runner.temp }}/staging
+      # A plain workspace-relative path, not ${{ runner.temp }}/staging --
+      # the `runner` context isn't available in a job-level `env:` block
+      # (it only becomes available at the step level), so referencing it
+      # here fails workflow validation ("Unrecognized named-value: 'runner'").
+      STAGING_DIR: staging
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
