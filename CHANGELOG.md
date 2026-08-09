@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.0...v0.7.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* don't fail-close on ENTRY-statement pseudo-entry-points ([1dc79d8](https://github.com/Landparty/mocky-mock-vscode/commit/1dc79d81eb750fb8e6c477a9213f9a4d07c597c8))
+* don't fail-close the Paragraph Tree on ENTRY-statement pseudo-entries ([9b9c336](https://github.com/Landparty/mocky-mock-vscode/commit/9b9c336acf3958f5214c76e109924872f39c29df))
+
 ## [0.7.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.6.0...v0.7.0) (2026-08-09)
 
 
