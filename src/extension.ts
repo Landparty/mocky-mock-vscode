@@ -308,11 +308,6 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
 
 function activateParagraphTreeView(context: vscode.ExtensionContext): void {
   const provider = new ParagraphTreeViewProvider(context);
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider('mockymock.paragraphTree', provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    })
-  );
 
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
@@ -338,8 +333,19 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
 
   // The webview only exists once VS Code first renders it -- see
   // ParagraphTreeViewProvider.onVisible's doc comment. Wire it before
-  // registerWebviewViewProvider could ever call resolveWebviewView.
+  // registerWebviewViewProvider (below), which is the call that can
+  // trigger resolveWebviewView -- this view has no unconditional
+  // scheduleRefresh() backstop the way activateBoundariesView does, so
+  // onVisible is the ONLY path to a first render; assigning it after
+  // registration would leave the view stuck on the empty state until the
+  // user manually switches editors or hits refresh.
   provider.onVisible = scheduleRefresh;
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('mockymock.paragraphTree', provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
 
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => scheduleRefresh()));
 
