@@ -1,4 +1,5 @@
 import type { CommandRunner } from '../environment/commandRunner';
+import { firstNonEmptyLine } from '../environment/textUtils';
 import type { FixtureBundle, ScenarioMode } from './bundleTypes';
 
 export class BundleError extends Error {
@@ -14,10 +15,6 @@ export interface FetchOptions {
 }
 
 const SUPPORTED_BUNDLE_VERSION = 1;
-
-function firstNonEmptyLine(text: string): string | undefined {
-  return text.split('\n').map((line) => line.trim()).find((line) => line.length > 0);
-}
 
 // Mirrors the exact `mockymock fixtures` arg order the CLI expects (PR #46,
 // feature/unify-with-data): subcommand, positional .cbl path, --scenarios,

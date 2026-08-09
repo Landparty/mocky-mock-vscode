@@ -1,0 +1,68 @@
+body {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-sideBar-background);
+  margin: 0;
+  padding: 8px;
+}
+.header { font-weight: 600; margin-bottom: 6px; }
+.search {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 4px 6px;
+  margin-bottom: 6px;
+}
+.depth-chips { display: flex; gap: 6px; margin-bottom: 8px; }
+.chip { opacity: 0.5; cursor: pointer; }
+.chip-active { opacity: 1; font-weight: 600; }
+.node { margin-left: 12px; }
+.thru-range { margin-left: 12px; border-left: 1px dashed var(--vscode-textLink-foreground); padding-left: 8px; }
+.thru-header { display: flex; gap: 6px; align-items: baseline; color: var(--vscode-textLink-foreground); font-style: italic; }
+/* Loop gutter bracket: a solid border tracks an UNTIL/VARYING paragraph's
+   nested rows, distinct from thru-range's dashed connector. */
+.loop-body { margin-left: 6px; border-left: 2px solid var(--vscode-charts-orange, #d7ba7d); padding-left: 6px; }
+.row { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 1px 0; }
+.row:hover { background: var(--vscode-list-hoverBackground); }
+.row.recursive { opacity: 0.7; }
+.name { flex: 0 0 auto; }
+.name .match { background: var(--vscode-editor-findMatchHighlightBackground); }
+.loop-annotation { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.recursive-marker { color: var(--vscode-errorForeground); font-size: 10px; text-transform: uppercase; }
+.badges { display: flex; gap: 2px; margin-left: auto; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-widget-border, #555); opacity: 0.3; }
+.dot-active { opacity: 1; }
+.dot-f.dot-active { background: #4fc1ff; }
+.dot-s.dot-active { background: #4fc1ff; }
+.dot-c.dot-active { background: #d7ba7d; }
+.line-number { color: var(--vscode-descriptionForeground); min-width: 2.5em; text-align: right; }
+.unreachable { opacity: 0.5; }
+.footer { margin-top: 8px; color: var(--vscode-descriptionForeground); font-size: 11px; }
+.empty-filter, .hidden-count { color: var(--vscode-descriptionForeground); font-size: 11px; }
+.empty-state-title { font-weight: 600; margin-bottom: 6px; }
+.empty-state-body { color: var(--vscode-descriptionForeground); margin-bottom: 10px; }
+.open-file-button {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+  border: none;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.error-state { color: var(--vscode-errorForeground); }
+.hover-popup {
+  position: fixed;
+  z-index: 1000;
+  background: var(--vscode-editorHoverWidget-background);
+  border: 1px solid var(--vscode-editorHoverWidget-border);
+  padding: 6px 8px;
+  max-width: 360px;
+  bottom: 8px;
+  right: 8px;
+  pointer-events: none;
+}
+.hover-title { font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
+.hover-code { margin: 0; white-space: pre; font-family: var(--vscode-editor-font-family, monospace); }
+.hover-hint { font-size: 11px; color: var(--vscode-textLink-foreground); margin-top: 4px; }

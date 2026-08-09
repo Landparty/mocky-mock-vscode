@@ -1,4 +1,5 @@
 src/**
+media/**
 **/*.test.ts
 .vscode/**
 .mocharc.json
@@ -19,9 +20,18 @@ node_modules/**
 esbuild.js
 PUBLISHING.md
 
-# esbuild bundles everything into one out/extension.js; nothing else under
-# out/ (per-module tsc output from a `tsc -p ./`-era build, leftover on a
-# contributor's machine or a not-fully-clean CI checkout, plus the dev
-# sourcemap) should ever ship.
+# esbuild bundles the extension into out/extension.js and the webview
+# client into out/media/paragraphTree/main.js (+ styles.css); nothing else
+# under out/ (per-module tsc output from a `tsc -p ./`-era build, leftover
+# on a contributor's machine or a not-fully-clean CI checkout, plus dev
+# sourcemaps) should ever ship. Negations below name exact files only --
+# vsce's own matching is NOT gitignore last-match-wins (see
+# node_modules/@vscode/vsce/out/package.js: files pass via
+# `!ignore.some(match) || negate.some(match)`, two flat unordered buckets),
+# so any `!`-wildcard negation would force-include everything under it
+# forever, including stray .map files -- no later plain-ignore line could
+# ever claw them back out.
 out/**
 !out/extension.js
+!out/media/paragraphTree/main.js
+!out/media/paragraphTree/styles.css
