@@ -3,15 +3,19 @@
 // no depth/children field) -> a renderable paragraph tree. No `vscode`
 // import (repo convention). Implements the derivation rules from
 // docs/superpowers/specs/2026-08-08-paragraph-tree-view-design.md:
-// hierarchy = PERFORM/PERFORM_THRU edges only; DFS pre-order from
+// hierarchy = PERFORM edges only (PERFORM_THRU is a duplicate of the same
+// span, deliberately ignored -- see the filter below); DFS pre-order from
 // entry_points in source-line order; a multi-caller paragraph is placed
 // once (first-reached) with a callCount badge; a PERFORM back-edge to an
 // ancestor on the current path renders as a childless "recursive" leaf
-// instead of re-descending; unreachable_nodes render as flat, childless
-// top-level entries; PERFORM ... THRU ranges become a `thruRange`
-// connector node; F/S/C badges are presence-only, derived from
-// statement_types/calls.call_count; a PERFORM edge naming an unknown
-// paragraph fails the whole build closed (never a partial/guessed tree).
+// instead of re-descending; every node never placed by the PERFORM
+// traversal renders as a flat, childless "unreachable" entry (computed
+// from `placed`, NOT from report.unreachable_nodes verbatim -- see the
+// comment above the `unreachable` computation below for why); PERFORM
+// ... THRU ranges become a `thruRange` connector node; F/S/C badges are
+// presence-only, derived from statement_types/calls.call_count; a PERFORM
+// edge naming an unknown paragraph fails the whole build closed (never a
+// partial/guessed tree).
 import { extractLoopAnnotation, PerformType } from './sourceAnnotations';
 
 export interface FlowLocation {
@@ -86,18 +90,22 @@ export class ParagraphTreeError extends Error {
 }
 
 // The eight file-op verbs cobol-parser's statement_types can emit for
-// OPEN/READ/WRITE/CLOSE-family statements (REWRITE/DELETE/START/UNLOCK
-// carry a "-STATEMENT" suffix to disambiguate from same-named non-I/O
-// statement types -- verified against cobolparser/models/statements/io.py).
+// OPEN/READ/WRITE/CLOSE-family statements. REWRITE/DELETE/START/UNLOCK
+// carry a "_STATEMENT" suffix (underscore, not hyphen) to disambiguate
+// from same-named non-I/O statement types -- verified directly against
+// cobolparser/models/statements/io.py's __init__ calls: OPEN (io.py:317),
+// READ (io.py:80), WRITE (io.py:190), CLOSE (io.py:386),
+// REWRITE_STATEMENT (io.py:546), DELETE_STATEMENT (io.py:593),
+// START_STATEMENT (io.py:626), UNLOCK_STATEMENT (io.py:671).
 const FILE_STATEMENT_TYPES = new Set([
   'OPEN',
   'READ',
   'WRITE',
   'CLOSE',
-  'REWRITE',
-  'DELETE-STATEMENT',
-  'START-STATEMENT',
-  'UNLOCK-STATEMENT',
+  'REWRITE_STATEMENT',
+  'DELETE_STATEMENT',
+  'START_STATEMENT',
+  'UNLOCK_STATEMENT',
 ]);
 
 function badgesFor(node: FlowNode): ParagraphBadges {
@@ -255,13 +263,20 @@ export function buildParagraphTree(
     roots.push(paragraphItem(node, callCounts.get(entryName) ?? 0, false, expand(entryName, new Set([entryName]))));
   }
 
-  const unreachable: ParagraphTreeItem[] = report.unreachable_nodes.map((name) => {
-    const node = nodesByName.get(name);
-    if (!node) {
-      throw new ParagraphTreeError(`unreachable node "${name}" is not a known paragraph`);
-    }
-    return paragraphItem(node, callCounts.get(name) ?? 0, false, []);
-  });
+  // Computed as "every node the PERFORM traversal never placed", NOT as
+  // report.unreachable_nodes verbatim. That JSON field is computed by
+  // cobol-parser over a much broader edge set (GOTO/FALL_THROUGH/SORT-MERGE
+  // procedures, not just PERFORM -- see cobolparser/analysis/program_flow/
+  // graph.py's build_fall_through_edges), so a paragraph reached only by
+  // sequential fall-through (common in real COBOL, no explicit PERFORM at
+  // all) is "reachable" by the JSON's definition but never PERFORM-placed
+  // by this tree -- trusting the JSON field verbatim would let such
+  // paragraphs vanish from both roots and unreachable. Deriving this
+  // bucket from `placed` instead guarantees every node in report.nodes
+  // appears exactly once, somewhere, in the returned tree.
+  const unreachable: ParagraphTreeItem[] = report.nodes
+    .filter((node) => !placed.has(node.name))
+    .map((node) => paragraphItem(node, callCounts.get(node.name) ?? 0, false, []));
 
   return { programName: report.program_name, roots, unreachable };
 }

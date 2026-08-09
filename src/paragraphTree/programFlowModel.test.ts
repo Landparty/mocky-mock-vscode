@@ -99,6 +99,23 @@ describe('buildParagraphTree', () => {
     assert.deepEqual(findByName(result.roots, 'TALLY-RECORD').badges, { file: true, sql: false, call: false });
   });
 
+  it('recognizes the underscore-suffixed file statement types (REWRITE_STATEMENT etc), not a hyphenated guess', () => {
+    const report: ProgramFlowReport = {
+      program_name: 'P',
+      entry_points: ['A'],
+      unreachable_nodes: [],
+      nodes: [
+        { name: 'A', type: 'PARAGRAPH', location: { line: 1, column: 1 }, calls: { perform_count: 0, goto_count: 0, call_count: 0 }, statement_types: { REWRITE_STATEMENT: 1 } },
+      ],
+      edges: [],
+    };
+    const result = buildParagraphTree(report, undefined);
+    const a = result.roots[0];
+    assert.equal(a.kind, 'paragraph');
+    if (a.kind !== 'paragraph') return;
+    assert.equal(a.badges.file, true);
+  });
+
   it('renders a PERFORM ... THRU range as a connector node with members nested inside', () => {
     const report: ProgramFlowReport = {
       program_name: 'RATERTE',
@@ -190,16 +207,26 @@ describe('buildParagraphTree', () => {
     assert.equal(backEdge.children.length, 0);
   });
 
-  it('appends unreachable_nodes as flat, childless top-level entries', () => {
+  it('buckets every never-PERFORM-reached paragraph as unreachable, independent of the JSON unreachable_nodes field', () => {
     const report: ProgramFlowReport = {
-      ...INVUPDT_REPORT,
-      unreachable_nodes: ['ASK-CONFIRM'],
+      program_name: 'P',
+      entry_points: ['MAIN'],
+      // Deliberately empty: program-flow's own unreachable_nodes list is
+      // GOTO/FALL_THROUGH-aware and would NOT list ORPHAN-PARA (it's
+      // "reachable" by that broader definition even with no PERFORM edge
+      // pointing at it) -- this bucket must not depend on that field.
+      unreachable_nodes: [],
+      nodes: [
+        { name: 'MAIN', type: 'PARAGRAPH', location: { line: 1, column: 1 }, calls: { perform_count: 0, goto_count: 0, call_count: 0 }, statement_types: {} },
+        { name: 'ORPHAN-PARA', type: 'PARAGRAPH', location: { line: 20, column: 1 }, calls: { perform_count: 0, goto_count: 0, call_count: 0 }, statement_types: {} },
+      ],
+      edges: [],
     };
     const result = buildParagraphTree(report, undefined);
     assert.equal(result.unreachable.length, 1);
     assert.equal(result.unreachable[0].kind, 'paragraph');
     if (result.unreachable[0].kind !== 'paragraph') return;
-    assert.equal(result.unreachable[0].name, 'ASK-CONFIRM');
+    assert.equal(result.unreachable[0].name, 'ORPHAN-PARA');
     assert.equal(result.unreachable[0].children.length, 0);
   });
 
