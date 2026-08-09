@@ -27,9 +27,9 @@ function isCobolPath(fsPath: string): boolean {
   return lower.endsWith('.cbl') || lower.endsWith('.cob') || lower.endsWith('.cobol');
 }
 
-// Active editor -> the .cbl path the Boundaries view should show, or
-// undefined (welcome state) for anything else -- a non-file editor, a
-// non-COBOL file, or no editor at all.
+// Active editor -> the .cbl path the Boundaries and Paragraph Tree views
+// should show, or undefined (welcome/empty state) for anything else -- a
+// non-file editor, a non-COBOL file, or no editor at all.
 function resolveActiveCblPath(): string | undefined {
   const editor = vscode.window.activeTextEditor;
   const fsPath = editor && editor.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
