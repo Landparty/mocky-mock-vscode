@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.6.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.5.0...v0.6.0) (2026-08-09)
+
+
+### Features
+
+* add analysisRunner for the mockymock analyze passthrough ([66fbb95](https://github.com/Landparty/mocky-mock-vscode/commit/66fbb95ca5c1dc75664d9fab21177e2f9532308f))
+* add Analyze COBOL File command ([4b09683](https://github.com/Landparty/mocky-mock-vscode/commit/4b09683ec3987ea8fde018a7b274a38e72085b5e))
+* add supportsAnalyzeCommand capability probe ([9484554](https://github.com/Landparty/mocky-mock-vscode/commit/94845540e5b14553251dd5efcfcb57382783a2e9))
+
+
+### Bug Fixes
+
+* close release-clobber guard gap + final-review nits ([c5d0840](https://github.com/Landparty/mocky-mock-vscode/commit/c5d08402698270e3368b29f64f341967eac0f62f))
+* correct artifact staging path and missing dist dir in build-vsix ([757ecfd](https://github.com/Landparty/mocky-mock-vscode/commit/757ecfdf48a2fe990b0acba7f8cb284fa40a7cf0))
+* distinguish missing CLI from too-old CLI; dispose analysis output channel ([5c230fd](https://github.com/Landparty/mocky-mock-vscode/commit/5c230fd96bc9e78df8387194eb9226e534819484))
+* surface stderr warnings and clear stale output on every analyze run ([28e79d2](https://github.com/Landparty/mocky-mock-vscode/commit/28e79d20dd0cb45ece2fe0705aab93d123e0d91e))
+* use one resource-scoped config for executablePath and copybookPaths in analyzeCobol ([69b4b12](https://github.com/Landparty/mocky-mock-vscode/commit/69b4b127a75f4eee566e964b41104f55771473d1))
+
 ## [0.5.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.2...v0.5.0) (2026-08-07)
 
 
