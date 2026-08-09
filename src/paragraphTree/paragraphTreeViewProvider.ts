@@ -13,13 +13,24 @@ type WebviewToExtensionMessage =
   | { type: 'ready' }
   | { type: 'reveal'; line: number }
   | { type: 'hover'; line: number; requestId: number }
-  | { type: 'openFile' };
+  | { type: 'openFile' }
+  | { type: 'showOutput' };
 
 type ExtensionToWebviewMessage =
   | { type: 'tree'; data: ParagraphTreeResult }
   | { type: 'empty' }
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: string; hasDetail: boolean }
   | { type: 'snippet'; requestId: number; fileName: string; lines: { line: number; text: string }[] };
+
+// Internal error shape carried by the guard's speculative/committed error
+// state -- `stderr` (when present) is the full CLI stderr for the "Show
+// output" output-channel affordance; the webview only ever learns whether it
+// exists (`hasDetail`), never the raw text itself (see postCurrentState /
+// refresh below).
+interface ErrorState {
+  message: string;
+  stderr?: string;
+}
 
 // WebviewViewProvider backing the Paragraph Tree sidebar view. Owns fetch
 // orchestration (RefreshGuard-guarded, same stale-result-drop discipline as
@@ -28,8 +39,14 @@ type ExtensionToWebviewMessage =
 // programFlowClient.ts + programFlowModel.ts.
 export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
   private readonly guard = new RefreshGuard<ParagraphTreeResult>();
+  private readonly outputChannel: vscode.OutputChannel;
   private webviewView: vscode.WebviewView | undefined;
-  private lastErrorMessage: string | undefined;
+  private lastError: ErrorState | undefined;
+  // Cache of the active .cbl file's source, split into lines, set by
+  // refresh() at the same time it builds the tree (see programFlowModel's
+  // buildParagraphTree call below) so sendSnippet() doesn't have to re-read
+  // and re-split the whole document on every single hover.
+  private sourceLines: string[] | undefined;
 
   // Set by extension.ts before this view is ever resolved. Unlike
   // TreeView (whose `view.onDidChangeVisibility` is available immediately
@@ -39,7 +56,10 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
   // refresh needs this callback to learn about that first reveal.
   onVisible?: () => void;
 
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(private readonly context: vscode.ExtensionContext) {
+    this.outputChannel = vscode.window.createOutputChannel('mockymock paragraph tree');
+    context.subscriptions.push(this.outputChannel);
+  }
 
   get cblPath(): string | undefined {
     return this.guard.cblPath;
@@ -74,9 +94,11 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
       if (message.type === 'reveal') {
         void this.revealLine(message.line);
       } else if (message.type === 'hover') {
-        void this.sendSnippet(message.line, message.requestId);
+        this.sendSnippet(message.line, message.requestId);
       } else if (message.type === 'openFile') {
         void this.openFile();
+      } else if (message.type === 'showOutput') {
+        this.outputChannel.show();
       } else if (message.type === 'ready') {
         this.postCurrentState();
       }
@@ -89,8 +111,8 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
   }
 
   private postCurrentState(): void {
-    if (this.lastErrorMessage) {
-      this.post({ type: 'error', message: this.lastErrorMessage });
+    if (this.lastError) {
+      this.post({ type: 'error', message: this.lastError.message, hasDetail: !!this.lastError.stderr });
     } else if (this.guard.model) {
       this.post({ type: 'tree', data: this.guard.model });
     } else {
@@ -127,12 +149,14 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
     editor.selection = new vscode.Selection(range.start, range.start);
   }
 
-  private async sendSnippet(line: number, requestId: number): Promise<void> {
+  private sendSnippet(line: number, requestId: number): void {
     const cblPath = this.guard.cblPath;
-    if (!cblPath) return;
-    const doc = await vscode.workspace.openTextDocument(cblPath);
-    const sourceLines = doc.getText().split(/\r?\n/);
-    const lines = extractSourceSnippet(sourceLines, line, 4);
+    // this.sourceLines is only ever set alongside a committed model (see
+    // refresh() below), so this doubles as the "is there a live tree" guard
+    // that `!cblPath` used to be on its own -- no re-read/re-split of the
+    // document needed on every hover.
+    if (!cblPath || !this.sourceLines) return;
+    const lines = extractSourceSnippet(this.sourceLines, line, 4);
     this.post({ type: 'snippet', requestId, lines, fileName: cblPath.split(/[\\/]/).pop() ?? cblPath });
   }
 
@@ -142,13 +166,15 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
 
     if (!cblPath) {
       this.guard.commit(token, undefined, undefined);
-      this.lastErrorMessage = undefined;
+      this.lastError = undefined;
+      this.sourceLines = undefined;
       this.post({ type: 'empty' });
       return;
     }
 
     let nextModel: ParagraphTreeResult | undefined;
-    let nextError: string | undefined;
+    let nextError: ErrorState | undefined;
+    let nextSourceLines: string[] | undefined;
     try {
       const uri = vscode.Uri.file(cblPath);
       const { executablePath, copybookPaths } = resolveInvocationConfig(this.context, uri);
@@ -166,24 +192,31 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
 
       const report = await fetchProgramFlow(runCommand, executablePath, cblPath, copybookPaths);
       const doc = await vscode.workspace.openTextDocument(cblPath);
-      const sourceLines = doc.getText().split(/\r?\n/);
-      nextModel = buildParagraphTree(report, sourceLines);
+      nextSourceLines = doc.getText().split(/\r?\n/);
+      nextModel = buildParagraphTree(report, nextSourceLines);
     } catch (err) {
       if (err instanceof ProgramFlowFetchError) {
-        nextError = describeRefreshError(err.message, err.stderr);
+        nextError = { message: describeRefreshError(err.message, err.stderr), stderr: err.stderr };
       } else if (err instanceof ParagraphTreeError) {
-        nextError = err.message;
+        nextError = { message: err.message };
       } else {
-        nextError = err instanceof Error ? err.message : String(err);
+        nextError = { message: err instanceof Error ? err.message : String(err) };
       }
     }
 
     const committed = this.guard.commit(token, nextModel ? cblPath : undefined, nextModel);
     if (!committed) return; // a newer refresh() landed first; drop this stale result
 
-    this.lastErrorMessage = nextError;
+    this.lastError = nextError;
+    this.sourceLines = nextModel ? nextSourceLines : undefined;
+    if (nextError?.stderr) {
+      // Written proactively (not waiting for the user to click "Show
+      // output") so the detail is already there if they go looking, same
+      // discipline as BoundariesTreeProvider.refresh().
+      this.outputChannel.appendLine(nextError.stderr);
+    }
     if (nextError) {
-      this.post({ type: 'error', message: nextError });
+      this.post({ type: 'error', message: nextError.message, hasDetail: !!nextError.stderr });
     } else if (nextModel) {
       this.post({ type: 'tree', data: nextModel });
     }

@@ -17,6 +17,12 @@ let currentTree: ParagraphTreeResult | undefined;
 let searchQuery = '';
 let depthCap = 4;
 let hoverRequestId = 0;
+// Reset at the top of renderTree() and incremented by renderNode() every
+// time it actually builds and returns a 'paragraph' row -- the single
+// source of truth for "how many paragraph rows are on screen right now",
+// honoring both the depth cap and the ancestor-preserving match rule
+// without re-deriving them in a second, easily-divergent helper.
+let renderedParagraphCount = 0;
 // Tracked across renders so a re-render triggered by typing in the search
 // box (renderTree() rebuilds the whole #root, including a brand-new <input>
 // each time) can restore focus and caret position on the new element --
@@ -41,11 +47,18 @@ function matches(item: ParagraphTreeItem, query: string): boolean {
   return item.children.some((child) => matches(child, query));
 }
 
-function countLeafMatches(items: ParagraphTreeItem[], query: string): number {
+// Mirrors renderNode's depth bookkeeping exactly (see its `depth > depthCap`
+// guard and the thruRange-vs-paragraph child-depth split) so `matchCount`
+// only counts matches that could actually survive to be rendered -- a match
+// buried past the depth cap must not suppress the "nothing matches those
+// filters" empty-state message.
+function countLeafMatches(items: ParagraphTreeItem[], query: string, depth: number): number {
   let count = 0;
   for (const item of items) {
+    if (depth > depthCap) continue;
     if (item.kind === 'paragraph' && item.name.toLowerCase().includes(query)) count++;
-    count += countLeafMatches(item.children, query);
+    const childDepth = item.kind === 'thruRange' ? depth : depth + 1;
+    count += countLeafMatches(item.children, query, childDepth);
   }
   return count;
 }
@@ -104,6 +117,8 @@ function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTML
     wrapper.appendChild(childrenEl);
     return wrapper;
   }
+
+  renderedParagraphCount += 1;
 
   const row = el('div', 'row' + (item.isRecursive ? ' recursive' : ''));
   row.dataset.line = String(item.line);
@@ -178,6 +193,7 @@ function renderTree(): void {
 
   hideHoverPreview(); // a popup from the row under the old content would otherwise be orphaned
   root.innerHTML = '';
+  renderedParagraphCount = 0;
   if (!currentTree) {
     searchBoxEl = undefined;
     return;
@@ -229,11 +245,14 @@ function renderTree(): void {
 
   if (query) {
     const totalParagraphs = countParagraphs([...currentTree.roots, ...currentTree.unreachable]);
-    const matchCount = countLeafMatches([...currentTree.roots, ...currentTree.unreachable], query);
+    const matchCount = countLeafMatches([...currentTree.roots, ...currentTree.unreachable], query, 1);
     if (matchCount === 0) {
       root.appendChild(el('div', 'empty-filter', 'nothing matches those filters'));
     }
-    root.appendChild(el('div', 'hidden-count', `${totalParagraphs - matchCount} paragraphs hidden`));
+    // renderedParagraphCount (not matchCount) is the count of rows actually
+    // on screen -- it already includes ancestors kept visible for a
+    // descendant's match, which matchCount deliberately does not.
+    root.appendChild(el('div', 'hidden-count', `${totalParagraphs - renderedParagraphCount} paragraphs hidden`));
   }
 
   root.appendChild(el('div', 'footer', 'F file · S sql · C call — click a row to jump'));
@@ -256,11 +275,18 @@ function renderEmptyState(): void {
   root.appendChild(button);
 }
 
-function renderErrorState(message: string): void {
+function renderErrorState(message: string, hasDetail: boolean): void {
   hideHoverPreview();
   searchBoxEl = undefined;
   root.innerHTML = '';
   root.appendChild(el('div', 'error-state', message));
+  if (hasDetail) {
+    // Only offered when the extension host actually captured stderr detail
+    // for this error -- otherwise this would reveal an empty output channel.
+    const button = el('button', 'open-file-button', 'Show output');
+    button.addEventListener('click', () => vscodeApi.postMessage({ type: 'showOutput' }));
+    root.appendChild(button);
+  }
 }
 
 window.addEventListener('message', (event: MessageEvent) => {
@@ -273,7 +299,7 @@ window.addEventListener('message', (event: MessageEvent) => {
     renderEmptyState();
   } else if (message.type === 'error') {
     currentTree = undefined;
-    renderErrorState(message.message as string);
+    renderErrorState(message.message as string, Boolean(message.hasDetail));
   } else if (message.type === 'snippet') {
     renderHoverSnippet(message.requestId, message.fileName, message.lines);
   }

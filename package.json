@@ -201,7 +201,7 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit -p ./",
+    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree",
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",

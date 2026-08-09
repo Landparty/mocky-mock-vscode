@@ -21,7 +21,7 @@ body {
 .chip-active { opacity: 1; font-weight: 600; }
 .node { margin-left: 12px; }
 .thru-range { margin-left: 12px; border-left: 1px dashed var(--vscode-textLink-foreground); padding-left: 8px; }
-.thru-header { color: var(--vscode-textLink-foreground); font-style: italic; }
+.thru-header { display: flex; gap: 6px; align-items: baseline; color: var(--vscode-textLink-foreground); font-style: italic; }
 /* Loop gutter bracket: a solid border tracks an UNTIL/VARYING paragraph's
    nested rows, distinct from thru-range's dashed connector. */
 .loop-body { margin-left: 6px; border-left: 2px solid var(--vscode-charts-orange, #d7ba7d); padding-left: 6px; }
@@ -59,8 +59,9 @@ body {
   border: 1px solid var(--vscode-editorHoverWidget-border);
   padding: 6px 8px;
   max-width: 360px;
-  top: 40px;
+  bottom: 8px;
   right: 8px;
+  pointer-events: none;
 }
 .hover-title { font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 4px; }
 .hover-code { margin: 0; white-space: pre; font-family: var(--vscode-editor-font-family, monospace); }
