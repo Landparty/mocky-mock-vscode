@@ -55,6 +55,12 @@
         "title": "Generate .cut",
         "category": "mockymock",
         "icon": "$(play)"
+      },
+      {
+        "command": "mockymock.paragraphTree.refresh",
+        "title": "Refresh Paragraph Tree",
+        "category": "mockymock",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -63,6 +69,12 @@
           "id": "mockymock.boundaries",
           "name": "COBOL Boundaries",
           "icon": "$(symbol-interface)"
+        },
+        {
+          "id": "mockymock.paragraphTree",
+          "name": "Paragraph Tree",
+          "type": "webview",
+          "icon": "$(list-tree)"
         }
       ]
     },
@@ -88,6 +100,11 @@
           "command": "mockymock.boundaries.setScenarioMode",
           "when": "view == mockymock.boundaries",
           "group": "navigation@3"
+        },
+        {
+          "command": "mockymock.paragraphTree.refresh",
+          "when": "view == mockymock.paragraphTree",
+          "group": "navigation@1"
         }
       ]
     },

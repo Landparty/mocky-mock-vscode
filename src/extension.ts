@@ -17,13 +17,14 @@ import { runGenerate, resolveOutPath, GenerateOptions, GenerateResult } from './
 import { BundleError } from './boundaries/bundleClient';
 import { shouldClearOnEditorChange } from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
+import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
-const BOUNDARIES_REFRESH_DEBOUNCE_MS = 300;
+const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
 
 function isCobolPath(fsPath: string): boolean {
   const lower = fsPath.toLowerCase();
-  return lower.endsWith('.cbl') || lower.endsWith('.cob');
+  return lower.endsWith('.cbl') || lower.endsWith('.cob') || lower.endsWith('.cobol');
 }
 
 // Active editor -> the .cbl path the Boundaries view should show, or
@@ -254,7 +255,7 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
         void provider.refresh(undefined);
       }
       // else: pin -- keep showing the last committed .cbl's boundaries.
-    }, BOUNDARIES_REFRESH_DEBOUNCE_MS);
+    }, TREE_VIEW_REFRESH_DEBOUNCE_MS);
   }
   context.subscriptions.push({
     dispose: () => {
@@ -305,6 +306,50 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
   );
 }
 
+function activateParagraphTreeView(context: vscode.ExtensionContext): void {
+  const provider = new ParagraphTreeViewProvider(context);
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('mockymock.paragraphTree', provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
+
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleRefresh(): void {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      if (!provider.visible) return;
+      const activeCblPath = resolveActiveCblPath();
+      const newEditorIsCobol = activeCblPath !== undefined;
+      if (newEditorIsCobol) {
+        if (activeCblPath !== provider.cblPath) {
+          void provider.refresh(activeCblPath);
+        }
+      } else if (shouldClearOnEditorChange(provider.cblPath !== undefined, newEditorIsCobol)) {
+        void provider.refresh(undefined);
+      }
+    }, TREE_VIEW_REFRESH_DEBOUNCE_MS);
+  }
+  context.subscriptions.push({
+    dispose: () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+    },
+  });
+
+  // The webview only exists once VS Code first renders it -- see
+  // ParagraphTreeViewProvider.onVisible's doc comment. Wire it before
+  // registerWebviewViewProvider could ever call resolveWebviewView.
+  provider.onVisible = scheduleRefresh;
+
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => scheduleRefresh()));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mockymock.paragraphTree.refresh', () => {
+      void provider.refresh(resolveActiveCblPath());
+    })
+  );
+}
+
 export function activate(context: vscode.ExtensionContext) {
   const environmentManager = new EnvironmentManager(context);
   activateTestController(context, environmentManager);
@@ -312,6 +357,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateExportMainframeCommand(context);
   activateAnalyzeCobolCommand(context);
   activateBoundariesView(context, environmentManager);
+  activateParagraphTreeView(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
