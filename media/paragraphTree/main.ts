@@ -87,8 +87,16 @@ function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTML
 
   if (item.kind === 'thruRange') {
     const wrapper = el('div', 'thru-range');
-    wrapper.appendChild(el('div', 'thru-header', `THRU ${item.from} → ${item.to}`));
-    const childrenEl = el('div', 'children');
+    const header = el('div', 'thru-header', `THRU ${item.from} → ${item.to}`);
+    if (item.loopAnnotation) {
+      header.appendChild(el('span', 'loop-annotation', item.loopAnnotation));
+    }
+    wrapper.appendChild(header);
+    // Same gutter-bracket device as a looping paragraph's children (see
+    // below): PERFORM A THRU C UNTIL ... loops the whole range, so its
+    // loop-body styling belongs on the range's children, not on any one
+    // member.
+    const childrenEl = el('div', item.loopAnnotation ? 'children loop-body' : 'children');
     for (const child of item.children) {
       const rendered = renderNode(child, depth, query);
       if (rendered) childrenEl.appendChild(rendered);
@@ -149,17 +157,31 @@ function showHoverPreview(line: number): void {
 function hideHoverPreview(): void {
   hoverPopup?.remove();
   hoverPopup = undefined;
+  // Invalidate any in-flight hover request too -- otherwise a snippet reply
+  // for a row the cursor already left (or that a search/refresh just
+  // removed from the DOM) can still arrive and render a stale popup, even
+  // though there was no popup element here for `.remove()` to catch.
+  hoverRequestId += 1;
 }
 
 function renderTree(): void {
   // Capture the outgoing search box's focus/caret state before it (and the
   // rest of #root) gets torn down -- see the searchBoxEl comment above.
-  const searchHadFocus = !!searchBoxEl && document.activeElement === searchBoxEl;
+  // document.hasFocus() guards against a webview iframe quirk: activeElement
+  // keeps pointing at the search box even after focus has genuinely moved
+  // outside the webview (e.g. to the COBOL editor). Without this check, a
+  // refresh-triggered renderTree() while the user is typing in the editor
+  // would call .focus() on the (still-"active" per the DOM, but not really
+  // focused) search box and steal their keystrokes.
+  const searchHadFocus = document.hasFocus() && !!searchBoxEl && document.activeElement === searchBoxEl;
   const searchCaret = searchBoxEl?.selectionStart ?? null;
 
   hideHoverPreview(); // a popup from the row under the old content would otherwise be orphaned
   root.innerHTML = '';
-  if (!currentTree) return;
+  if (!currentTree) {
+    searchBoxEl = undefined;
+    return;
+  }
 
   const header = el('div', 'header', `PARAGRAPH TREE — ${currentTree.programName}`);
   root.appendChild(header);
