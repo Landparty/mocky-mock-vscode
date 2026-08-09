@@ -24,14 +24,16 @@ jobs:
         run: node esbuild.js --production
 
       # Regression guard for exactly the bug this check is designed to
-      # catch: esbuild only emits out/extension.js, but a stale `tsc -p ./`
-      # run (or a not-fully-clean checkout) can leave readable per-module
-      # .js files sitting alongside it, and .vscodeignore has to explicitly
-      # exclude them (see PUBLISHING.md) or they silently ship in the
-      # .vsix. `vsce ls` reflects whatever's actually on disk -- it does
-      # NOT build first the way `vsce package` does -- so the explicit
-      # build step above is required, or this check would pass vacuously
-      # against a missing bundle instead of actually verifying one.
+      # catch: esbuild emits out/extension.js (the main bundle) and, since
+      # the Paragraph Tree webview shipped, out/media/paragraphTree/main.js
+      # + styles.css (the webview bundle) -- but a stale `tsc -p ./` run (or
+      # a not-fully-clean checkout) can leave readable per-module .js files
+      # sitting alongside them, and .vscodeignore has to explicitly exclude
+      # those (see PUBLISHING.md) or they silently ship in the .vsix.
+      # `vsce ls` reflects whatever's actually on disk -- it does NOT build
+      # first the way `vsce package` does -- so the explicit build step
+      # above is required, or this check would pass vacuously against a
+      # missing bundle instead of actually verifying one.
       - name: Verify the packaged .vsix ships the bundle and no source
         run: |
           npx vsce ls > /tmp/vsix-files.txt
@@ -40,14 +42,26 @@ jobs:
             echo "ERROR: out/extension.js (the bundled extension) is missing from the package"
             exit 1
           fi
+          if ! grep -qE '^out/media/paragraphTree/main\.js$' /tmp/vsix-files.txt; then
+            echo "ERROR: out/media/paragraphTree/main.js (the paragraph-tree webview bundle) is missing from the package"
+            exit 1
+          fi
+          if ! grep -qE '^out/media/paragraphTree/styles\.css$' /tmp/vsix-files.txt; then
+            echo "ERROR: out/media/paragraphTree/styles.css (the paragraph-tree webview styles) is missing from the package"
+            exit 1
+          fi
           if grep -qE '^src/' /tmp/vsix-files.txt; then
             echo "ERROR: src/ (TypeScript source) is present in the packaged .vsix"
             exit 1
           fi
-          BAD_OUT=$(grep -E '^out/' /tmp/vsix-files.txt | grep -v -E '^out/extension\.js$' || true)
+          if grep -qE '^media/' /tmp/vsix-files.txt; then
+            echo "ERROR: media/ (webview TypeScript source) is present in the packaged .vsix"
+            exit 1
+          fi
+          BAD_OUT=$(grep -E '^out/' /tmp/vsix-files.txt | grep -v -E '^out/extension\.js$' | grep -v -E '^out/media/paragraphTree/(main\.js|styles\.css)$' || true)
           if [ -n "$BAD_OUT" ]; then
-            echo "ERROR: unexpected files under out/ (expected only out/extension.js):"
+            echo "ERROR: unexpected files under out/ (expected only out/extension.js and the paragraph-tree webview bundle):"
             echo "$BAD_OUT"
             exit 1
           fi
-          echo "OK: packaged .vsix contains exactly out/extension.js and no source"
+          echo "OK: packaged .vsix contains exactly the expected bundles and no source"
