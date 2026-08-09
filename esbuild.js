@@ -10,7 +10,7 @@ const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
 
 async function main() {
-  const ctx = await esbuild.context({
+  const extensionCtx = await esbuild.context({
     entryPoints: ['src/extension.ts'],
     bundle: true,
     format: 'cjs',
@@ -22,11 +22,28 @@ async function main() {
     sourcesContent: false,
     logLevel: 'info',
   });
+  // Runs inside the webview's isolated browser context -- a separate
+  // bundle from out/extension.js (platform: 'browser', no 'vscode'
+  // external, since the webview never imports it).
+  const webviewCtx = await esbuild.context({
+    entryPoints: ['media/paragraphTree/main.ts'],
+    bundle: true,
+    format: 'iife',
+    platform: 'browser',
+    outfile: 'out/media/paragraphTree/main.js',
+    minify: production,
+    sourcemap: !production,
+    sourcesContent: false,
+    logLevel: 'info',
+  });
+  const fs = require('fs');
+  fs.mkdirSync('out/media/paragraphTree', { recursive: true });
+  fs.copyFileSync('media/paragraphTree/styles.css', 'out/media/paragraphTree/styles.css');
   if (watch) {
-    await ctx.watch();
+    await Promise.all([extensionCtx.watch(), webviewCtx.watch()]);
   } else {
-    await ctx.rebuild();
-    await ctx.dispose();
+    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild()]);
+    await Promise.all([extensionCtx.dispose(), webviewCtx.dispose()]);
   }
 }
 

@@ -1,4 +1,5 @@
 src/**
+media/**
 **/*.test.ts
 .vscode/**
 .mocharc.json
@@ -25,3 +26,6 @@ PUBLISHING.md
 # sourcemap) should ever ship.
 out/**
 !out/extension.js
+!out/media
+!out/media/paragraphTree
+!out/media/paragraphTree/**
