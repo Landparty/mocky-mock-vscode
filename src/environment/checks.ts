@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { CommandRunner } from './commandRunner';
 
@@ -80,9 +81,26 @@ export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
 export const CLI_NOT_FOUND_MESSAGE =
   "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Environment Status'.";
 
-// Maps commandRunner's ENOENT sentinel -- a CommandResult of
-// `{ code: -1, stdout: '', stderr: 'command not found' }`, produced when
-// spawn() itself can't find the executable (see commandRunner.ts's
+// The message for commandRunner's EACCES sentinel (see describeSpawnError in
+// commandRunner.ts): the binary exists but the OS refused to execute it.
+// The dominant real-world cause is macOS Gatekeeper blocking a downloaded,
+// unsigned/quarantined binary -- distinct enough from "not found" (which
+// tells users to reinstall something that's already there) to need its own
+// message and its own fix.
+export const CLI_PERMISSION_DENIED_MESSAGE =
+  "mockymock CLI found but couldn't be run (permission denied). On macOS this is usually Gatekeeper blocking an unsigned binary — run 'mockymock: Check Environment Status' to see the exact path and fix command.";
+
+// Same underlying problem as CLI_PERMISSION_DENIED_MESSAGE, but for the one
+// caller (environmentManager.ts) that actually has the resolved
+// executablePath in scope and can put the real path/command in front of the
+// user instead of pointing them at another command to go find it.
+export function permissionDeniedMessageForPath(executablePath: string): string {
+  return `mockymock CLI at "${executablePath}" was found but couldn't be run (permission denied). On macOS this is usually Gatekeeper blocking an unsigned binary — in Terminal, run: xattr -d com.apple.quarantine "${executablePath}", then reload the window (Developer: Reload Window).`;
+}
+
+// Maps commandRunner's ENOENT/EACCES sentinels -- a CommandResult of
+// `{ code: -1, stdout: '', stderr: 'command not found' | 'permission denied' }`,
+// produced when spawn() itself can't run the executable (see commandRunner.ts's
 // synchronous try/catch and its 'error' listener) -- to an actionable
 // label instead of surfacing that raw sentinel string verbatim in a Boundaries
 // view error node. bundleClient.fetchBundle carries `result.stderr` straight
@@ -92,6 +110,9 @@ export const CLI_NOT_FOUND_MESSAGE =
 // one checkDocker's own 'not-installed' branch already recognizes -- is
 // caught too. Pure string logic: no vscode import, directly unit-testable.
 export function describeRefreshError(message: string, stderr: string | undefined): string {
+  if (stderr === 'permission denied') {
+    return CLI_PERMISSION_DENIED_MESSAGE;
+  }
   if (stderr !== undefined && COMMAND_NOT_FOUND_PATTERN.test(stderr)) {
     return CLI_NOT_FOUND_MESSAGE;
   }
@@ -102,13 +123,49 @@ export function bundledBinaryName(platform: NodeJS.Platform): string {
   return platform === 'win32' ? 'mockymock.exe' : 'mockymock';
 }
 
-export function resolveExecutablePath(configuredPath: string | undefined, extensionPath: string): string {
+// Common places `mockymock` ends up on macOS outside a bundled install: `uv
+// tool install` (environmentManager.ts's installMockymock fallback) shims
+// into ~/.local/bin, and a manual Homebrew-style install typically lands in
+// /opt/homebrew/bin (Apple Silicon) or /usr/local/bin (Intel). homeDir is a
+// parameter (not read via os.homedir() internally) so this stays directly
+// unit-testable against a fake home directory.
+export function darwinPathFallbackCandidates(homeDir: string): string[] {
+  // path.posix (not path.join): these are macOS paths by definition, so they
+  // must use forward slashes regardless of the OS this code happens to be
+  // running/tested on (this repo's dev and CI machines are Windows/Linux).
+  return [
+    path.posix.join(homeDir, '.local', 'bin', 'mockymock'),
+    '/opt/homebrew/bin/mockymock',
+    '/usr/local/bin/mockymock',
+  ];
+}
+
+export function resolveExecutablePath(
+  configuredPath: string | undefined,
+  extensionPath: string,
+  platform: NodeJS.Platform = process.platform,
+  homeDir: string = os.homedir()
+): string {
   if (configuredPath && configuredPath.trim().length > 0) {
     return configuredPath.trim();
   }
-  const bundledPath = path.join(extensionPath, 'bin', bundledBinaryName(process.platform));
+  const bundledPath = path.join(extensionPath, 'bin', bundledBinaryName(platform));
   if (fs.existsSync(bundledPath)) {
     return bundledPath;
+  }
+  // A GUI-launched VS Code on macOS doesn't source ~/.zshrc / ~/.zprofile,
+  // so process.env.PATH here can lack directories a login shell would have
+  // -- notably ~/.local/bin, where the uv-install fallback below puts its
+  // shim. Probing known install locations directly, before giving up to the
+  // bare command name, catches a CLI a plain PATH lookup would miss.
+  // Windows and Linux desktop sessions don't have this gap (PATH is set
+  // system-wide, or sourced by the display manager), so this only runs on
+  // darwin -- no behavior change for other platforms.
+  if (platform === 'darwin') {
+    const fallback = darwinPathFallbackCandidates(homeDir).find((candidate) => fs.existsSync(candidate));
+    if (fallback) {
+      return fallback;
+    }
   }
   return 'mockymock';
 }

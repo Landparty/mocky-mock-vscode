@@ -6,6 +6,7 @@ import {
   checkCommandAvailable,
   checkDocker,
   getDockerDesktopLaunchCommand,
+  permissionDeniedMessageForPath,
   resolveExecutablePath,
 } from './checks';
 
@@ -48,9 +49,13 @@ export class EnvironmentManager {
       vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
       this.context.extensionPath
     );
-    const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
-    if (!mockymockOk) {
-      this.setStatus('$(warning) mockymock: CLI not found', 'Click to install the mockymock CLI');
+    const mockymockProbe = await runCommand(executablePath, ['--version']);
+    if (mockymockProbe.code !== 0) {
+      if (mockymockProbe.stderr === 'permission denied') {
+        this.setStatus('$(error) mockymock: permission denied', permissionDeniedMessageForPath(executablePath));
+      } else {
+        this.setStatus('$(warning) mockymock: CLI not found', 'Click to install the mockymock CLI');
+      }
       return;
     }
     const dockerStatus = await checkDocker(runCommand);
@@ -69,8 +74,21 @@ export class EnvironmentManager {
       this.context.extensionPath
     );
 
-    const mockymockOk = await checkCommandAvailable(runCommand, executablePath, ['--version']);
-    if (!mockymockOk) {
+    const mockymockProbe = await runCommand(executablePath, ['--version']);
+    if (mockymockProbe.code !== 0) {
+      if (mockymockProbe.stderr === 'permission denied') {
+        // The binary exists but the OS refused to run it -- attempting a uv
+        // reinstall below would just install a second, unrelated copy and
+        // mask the actual problem (most commonly, macOS Gatekeeper blocking
+        // a quarantined binary). Shown as an error dialog (matching
+        // installMockymock's own failure branches below) since this only
+        // runs from an explicit "Check Environment Status" invocation or a
+        // real test run -- not the passive activation-time refreshStatus().
+        const message = permissionDeniedMessageForPath(executablePath);
+        this.setStatus('$(error) mockymock: permission denied', message);
+        vscode.window.showErrorMessage(message);
+        return { ok: false, message };
+      }
       const installed = await this.installMockymock(executablePath);
       if (!installed) {
         this.setStatus('$(error) mockymock: CLI not found');

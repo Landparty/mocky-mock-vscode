@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { runCommand, quoteArgForWindowsShell } from './commandRunner';
+import { runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
 
 describe('quoteArgForWindowsShell', () => {
   it('leaves a plain argument untouched', () => {
@@ -8,6 +8,21 @@ describe('quoteArgForWindowsShell', () => {
 
   it('quotes an argument containing a space', () => {
     assert.strictEqual(quoteArgForWindowsShell('C:\\Users\\Sam Dion\\PROG.cbl'), '"C:\\Users\\Sam Dion\\PROG.cbl"');
+  });
+});
+
+describe('describeSpawnError', () => {
+  it('maps EACCES to a permission-denied sentinel distinct from "not found"', () => {
+    assert.strictEqual(describeSpawnError({ name: 'Error', message: 'boom', code: 'EACCES' }), 'permission denied');
+  });
+
+  it('maps ENOENT to the "command not found" sentinel', () => {
+    assert.strictEqual(describeSpawnError({ name: 'Error', message: 'boom', code: 'ENOENT' }), 'command not found');
+  });
+
+  it('falls back to "command not found" for an error with no/unknown code', () => {
+    assert.strictEqual(describeSpawnError({ name: 'Error', message: 'boom' }), 'command not found');
+    assert.strictEqual(describeSpawnError({ name: 'Error', message: 'boom', code: 'EPERM' }), 'command not found');
   });
 });
 

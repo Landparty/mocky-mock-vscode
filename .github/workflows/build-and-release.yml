@@ -1,8 +1,8 @@
 name: build-and-release
 
 # Manually-triggered only. Pulls mocky-mock's source (private repo, latest
-# release tag) and this repo's own source, builds the 3 Nuitka mockymock
-# executables from scratch, packages them into the 3 platform-specific
+# release tag) and this repo's own source, builds the 4 Nuitka mockymock
+# executables from scratch, packages them into the 4 platform-specific
 # vsix files, attaches them to a GitHub Release on this repo, and
 # optionally publishes to the VS Code Marketplace -- all in one dispatch.
 # Replaces the old three-piece pipeline (mocky-mock's build-executables.yml
@@ -54,6 +54,12 @@ jobs:
             artifact: mockymock-linux-x86_64
           - os: macos-latest
             artifact: mockymock-macos-arm64
+          # macos-13 (the previous Intel label) was retired Dec 2025;
+          # macos-15-intel is GitHub's current Intel Mac runner, planned to
+          # stay available through Aug 2027 (the last x86_64 macOS image --
+          # see https://github.blog/changelog/2025-09-19-github-actions-macos-13-runner-image-is-closing-down/).
+          - os: macos-15-intel
+            artifact: mockymock-macos-x86_64
           - os: windows-latest
             artifact: mockymock-windows-amd64.exe
     runs-on: ${{ matrix.os }}
@@ -95,6 +101,21 @@ jobs:
         shell: bash
         working-directory: mockymock-src
         run: scripts/build_executable.sh "${{ matrix.artifact }}"
+      # We have no Apple Developer Program cert, so this can't be a real
+      # (Developer ID + notarized) signature -- but macOS requires arm64
+      # binaries to carry at least an ad-hoc signature to run at all, and
+      # Nuitka's onefile mode appends a payload after the Mach-O the C
+      # toolchain's linker already ad-hoc-signed, which can invalidate that
+      # signature's whole-file hash. Re-signing here, after Nuitka's own
+      # packing, guarantees the artifact that actually ships is signed over
+      # its final on-disk bytes. This does NOT satisfy Gatekeeper on its own
+      # for a quarantined file -- see src/environment/macSelfHeal.ts (the
+      # extension) and README.md's macOS section for the rest of that story.
+      - name: Ad-hoc code-sign the macOS executable
+        if: runner.os == 'macOS'
+        shell: bash
+        working-directory: mockymock-src
+        run: codesign --force --sign - --timestamp=none "build/${{ matrix.artifact }}"
       - name: Smoke-test the executable
         shell: bash
         working-directory: mockymock-src
@@ -195,6 +216,18 @@ jobs:
           unzip -l dist/*darwin-arm64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "darwin-arm64 package missing bundled binary" >&2; exit 1; }
           if unzip -l dist/*darwin-arm64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
             echo "darwin-arm64 package contains a foreign-platform binary or staging leakage" >&2
+            exit 1
+          fi
+      - name: Package darwin-x64
+        run: |
+          rm -rf bin && mkdir bin
+          cp "$STAGING_DIR/build/mockymock-macos-x86_64" bin/mockymock
+          chmod +x bin/mockymock
+          cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          npx @vscode/vsce package --target darwin-x64 -o dist/
+          unzip -l dist/*darwin-x64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "darwin-x64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*darwin-x64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
+            echo "darwin-x64 package contains a foreign-platform binary or staging leakage" >&2
             exit 1
           fi
       - uses: actions/upload-artifact@v4

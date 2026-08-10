@@ -6,6 +6,7 @@ import {
   bundledBinaryName,
   checkCommandAvailable,
   checkDocker,
+  darwinPathFallbackCandidates,
   resolveExecutablePath,
   getDockerDesktopLaunchCommand,
   supportsTraceFlag,
@@ -14,6 +15,8 @@ import {
   supportsAnalyzeCommand,
   describeRefreshError,
   CLI_NOT_FOUND_MESSAGE,
+  CLI_PERMISSION_DENIED_MESSAGE,
+  permissionDeniedMessageForPath,
 } from './checks';
 import { CommandResult, CommandRunner } from './commandRunner';
 
@@ -184,6 +187,18 @@ describe('describeRefreshError', () => {
   it('leaves the message untouched when stderr is undefined', () => {
     assert.strictEqual(describeRefreshError('bundle_version 2 is not supported', undefined), 'bundle_version 2 is not supported');
   });
+
+  it('maps commandRunner\'s EACCES sentinel to the permission-denied message, not the not-found one', () => {
+    assert.strictEqual(describeRefreshError('permission denied', 'permission denied'), CLI_PERMISSION_DENIED_MESSAGE);
+  });
+});
+
+describe('permissionDeniedMessageForPath', () => {
+  it('includes the exact executable path and the xattr fix command', () => {
+    const message = permissionDeniedMessageForPath('/Applications/foo/bin/mockymock');
+    assert.match(message, /\/Applications\/foo\/bin\/mockymock/);
+    assert.match(message, /xattr -d com\.apple\.quarantine/);
+  });
 });
 
 describe('bundledBinaryName', () => {
@@ -231,6 +246,59 @@ describe('resolveExecutablePath', () => {
 
   it('falls back to "mockymock" when the extension has no bin directory at all', () => {
     assert.strictEqual(resolveExecutablePath(undefined, path.join(tempDir, 'does-not-exist')), 'mockymock');
+  });
+
+  it('on darwin, falls back to "mockymock" (not a fake path) when no candidate exists either', () => {
+    const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
+    const emptyHomeDir = path.join(tempDir, 'empty-home');
+    fs.mkdirSync(emptyHomeDir);
+    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'darwin', emptyHomeDir), 'mockymock');
+  });
+
+  it('on darwin, finds a uv-installed CLI under ~/.local/bin when no bundled binary exists', () => {
+    const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
+    const fakeHomeDir = path.join(tempDir, 'home');
+    const localBinDir = path.join(fakeHomeDir, '.local', 'bin');
+    fs.mkdirSync(localBinDir, { recursive: true });
+    fs.writeFileSync(path.join(localBinDir, 'mockymock'), '');
+    assert.strictEqual(
+      // darwinPathFallbackCandidates joins with path.posix (these are macOS
+      // paths by definition -- see its own comment), so the expected value
+      // must be built the same way rather than with the host OS's path.join.
+      resolveExecutablePath(undefined, noBinExtensionPath, 'darwin', fakeHomeDir),
+      path.posix.join(fakeHomeDir, '.local', 'bin', 'mockymock')
+    );
+  });
+
+  it('on darwin, a bundled binary still wins over the ~/.local/bin fallback', () => {
+    const binDir = path.join(tempDir, 'bin');
+    fs.mkdirSync(binDir);
+    fs.writeFileSync(path.join(binDir, 'mockymock'), '');
+    const fakeHomeDir = path.join(tempDir, 'home');
+    const localBinDir = path.join(fakeHomeDir, '.local', 'bin');
+    fs.mkdirSync(localBinDir, { recursive: true });
+    fs.writeFileSync(path.join(localBinDir, 'mockymock'), '');
+    assert.strictEqual(resolveExecutablePath(undefined, tempDir, 'darwin', fakeHomeDir), path.join(binDir, 'mockymock'));
+  });
+
+  it('does not apply the darwin PATH fallback on win32/linux', () => {
+    const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
+    const fakeHomeDir = path.join(tempDir, 'home');
+    const localBinDir = path.join(fakeHomeDir, '.local', 'bin');
+    fs.mkdirSync(localBinDir, { recursive: true });
+    fs.writeFileSync(path.join(localBinDir, 'mockymock'), '');
+    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'linux', fakeHomeDir), 'mockymock');
+    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'win32', fakeHomeDir), 'mockymock');
+  });
+});
+
+describe('darwinPathFallbackCandidates', () => {
+  it('lists ~/.local/bin ahead of the Homebrew locations', () => {
+    assert.deepStrictEqual(darwinPathFallbackCandidates('/Users/sam'), [
+      '/Users/sam/.local/bin/mockymock',
+      '/opt/homebrew/bin/mockymock',
+      '/usr/local/bin/mockymock',
+    ]);
   });
 });
 

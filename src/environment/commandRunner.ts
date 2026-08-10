@@ -30,6 +30,17 @@ export function quoteArgForWindowsShell(arg: string): string {
   return arg;
 }
 
+// Node's spawn() reports *why* it couldn't run the command via err.code
+// (an errno string) -- ENOENT means the executable genuinely isn't there,
+// EACCES means it exists but the OS refused to execute it (missing +x, or
+// on macOS, Gatekeeper blocking a quarantined/unsigned binary). Collapsing
+// both to the same "command not found" string -- as this used to do --
+// makes a Gatekeeper block look identical to a missing CLI and sends users
+// chasing the wrong fix (reinstalling something that's already there).
+export function describeSpawnError(err: NodeJS.ErrnoException): string {
+  return err.code === 'EACCES' ? 'permission denied' : 'command not found';
+}
+
 export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
   return new Promise((resolve) => {
     let stdout = '';
@@ -49,8 +60,8 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
       // an in-flight mockymock/docker process instead of merely being
       // noted between files.
       child = spawn(spawnCommand, spawnArgs, { shell: useShell, signal });
-    } catch {
-      resolve({ code: -1, stdout: '', stderr: 'command not found' });
+    } catch (err) {
+      resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
       return;
     }
     child.stdout?.on('data', (d) => {
@@ -63,11 +74,11 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
       stderr += text;
       onOutput?.(text, 'stderr');
     });
-    child.on('error', () =>
+    child.on('error', (err) =>
       resolve({
         code: -1,
         stdout,
-        stderr: signal?.aborted ? 'run cancelled' : stderr || 'command not found',
+        stderr: signal?.aborted ? 'run cancelled' : stderr || describeSpawnError(err as NodeJS.ErrnoException),
       })
     );
     child.on('close', (code) =>

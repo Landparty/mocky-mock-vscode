@@ -73,6 +73,28 @@ code --install-extension mockymock-vscode-<platform>-<version>.vsix
 
 Or download from the microsoft extension store (currently worked on)
 
+### macOS
+
+Two release builds cover macOS: `darwin-arm64` (Apple Silicon: M1/M2/M3/M4)
+and `darwin-x64` (Intel — available from the first release built after this
+was added; earlier releases only shipped `darwin-arm64`, and Intel Macs fall
+back to the `uv`-based auto-install described below). If you're not sure
+which chip you have, run `uname -m` in Terminal — `arm64` means Apple
+Silicon, `x86_64` means Intel — and download the matching `.vsix`.
+
+The bundled `mockymock` binary isn't signed with a paid Apple Developer
+Program certificate, so on first activation the extension automatically
+clears the macOS quarantine flag on it (the thing Gatekeeper checks) —
+no action needed on your part. If a fresh install still shows "mockymock:
+permission denied" in the status bar, run `mockymock: Check Environment
+Status` to see the exact bundled binary path, then in Terminal:
+
+```bash
+xattr -d com.apple.quarantine <path-from-the-command-above>
+```
+
+...and reload the window (`Developer: Reload Window`).
+
 ## Settings
 
 | Setting | Default | Purpose |

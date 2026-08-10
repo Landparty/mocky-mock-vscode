@@ -10,6 +10,7 @@ import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationP
 import { activateExportMainframeCommand } from './export/exportMainframe';
 import { activateAnalyzeCobolCommand } from './analysis/analyzeCobol';
 import { runCommand } from './environment/commandRunner';
+import { healBundledBinaryOnDarwin } from './environment/macSelfHeal';
 import { resolveInvocationConfig } from './environment/invocationConfig';
 import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundariesTreeProvider';
 import { placeholderArgs } from './boundaries/boundariesModel';
@@ -357,6 +358,16 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+  // Best-effort, macOS-only, fire-and-forget -- see macSelfHeal.ts for why
+  // this exists (Gatekeeper). Deliberately NOT awaited: activate() must
+  // finish registering every command/provider below synchronously, so a
+  // stall here (there shouldn't be one, but "should never happen" is not a
+  // guarantee worth staking command registration on) can never leave
+  // mockymock's commands unregistered. It's still started before
+  // EnvironmentManager's constructor kicks off its own first CLI probe, so
+  // it normally wins that race; if it doesn't, that probe is read-only and
+  // re-runs on the next status-bar click or test run regardless.
+  void healBundledBinaryOnDarwin(context.extensionPath);
   const environmentManager = new EnvironmentManager(context);
   activateTestController(context, environmentManager);
   activateLintDiagnostics(context);
