@@ -10,6 +10,7 @@ import {
   resolveExecutablePath,
   getDockerDesktopLaunchCommand,
   describeDockerLaunchFailure,
+  describeDockerStartFailure,
   supportsTraceFlag,
   supportsDebugCommand,
   supportsExportCommand,
@@ -327,6 +328,28 @@ describe('describeDockerLaunchFailure', () => {
   it('falls back to the exit code when neither stream has content', () => {
     const message = describeDockerLaunchFailure({ code: 1, stdout: '', stderr: '' });
     assert.match(message!, /exit code 1/);
+  });
+});
+
+describe('describeDockerStartFailure', () => {
+  it('returns the generic timeout message when there is no launch error', () => {
+    assert.strictEqual(
+      describeDockerStartFailure(undefined),
+      'Docker Desktop did not become ready within the timeout. Start it manually and try again.'
+    );
+  });
+
+  it('prefers the specific launch error over the generic timeout message', () => {
+    const message = describeDockerStartFailure('Failed to launch Docker Desktop: exit code 1');
+    assert.match(message, /^Failed to launch Docker Desktop: exit code 1\. Start Docker Desktop manually/);
+  });
+
+  it('does not double punctuation when the launch error already ends with one', () => {
+    const message = describeDockerStartFailure(
+      'Failed to launch Docker Desktop: The filename, directory name, or volume label syntax is incorrect.'
+    );
+    assert.ok(!message.includes('..'), `expected no doubled punctuation, got ${message}`);
+    assert.match(message, /incorrect\. Start Docker Desktop manually and try again\.$/);
   });
 });
 

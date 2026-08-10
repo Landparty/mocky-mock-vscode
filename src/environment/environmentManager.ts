@@ -6,6 +6,7 @@ import {
   checkCommandAvailable,
   checkDocker,
   describeDockerLaunchFailure,
+  describeDockerStartFailure,
   getDockerDesktopLaunchCommand,
   permissionDeniedMessageForPath,
   resolveExecutablePath,
@@ -112,9 +113,7 @@ export class EnvironmentManager {
         this.setStatus('$(check) mockymock: ready');
         return { ok: true, message: 'ready' };
       }
-      const message = launchError
-        ? `${launchError}. Start Docker Desktop manually and try again.`
-        : 'Docker Desktop did not become ready within the timeout. Start it manually and try again.';
+      const message = describeDockerStartFailure(launchError);
       this.setStatus('$(error) mockymock: Docker did not start', message);
       return { ok: false, message };
     }
@@ -172,7 +171,10 @@ export class EnvironmentManager {
   private async startDockerDesktopAndWait(): Promise<{ started: boolean; launchError?: string }> {
     const launch = getDockerDesktopLaunchCommand(process.platform);
     if (!launch) {
-      return { started: false };
+      return {
+        started: false,
+        launchError: `Docker Desktop auto-launch is not supported on this platform (${process.platform})`,
+      };
     }
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'Starting Docker Desktop…' },
