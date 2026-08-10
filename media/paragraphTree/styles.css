@@ -1,3 +1,15 @@
+:root {
+  /* Single source of truth for physical row indentation -- main.ts reads
+     these SAME custom properties at render time to compute each row's
+     compensating margin-right (see .row below), so the CSS that actually
+     draws the indentation and the JS that cancels it out for column
+     alignment can never silently drift apart. --pt-bracket/--pt-loop-bracket
+     are each a wrapper's FULL contribution (margin + border + padding
+     combined), not just one component of it. */
+  --pt-indent: 12px;
+  --pt-bracket: 21px;
+  --pt-loop-bracket: 14px;
+}
 body {
   font-family: var(--vscode-editor-font-family, monospace);
   font-size: 12px;
@@ -19,13 +31,42 @@ body {
 .depth-chips { display: flex; gap: 6px; margin-bottom: 8px; }
 .chip { opacity: 0.5; cursor: pointer; }
 .chip-active { opacity: 1; font-weight: 600; }
-.node { margin-left: 12px; }
-.thru-range { margin-left: 12px; border-left: 1px dashed var(--vscode-textLink-foreground); padding-left: 8px; }
+/* Column-header row: labels the F/S/C dot columns at the top, next to the
+   depth chips, so their meaning is visible without scrolling down to the
+   footer legend -- reuses .row's own layout (name | badges | line-number)
+   so the letters land in exactly the same columns as the real dots below. */
+.row.legend-row { color: var(--vscode-descriptionForeground); cursor: default; margin-bottom: 4px; }
+.row.legend-row:hover { background: none; }
+.node { margin-left: var(--pt-indent); }
+.thru-range {
+  margin-left: var(--pt-indent);
+  border-left: 1px dashed var(--vscode-textLink-foreground);
+  /* padding-left derived from --pt-bracket so it always sums (with the
+     margin above and the 1px border) to exactly --pt-bracket -- the value
+     main.ts reads to compensate rows nested inside a THRU range. */
+  padding-left: calc(var(--pt-bracket) - var(--pt-indent) - 1px);
+}
 .thru-header { display: flex; gap: 6px; align-items: baseline; color: var(--vscode-textLink-foreground); font-style: italic; }
 /* Loop gutter bracket: a solid border tracks an UNTIL/VARYING paragraph's
-   nested rows, distinct from thru-range's dashed connector. */
-.loop-body { margin-left: 6px; border-left: 2px solid var(--vscode-charts-orange, #d7ba7d); padding-left: 6px; }
-.row { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 1px 0; }
+   nested rows, distinct from thru-range's dashed connector. padding-left
+   derived from --pt-loop-bracket for the same single-source-of-truth
+   reason as .thru-range above. */
+.loop-body { margin-left: 0; border-left: 2px solid var(--vscode-charts-orange, #d7ba7d); padding-left: calc(var(--pt-loop-bracket) - 2px); }
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 1px 0;
+  box-sizing: border-box;
+  /* Cancels out this row's own cumulative physical indentation (every
+     .node/.thru-range/.loop-body wrapper between it and .tree, set by
+     main.ts as --pt-row-indent) so .badges's margin-left: auto lands at
+     the SAME x-position for every row regardless of nesting depth or
+     bracket type. Falls back to 0px (no-op) for rows that don't set the
+     property, e.g. the legend header row. */
+  margin-right: calc(-1 * var(--pt-row-indent, 0px));
+}
 .row:hover { background: var(--vscode-list-hoverBackground); }
 .row.recursive { opacity: 0.7; }
 .name { flex: 0 0 auto; }
