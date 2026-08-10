@@ -18,7 +18,7 @@ let searchQuery = '';
 let depthCap = 4;
 let hoverRequestId = 0;
 // Reset at the top of renderTree() and incremented by renderNode() every
-// time it actually builds and returns a 'paragraph' row -- the single
+// time it actually builds and appends a 'paragraph' row -- the single
 // source of truth for "how many paragraph rows are on screen right now",
 // honoring both the depth cap and the ancestor-preserving match rule
 // without re-deriving them in a second, easily-divergent helper.
@@ -30,27 +30,19 @@ let renderedParagraphCount = 0;
 // keystroke would be lost.
 let searchBoxEl: HTMLInputElement | undefined;
 
-// Physical indentation constants, read fresh from CSS at the top of every
-// renderTree() -- see the :root custom properties and the .row comment in
-// styles.css. Kept in sync with the CSS by construction: both derive from
-// the same --pt-indent/--pt-bracket/--pt-loop-bracket values, so this
-// compensation math can never silently drift out of step with what the
-// wrapper elements actually render at. Fallback values match the CSS
-// defaults in case the custom properties are ever unavailable.
-let indentPx = 12;
-let bracketPx = 21;
-let loopBracketPx = 14;
-
-function readIndentConstants(): void {
-  const style = getComputedStyle(document.documentElement);
-  const px = (name: string, fallback: number): number => {
-    const parsed = parseFloat(style.getPropertyValue(name));
-    return Number.isFinite(parsed) ? parsed : fallback;
-  };
-  indentPx = px('--pt-indent', indentPx);
-  bracketPx = px('--pt-bracket', bracketPx);
-  loopBracketPx = px('--pt-loop-bracket', loopBracketPx);
-}
+// Per-depth-level indentation, in px. Applied directly as inline
+// padding-left on each row's name-cell -- see renderNode. Deliberately NOT
+// implemented via nested wrapper divs with margin-left (an earlier version
+// of this file did that, and it silently drifted: each ancestor wrapper's
+// own margin shrank its own available width, so a row's containing
+// block -- and therefore where badges/line-number's margin-left:auto
+// landed -- ended up at a different absolute position per row, worse for
+// anything nested inside a THRU range or loop body, which don't even
+// increment the tree's own `depth` counter the same way. CSS Grid doesn't
+// have that failure mode: every cell appended to .tree shares the exact
+// same column tracks by definition, regardless of what padding an
+// individual cell carries.
+const INDENT_PX = 16;
 
 const root = document.getElementById('root')!;
 
@@ -116,96 +108,95 @@ function renderBadgeDot(active: boolean, label: string): HTMLElement {
   return el('span', `dot dot-${label}${active ? ' dot-active' : ''}`);
 }
 
+// Wires the same click/hover behavior onto every cell belonging to one
+// logical row (name-cell, badges-cell, line-cell aren't wrapped in a
+// shared parent element -- see the module comment on INDENT_PX for why --
+// so each needs its own listeners, and mouseenter/mouseleave toggle a
+// shared class across all of them so hovering any cell highlights the
+// whole row).
+function wireRowInteractivity(cells: HTMLElement[], line: number): void {
+  for (const cell of cells) {
+    cell.dataset.line = String(line);
+    cell.addEventListener('click', () => vscodeApi.postMessage({ type: 'reveal', line }));
+    cell.addEventListener('mouseenter', () => {
+      for (const c of cells) c.classList.add('row-hover');
+      showHoverPreview(line);
+    });
+    cell.addEventListener('mouseleave', () => {
+      for (const c of cells) c.classList.remove('row-hover');
+      hideHoverPreview();
+    });
+  }
+}
+
+// Appends this item's row (and recursively, its descendants') directly to
+// `treeEl` as flat CSS Grid children -- three cells (name | badges |
+// line-number) per paragraph row, or one grid-column-spanning cell for a
+// THRU range's header. No nested wrapper divs: grid column alignment is
+// guaranteed by the grid itself for any direct child, regardless of this
+// item's depth or how many bracket contexts it's nested inside.
+// `bracketed` records whether this row is visually part of a THRU range or
+// a looping paragraph's body, purely for a small left-border marker on its
+// name-cell -- it does not attempt to reproduce one continuous line
+// spanning multiple sibling rows, to keep this alignment-critical code as
+// simple as possible.
 function renderNode(
+  treeEl: HTMLElement,
   item: ParagraphTreeItem,
   depth: number,
   query: string,
-  extraIndent: number
-): HTMLElement | undefined {
-  if (depth > depthCap) return undefined;
-  if (!matches(item, query)) return undefined;
+  bracketed: 'thru' | 'loop' | undefined
+): void {
+  if (depth > depthCap) return;
+  if (!matches(item, query)) return;
 
   if (item.kind === 'thruRange') {
-    const wrapper = el('div', 'thru-range');
-    const header = el('div', 'thru-header', `THRU ${item.from} → ${item.to}`);
+    const header = el('div', 'thru-row');
+    header.style.paddingLeft = `${depth * INDENT_PX}px`;
+    header.appendChild(document.createTextNode(`THRU ${item.from} → ${item.to}`));
     if (item.loopAnnotation) {
       header.appendChild(el('span', 'loop-annotation', item.loopAnnotation));
     }
-    wrapper.appendChild(header);
-    // Same gutter-bracket device as a looping paragraph's children (see
-    // below): PERFORM A THRU C UNTIL ... loops the whole range, so its
-    // loop-body styling belongs on the range's children, not on any one
-    // member.
-    const isLoop = !!item.loopAnnotation;
-    const childrenEl = el('div', isLoop ? 'children loop-body' : 'children');
-    // A thruRange wrapper doesn't increment `depth` (its members share
-    // their range's depth, not an extra level -- see programFlowModel.ts),
-    // but it DOES insert its own physical DOM wrapper (margin+border+
-    // padding = bracketPx), so that has to be tracked separately from the
-    // depth-driven --pt-indent multiples below.
-    const childExtraIndent = extraIndent + bracketPx + (isLoop ? loopBracketPx : 0);
+    treeEl.appendChild(header);
+    const childBracket = item.loopAnnotation ? 'loop' : 'thru';
     for (const child of item.children) {
-      const rendered = renderNode(child, depth, query, childExtraIndent);
-      if (rendered) childrenEl.appendChild(rendered);
+      renderNode(treeEl, child, depth, query, childBracket);
     }
-    wrapper.appendChild(childrenEl);
-    return wrapper;
+    return;
   }
 
   renderedParagraphCount += 1;
 
-  const row = el('div', 'row' + (item.isRecursive ? ' recursive' : ''));
-  row.dataset.line = String(item.line);
-  // See the .row comment in styles.css: this cancels out the row's own
-  // cumulative physical indentation (every .node wrapper from the root
-  // down to it, at --pt-indent each, plus any thru-range/loop-body bracket
-  // wrappers threaded in via extraIndent) so the badges/line-number
-  // columns land at the same x-position regardless of nesting shape.
-  row.style.setProperty('--pt-row-indent', `${depth * indentPx + extraIndent}px`);
-
-  const nameEl = el('span', 'name');
-  nameEl.appendChild(highlightedName(item.name, query));
-  row.appendChild(nameEl);
-
+  const nameCell = el('span', 'name-cell' + (bracketed ? ` bracket-${bracketed}` : ''));
+  nameCell.style.paddingLeft = `${depth * INDENT_PX}px`;
+  const nameText = el('span', 'name');
+  nameText.appendChild(highlightedName(item.name, query));
+  nameCell.appendChild(nameText);
   if (item.loopAnnotation) {
-    row.appendChild(el('span', 'loop-annotation', item.loopAnnotation));
+    nameCell.appendChild(el('span', 'loop-annotation', item.loopAnnotation));
   }
   if (item.isRecursive) {
-    row.appendChild(el('span', 'recursive-marker', 'recursive'));
+    nameCell.appendChild(el('span', 'recursive-marker', 'recursive'));
   }
 
-  const badges = el('span', 'badges');
-  badges.appendChild(renderBadgeDot(item.badges.file, 'f'));
-  badges.appendChild(renderBadgeDot(item.badges.sql, 's'));
-  badges.appendChild(renderBadgeDot(item.badges.call, 'c'));
-  row.appendChild(badges);
+  const badgesCell = el('span', 'badges-cell');
+  badgesCell.appendChild(renderBadgeDot(item.badges.file, 'f'));
+  badgesCell.appendChild(renderBadgeDot(item.badges.sql, 's'));
+  badgesCell.appendChild(renderBadgeDot(item.badges.call, 'c'));
 
-  row.appendChild(el('span', 'line-number', item.callCount > 1 ? `×${item.callCount}` : String(item.line)));
+  const lineCell = el('span', 'line-cell', item.callCount > 1 ? `×${item.callCount}` : String(item.line));
 
-  row.addEventListener('click', () => vscodeApi.postMessage({ type: 'reveal', line: item.line }));
-  row.addEventListener('mouseenter', () => showHoverPreview(item.line));
-  row.addEventListener('mouseleave', hideHoverPreview);
-
-  const wrapper = el('div', 'node');
-  wrapper.appendChild(row);
-  if (item.children.length > 0) {
-    // Loop-spanning paragraphs (UNTIL/VARYING) get a gutter bracket beside
-    // their nested rows, same visual device as thruRange's connector --
-    // driven entirely by loopAnnotation being set, no new data needed.
-    const isLoop = !!item.loopAnnotation;
-    const childrenEl = el('div', isLoop ? 'children loop-body' : 'children');
-    // Unlike thruRange above, an ordinary child DOES get its own .node
-    // wrapper (accounted for by depth + 1 * indentPx on the next call), so
-    // only the loop-body bracket's extra needs threading here, not
-    // indentPx itself -- that would double-count it.
-    const childExtraIndent = extraIndent + (isLoop ? loopBracketPx : 0);
-    for (const child of item.children) {
-      const rendered = renderNode(child, depth + 1, query, childExtraIndent);
-      if (rendered) childrenEl.appendChild(rendered);
-    }
-    wrapper.appendChild(childrenEl);
+  const cells = [nameCell, badgesCell, lineCell];
+  if (item.isRecursive) {
+    for (const cell of cells) cell.classList.add('recursive');
   }
-  return wrapper;
+  wireRowInteractivity(cells, item.line);
+  for (const cell of cells) treeEl.appendChild(cell);
+
+  const childBracket = item.loopAnnotation ? 'loop' : bracketed;
+  for (const child of item.children) {
+    renderNode(treeEl, child, depth + 1, query, childBracket);
+  }
 }
 
 let hoverPopup: HTMLElement | undefined;
@@ -240,7 +231,6 @@ function renderTree(): void {
   hideHoverPreview(); // a popup from the row under the old content would otherwise be orphaned
   root.innerHTML = '';
   renderedParagraphCount = 0;
-  readIndentConstants();
   if (!currentTree) {
     searchBoxEl = undefined;
     return;
@@ -275,35 +265,48 @@ function renderTree(): void {
   }
   root.appendChild(depthRow);
 
+  const treeEl = el('div', 'tree');
+
   // Column-header row -- labels which dot is which without requiring a
-  // scroll down to the footer legend. Built from .row itself (not a
-  // one-off layout) so its F/S/C letters share the exact same columns as
-  // the real dots below: it has no --pt-row-indent set, so .row's
-  // compensation defaults to a 0px no-op, landing it at .tree's natural
-  // (unindented) right edge -- precisely where every other row's
-  // compensated right edge now also lands.
-  const legend = el('div', 'row legend-row');
-  legend.appendChild(el('span', 'name', ''));
-  const legendBadges = el('span', 'badges');
+  // scroll down to the footer legend. These are the FIRST three cells
+  // appended to treeEl, so they share the exact same grid column tracks as
+  // every real row appended after them -- alignment here is guaranteed by
+  // the grid, not by matching padding/margin math by hand.
+  const legendName = el('span', 'name-cell legend-row');
+  const legendBadges = el('span', 'badges-cell legend-row');
   legendBadges.appendChild(el('span', 'legend-letter', 'F'));
   legendBadges.appendChild(el('span', 'legend-letter', 'S'));
   legendBadges.appendChild(el('span', 'legend-letter', 'C'));
-  legend.appendChild(legendBadges);
-  legend.appendChild(el('span', 'line-number', ''));
-  root.appendChild(legend);
+  const legendLine = el('span', 'line-cell legend-row');
+  treeEl.appendChild(legendName);
+  treeEl.appendChild(legendBadges);
+  treeEl.appendChild(legendLine);
 
-  const treeEl = el('div', 'tree');
   const query = searchQuery;
   for (const rootItem of currentTree.roots) {
-    const rendered = renderNode(rootItem, 1, query, 0);
-    if (rendered) treeEl.appendChild(rendered);
+    renderNode(treeEl, rootItem, 1, query, undefined);
   }
   for (const item of currentTree.unreachable) {
-    const rendered = renderNode(item, 1, query, 0);
-    if (rendered) {
-      rendered.classList.add('unreachable');
-      treeEl.appendChild(rendered);
-    }
+    if (item.kind !== 'paragraph') continue; // unreachable is always flat/childless paragraphs -- see programFlowModel.ts
+    if (1 > depthCap) continue;
+    if (!matches(item, query)) continue;
+    renderedParagraphCount += 1;
+    const nameCell = el('span', 'name-cell unreachable-row');
+    const nameText = el('span', 'name');
+    nameText.appendChild(highlightedName(item.name, query));
+    nameCell.appendChild(nameText);
+    const badgesCell = el('span', 'badges-cell unreachable-row');
+    badgesCell.appendChild(renderBadgeDot(item.badges.file, 'f'));
+    badgesCell.appendChild(renderBadgeDot(item.badges.sql, 's'));
+    badgesCell.appendChild(renderBadgeDot(item.badges.call, 'c'));
+    const lineCell = el(
+      'span',
+      'line-cell unreachable-row',
+      item.callCount > 1 ? `×${item.callCount}` : String(item.line)
+    );
+    const cells = [nameCell, badgesCell, lineCell];
+    wireRowInteractivity(cells, item.line);
+    for (const cell of cells) treeEl.appendChild(cell);
   }
   root.appendChild(treeEl);
 
