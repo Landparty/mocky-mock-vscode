@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.4](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.3...v0.7.4) (2026-08-10)
+
+
+### Bug Fixes
+
+* address PR review feedback on Docker launch failure messaging ([022ef61](https://github.com/Landparty/mocky-mock-vscode/commit/022ef61545ecbda26f552d2a47698e70efe979a5))
+* stop double-quoting the Windows Docker Desktop launch path ([53ac144](https://github.com/Landparty/mocky-mock-vscode/commit/53ac1442965156e4c16fb8fff3019de200cd39a8))
+* stop double-quoting the Windows Docker Desktop launch path ([cb4377a](https://github.com/Landparty/mocky-mock-vscode/commit/cb4377a4ff4ed0672823e13b2f2fb9f442dd89a6))
+
 ## [0.7.3](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.2...v0.7.3) (2026-08-10)
 
 
