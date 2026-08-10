@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { CommandRunner } from './commandRunner';
+import { CommandResult, CommandRunner } from './commandRunner';
 
 export async function checkCommandAvailable(
   run: CommandRunner,
@@ -175,9 +175,43 @@ export interface LaunchCommand {
   args: string[];
 }
 
+// Surfaces a non-zero exit from the OS-level Docker Desktop launch command
+// (see getDockerDesktopLaunchCommand) as an actionable message, instead of
+// silently discarding it and falling through to the 90s polling loop in
+// environmentManager's startDockerDesktopAndWait. This is exactly the gap
+// that let the win32 double-quoting bug (fixed below, in
+// getDockerDesktopLaunchCommand) go unnoticed: cmd.exe returned exit 1 with
+// "The filename, directory name, or volume label syntax is incorrect." and
+// nothing ever looked at the result.
+export function describeDockerLaunchFailure(result: CommandResult): string | undefined {
+  if (result.code === 0) {
+    return undefined;
+  }
+  const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`;
+  return `Failed to launch Docker Desktop: ${detail}`;
+}
+
+// Builds the message ensureReady() shows when Docker Desktop didn't become
+// ready: prefers the specific launch failure (from describeDockerLaunchFailure
+// above, or the "not supported on this platform" case in
+// startDockerDesktopAndWait) over the generic 90s-timeout message, and
+// strips any trailing punctuation from it first so appending our own
+// sentence can't produce "..".
+export function describeDockerStartFailure(launchError: string | undefined): string {
+  if (!launchError) {
+    return 'Docker Desktop did not become ready within the timeout. Start it manually and try again.';
+  }
+  return `${launchError.replace(/[.!?]+$/, '')}. Start Docker Desktop manually and try again.`;
+}
+
 export function getDockerDesktopLaunchCommand(platform: NodeJS.Platform): LaunchCommand | null {
   if (platform === 'win32') {
-    return { command: '"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"', args: [] };
+    // Unquoted: commandRunner's runCommand (shell:true on win32) already
+    // quotes any command/arg containing a space via quoteArgForWindowsShell
+    // before handing it to cmd.exe. Pre-quoting here would make that helper
+    // match on the embedded quote characters too and double-quote the
+    // string, which cmd.exe then rejects outright.
+    return { command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', args: [] };
   }
   if (platform === 'darwin') {
     return { command: 'open', args: ['-a', 'Docker'] };

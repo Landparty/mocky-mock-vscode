@@ -9,6 +9,8 @@ import {
   darwinPathFallbackCandidates,
   resolveExecutablePath,
   getDockerDesktopLaunchCommand,
+  describeDockerLaunchFailure,
+  describeDockerStartFailure,
   supportsTraceFlag,
   supportsDebugCommand,
   supportsExportCommand,
@@ -303,11 +305,72 @@ describe('darwinPathFallbackCandidates', () => {
 });
 
 
+describe('describeDockerLaunchFailure', () => {
+  it('returns undefined when the launch command exited 0', () => {
+    const message = describeDockerLaunchFailure({ code: 0, stdout: '', stderr: '' });
+    assert.strictEqual(message, undefined);
+  });
+
+  it('surfaces stderr from a failed launch (the cmd.exe double-quoting bug case)', () => {
+    const message = describeDockerLaunchFailure({
+      code: 1,
+      stdout: '',
+      stderr: 'The filename, directory name, or volume label syntax is incorrect.',
+    });
+    assert.match(message!, /The filename, directory name, or volume label syntax is incorrect\./);
+  });
+
+  it('falls back to stdout when stderr is empty', () => {
+    const message = describeDockerLaunchFailure({ code: 1, stdout: 'some stdout detail', stderr: '' });
+    assert.match(message!, /some stdout detail/);
+  });
+
+  it('falls back to the exit code when neither stream has content', () => {
+    const message = describeDockerLaunchFailure({ code: 1, stdout: '', stderr: '' });
+    assert.match(message!, /exit code 1/);
+  });
+});
+
+describe('describeDockerStartFailure', () => {
+  it('returns the generic timeout message when there is no launch error', () => {
+    assert.strictEqual(
+      describeDockerStartFailure(undefined),
+      'Docker Desktop did not become ready within the timeout. Start it manually and try again.'
+    );
+  });
+
+  it('prefers the specific launch error over the generic timeout message', () => {
+    const message = describeDockerStartFailure('Failed to launch Docker Desktop: exit code 1');
+    assert.match(message, /^Failed to launch Docker Desktop: exit code 1\. Start Docker Desktop manually/);
+  });
+
+  it('does not double punctuation when the launch error already ends with one', () => {
+    const message = describeDockerStartFailure(
+      'Failed to launch Docker Desktop: The filename, directory name, or volume label syntax is incorrect.'
+    );
+    assert.ok(!message.includes('..'), `expected no doubled punctuation, got ${message}`);
+    assert.match(message, /incorrect\. Start Docker Desktop manually and try again\.$/);
+  });
+});
+
 describe('getDockerDesktopLaunchCommand', () => {
   it('returns a win32 launch command', () => {
     const launch = getDockerDesktopLaunchCommand('win32');
     assert.ok(launch);
     assert.match(launch!.command, /Docker Desktop\.exe/);
+  });
+
+  it('does not pre-quote the win32 path, since commandRunner.quoteArgForWindowsShell already quotes any command containing a space', () => {
+    // Regression test: a pre-quoted command here gets double-quoted by
+    // commandRunner (it quotes any arg matching /[\s"]/, and a pre-quoted
+    // string matches on both the space AND the embedded quote chars),
+    // which cmd.exe then rejects with "The filename, directory name, or
+    // volume label syntax is incorrect." -- silently breaking Docker
+    // Desktop auto-launch on Windows until the 90s timeout in
+    // environmentManager's startDockerDesktopAndWait gives up.
+    const launch = getDockerDesktopLaunchCommand('win32');
+    assert.ok(launch);
+    assert.ok(!launch!.command.includes('"'), `expected an unquoted path, got ${launch!.command}`);
   });
 
   it('returns a darwin launch command', () => {
