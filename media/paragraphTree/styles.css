@@ -35,9 +35,8 @@ body {
    depth chips, so their meaning is visible without scrolling down to the
    footer legend -- reuses .row's own layout (name | badges | line-number)
    so the letters land in exactly the same columns as the real dots below. */
-.legend-row { color: var(--vscode-descriptionForeground); cursor: default; margin-bottom: 4px; }
-.legend-row:hover { background: none; }
-.legend-letter { min-width: 6px; font-size: 9px; text-align: center; opacity: 0.8; }
+.row.legend-row { color: var(--vscode-descriptionForeground); cursor: default; margin-bottom: 4px; }
+.row.legend-row:hover { background: none; }
 .node { margin-left: var(--pt-indent); }
 .thru-range {
   margin-left: var(--pt-indent);
