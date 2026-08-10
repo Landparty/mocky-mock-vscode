@@ -16,6 +16,11 @@ dist/**
 # business in the package -- exclude the whole directory rather than
 # trust whatever happens to be under it on the packaging machine.
 .claude/**
+
+# Same as .claude/** above, but for this repo's own dev workflow: parallel
+# git worktrees live at top-level .worktrees/<branch>/, each a full nested
+# checkout with its own source, node_modules, and docs.
+.worktrees/**
 node_modules/**
 esbuild.js
 PUBLISHING.md
