@@ -30,6 +30,28 @@ let renderedParagraphCount = 0;
 // keystroke would be lost.
 let searchBoxEl: HTMLInputElement | undefined;
 
+// Physical indentation constants, read fresh from CSS at the top of every
+// renderTree() -- see the :root custom properties and the .row comment in
+// styles.css. Kept in sync with the CSS by construction: both derive from
+// the same --pt-indent/--pt-bracket/--pt-loop-bracket values, so this
+// compensation math can never silently drift out of step with what the
+// wrapper elements actually render at. Fallback values match the CSS
+// defaults in case the custom properties are ever unavailable.
+let indentPx = 12;
+let bracketPx = 21;
+let loopBracketPx = 14;
+
+function readIndentConstants(): void {
+  const style = getComputedStyle(document.documentElement);
+  const px = (name: string, fallback: number): number => {
+    const parsed = parseFloat(style.getPropertyValue(name));
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+  indentPx = px('--pt-indent', indentPx);
+  bracketPx = px('--pt-bracket', bracketPx);
+  loopBracketPx = px('--pt-loop-bracket', loopBracketPx);
+}
+
 const root = document.getElementById('root')!;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -94,7 +116,12 @@ function renderBadgeDot(active: boolean, label: string): HTMLElement {
   return el('span', `dot dot-${label}${active ? ' dot-active' : ''}`);
 }
 
-function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTMLElement | undefined {
+function renderNode(
+  item: ParagraphTreeItem,
+  depth: number,
+  query: string,
+  extraIndent: number
+): HTMLElement | undefined {
   if (depth > depthCap) return undefined;
   if (!matches(item, query)) return undefined;
 
@@ -109,9 +136,16 @@ function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTML
     // below): PERFORM A THRU C UNTIL ... loops the whole range, so its
     // loop-body styling belongs on the range's children, not on any one
     // member.
-    const childrenEl = el('div', item.loopAnnotation ? 'children loop-body' : 'children');
+    const isLoop = !!item.loopAnnotation;
+    const childrenEl = el('div', isLoop ? 'children loop-body' : 'children');
+    // A thruRange wrapper doesn't increment `depth` (its members share
+    // their range's depth, not an extra level -- see programFlowModel.ts),
+    // but it DOES insert its own physical DOM wrapper (margin+border+
+    // padding = bracketPx), so that has to be tracked separately from the
+    // depth-driven --pt-indent multiples below.
+    const childExtraIndent = extraIndent + bracketPx + (isLoop ? loopBracketPx : 0);
     for (const child of item.children) {
-      const rendered = renderNode(child, depth, query);
+      const rendered = renderNode(child, depth, query, childExtraIndent);
       if (rendered) childrenEl.appendChild(rendered);
     }
     wrapper.appendChild(childrenEl);
@@ -122,6 +156,12 @@ function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTML
 
   const row = el('div', 'row' + (item.isRecursive ? ' recursive' : ''));
   row.dataset.line = String(item.line);
+  // See the .row comment in styles.css: this cancels out the row's own
+  // cumulative physical indentation (every .node wrapper from the root
+  // down to it, at --pt-indent each, plus any thru-range/loop-body bracket
+  // wrappers threaded in via extraIndent) so the badges/line-number
+  // columns land at the same x-position regardless of nesting shape.
+  row.style.setProperty('--pt-row-indent', `${depth * indentPx + extraIndent}px`);
 
   const nameEl = el('span', 'name');
   nameEl.appendChild(highlightedName(item.name, query));
@@ -152,9 +192,15 @@ function renderNode(item: ParagraphTreeItem, depth: number, query: string): HTML
     // Loop-spanning paragraphs (UNTIL/VARYING) get a gutter bracket beside
     // their nested rows, same visual device as thruRange's connector --
     // driven entirely by loopAnnotation being set, no new data needed.
-    const childrenEl = el('div', item.loopAnnotation ? 'children loop-body' : 'children');
+    const isLoop = !!item.loopAnnotation;
+    const childrenEl = el('div', isLoop ? 'children loop-body' : 'children');
+    // Unlike thruRange above, an ordinary child DOES get its own .node
+    // wrapper (accounted for by depth + 1 * indentPx on the next call), so
+    // only the loop-body bracket's extra needs threading here, not
+    // indentPx itself -- that would double-count it.
+    const childExtraIndent = extraIndent + (isLoop ? loopBracketPx : 0);
     for (const child of item.children) {
-      const rendered = renderNode(child, depth + 1, query);
+      const rendered = renderNode(child, depth + 1, query, childExtraIndent);
       if (rendered) childrenEl.appendChild(rendered);
     }
     wrapper.appendChild(childrenEl);
@@ -194,6 +240,7 @@ function renderTree(): void {
   hideHoverPreview(); // a popup from the row under the old content would otherwise be orphaned
   root.innerHTML = '';
   renderedParagraphCount = 0;
+  readIndentConstants();
   if (!currentTree) {
     searchBoxEl = undefined;
     return;
@@ -228,14 +275,31 @@ function renderTree(): void {
   }
   root.appendChild(depthRow);
 
+  // Column-header row -- labels which dot is which without requiring a
+  // scroll down to the footer legend. Built from .row itself (not a
+  // one-off layout) so its F/S/C letters share the exact same columns as
+  // the real dots below: it has no --pt-row-indent set, so .row's
+  // compensation defaults to a 0px no-op, landing it at .tree's natural
+  // (unindented) right edge -- precisely where every other row's
+  // compensated right edge now also lands.
+  const legend = el('div', 'row legend-row');
+  legend.appendChild(el('span', 'name', ''));
+  const legendBadges = el('span', 'badges');
+  legendBadges.appendChild(el('span', 'legend-letter', 'F'));
+  legendBadges.appendChild(el('span', 'legend-letter', 'S'));
+  legendBadges.appendChild(el('span', 'legend-letter', 'C'));
+  legend.appendChild(legendBadges);
+  legend.appendChild(el('span', 'line-number', ''));
+  root.appendChild(legend);
+
   const treeEl = el('div', 'tree');
   const query = searchQuery;
   for (const rootItem of currentTree.roots) {
-    const rendered = renderNode(rootItem, 1, query);
+    const rendered = renderNode(rootItem, 1, query, 0);
     if (rendered) treeEl.appendChild(rendered);
   }
   for (const item of currentTree.unreachable) {
-    const rendered = renderNode(item, 1, query);
+    const rendered = renderNode(item, 1, query, 0);
     if (rendered) {
       rendered.classList.add('unreachable');
       treeEl.appendChild(rendered);
