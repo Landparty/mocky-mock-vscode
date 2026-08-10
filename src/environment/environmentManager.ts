@@ -5,6 +5,7 @@ import { runCommand } from './commandRunner';
 import {
   checkCommandAvailable,
   checkDocker,
+  describeDockerLaunchFailure,
   getDockerDesktopLaunchCommand,
   permissionDeniedMessageForPath,
   resolveExecutablePath,
@@ -106,16 +107,16 @@ export class EnvironmentManager {
     }
 
     if (dockerStatus === 'daemon-down') {
-      const started = await this.startDockerDesktopAndWait();
+      const { started, launchError } = await this.startDockerDesktopAndWait();
       if (started) {
         this.setStatus('$(check) mockymock: ready');
         return { ok: true, message: 'ready' };
       }
-      this.setStatus('$(error) mockymock: Docker did not start');
-      return {
-        ok: false,
-        message: 'Docker Desktop did not become ready within the timeout. Start it manually and try again.',
-      };
+      const message = launchError
+        ? `${launchError}. Start Docker Desktop manually and try again.`
+        : 'Docker Desktop did not become ready within the timeout. Start it manually and try again.';
+      this.setStatus('$(error) mockymock: Docker did not start', message);
+      return { ok: false, message };
     }
 
     this.setStatus('$(warning) mockymock: Docker not installed', 'Click to install Docker Desktop');
@@ -168,24 +169,28 @@ export class EnvironmentManager {
   }
 
 
-  private async startDockerDesktopAndWait(): Promise<boolean> {
+  private async startDockerDesktopAndWait(): Promise<{ started: boolean; launchError?: string }> {
     const launch = getDockerDesktopLaunchCommand(process.platform);
     if (!launch) {
-      return false;
+      return { started: false };
     }
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'Starting Docker Desktop…' },
       async () => {
-        await runCommand(launch.command, launch.args);
+        const launchResult = await runCommand(launch.command, launch.args);
+        const launchError = describeDockerLaunchFailure(launchResult);
+        if (launchError) {
+          return { started: false, launchError };
+        }
         const deadline = Date.now() + 90_000;
         while (Date.now() < deadline) {
           const status = await checkDocker(runCommand);
           if (status === 'available') {
-            return true;
+            return { started: true };
           }
           await new Promise((resolve) => setTimeout(resolve, 3000));
         }
-        return false;
+        return { started: false };
       }
     );
   }
