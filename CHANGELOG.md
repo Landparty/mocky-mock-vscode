@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.3](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.2...v0.7.3) (2026-08-10)
+
+
+### Bug Fixes
+
+* improve macOS support (Gatekeeper, Intel build, PATH resolution) ([248fecf](https://github.com/Landparty/mocky-mock-vscode/commit/248fecf7a013dd844650f53e6bf030fba83e7fa9))
+* replace broken margin-compensation with CSS Grid for tree columns ([329f55c](https://github.com/Landparty/mocky-mock-vscode/commit/329f55c8753bf67c1bb351ba80eabcae07cf25fd))
+* switch paragraph tree layout to CSS Grid, undoing the broken margin-compensation attempt ([8f9c009](https://github.com/Landparty/mocky-mock-vscode/commit/8f9c009e04b72462dcc4b7d54982ec634c7923e5))
+
 ## [0.7.2](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.1...v0.7.2) (2026-08-10)
 
 
