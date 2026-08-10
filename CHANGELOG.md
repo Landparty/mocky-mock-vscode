@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.2](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.1...v0.7.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* align paragraph tree columns and add F/S/C column header ([87d11ad](https://github.com/Landparty/mocky-mock-vscode/commit/87d11ad6d347f878789d926d42633105e84907dc))
+* align Paragraph Tree columns, add F/S/C column header ([d62b697](https://github.com/Landparty/mocky-mock-vscode/commit/d62b6977fb0e508157f1259c170e3c06c02f3648))
+
 ## [0.7.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.0...v0.7.1) (2026-08-09)
 
 
