@@ -7,7 +7,6 @@ import {
   checkCommandAvailable,
   checkDocker,
   resolveExecutablePath,
-  resolveReleaseAssetName,
   getDockerDesktopLaunchCommand,
   supportsTraceFlag,
   supportsDebugCommand,
@@ -235,27 +234,6 @@ describe('resolveExecutablePath', () => {
   });
 });
 
-describe('resolveReleaseAssetName', () => {
-  it('maps linux x64 to the linux release asset', () => {
-    assert.strictEqual(resolveReleaseAssetName('linux', 'x64'), 'mockymock-linux-x86_64');
-  });
-
-  it('maps darwin arm64 to the macOS release asset', () => {
-    assert.strictEqual(resolveReleaseAssetName('darwin', 'arm64'), 'mockymock-macos-arm64');
-  });
-
-  it('maps win32 x64 to the Windows release asset', () => {
-    assert.strictEqual(resolveReleaseAssetName('win32', 'x64'), 'mockymock-windows-amd64.exe');
-  });
-
-  it('returns null for a combination the release workflow does not build (e.g. Intel Mac)', () => {
-    assert.strictEqual(resolveReleaseAssetName('darwin', 'x64'), null);
-  });
-
-  it('returns null for an unsupported platform', () => {
-    assert.strictEqual(resolveReleaseAssetName('aix' as NodeJS.Platform, 'x64'), null);
-  });
-});
 
 describe('getDockerDesktopLaunchCommand', () => {
   it('returns a win32 launch command', () => {

@@ -2,14 +2,13 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.5.0",
-  "mockymockCliVersion": "v0.4.0",
+  "version": "0.7.2",
   "publisher": "lanparty",
   "private": true,
   "license": "GPL-3.0-only",
   "repository": {
     "type": "git",
-    "url": "https://github.com/samdion1994/mocky-mock-vscode.git"
+    "url": "https://github.com/Landparty/mocky-mock-vscode.git"
   },
   "engines": {
     "vscode": "^1.88.0"

@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.7.2](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.1...v0.7.2) (2026-08-10)
+
+
+### Bug Fixes
+
+* align paragraph tree columns and add F/S/C column header ([87d11ad](https://github.com/Landparty/mocky-mock-vscode/commit/87d11ad6d347f878789d926d42633105e84907dc))
+* align Paragraph Tree columns, add F/S/C column header ([d62b697](https://github.com/Landparty/mocky-mock-vscode/commit/d62b6977fb0e508157f1259c170e3c06c02f3648))
+
+## [0.7.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.0...v0.7.1) (2026-08-09)
+
+
+### Bug Fixes
+
+* don't fail-close on ENTRY-statement pseudo-entry-points ([1dc79d8](https://github.com/Landparty/mocky-mock-vscode/commit/1dc79d81eb750fb8e6c477a9213f9a4d07c597c8))
+* don't fail-close the Paragraph Tree on ENTRY-statement pseudo-entries ([9b9c336](https://github.com/Landparty/mocky-mock-vscode/commit/9b9c336acf3958f5214c76e109924872f39c29df))
+
+## [0.7.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.6.0...v0.7.0) (2026-08-09)
+
+
+### Features
+
+* add Paragraph Tree webview ([80c4213](https://github.com/Landparty/mocky-mock-vscode/commit/80c4213a9a99be98114326e156f150ff432337c1))
+
+
+### Bug Fixes
+
+* address final review findings on Paragraph Tree (PR [#22](https://github.com/Landparty/mocky-mock-vscode/issues/22)) ([5c6c25f](https://github.com/Landparty/mocky-mock-vscode/commit/5c6c25fd87855c56d4605bc6153a56b5596041e1))
+* drop invalid runner-context reference in build-vsix's job-level env ([7ef0cc0](https://github.com/Landparty/mocky-mock-vscode/commit/7ef0cc0d53a06c7877ddffed014e8efefe3585f9))
+* update CI packaging guard for the paragraph-tree webview bundle ([31e59c7](https://github.com/Landparty/mocky-mock-vscode/commit/31e59c7a5bd9719b0e2ec4185e9562d270563dc3))
+
+## [0.6.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.5.0...v0.6.0) (2026-08-09)
+
+
+### Features
+
+* add analysisRunner for the mockymock analyze passthrough ([66fbb95](https://github.com/Landparty/mocky-mock-vscode/commit/66fbb95ca5c1dc75664d9fab21177e2f9532308f))
+* add Analyze COBOL File command ([4b09683](https://github.com/Landparty/mocky-mock-vscode/commit/4b09683ec3987ea8fde018a7b274a38e72085b5e))
+* add supportsAnalyzeCommand capability probe ([9484554](https://github.com/Landparty/mocky-mock-vscode/commit/94845540e5b14553251dd5efcfcb57382783a2e9))
+
+
+### Bug Fixes
+
+* close release-clobber guard gap + final-review nits ([c5d0840](https://github.com/Landparty/mocky-mock-vscode/commit/c5d08402698270e3368b29f64f341967eac0f62f))
+* correct artifact staging path and missing dist dir in build-vsix ([757ecfd](https://github.com/Landparty/mocky-mock-vscode/commit/757ecfdf48a2fe990b0acba7f8cb284fa40a7cf0))
+* distinguish missing CLI from too-old CLI; dispose analysis output channel ([5c230fd](https://github.com/Landparty/mocky-mock-vscode/commit/5c230fd96bc9e78df8387194eb9226e534819484))
+* surface stderr warnings and clear stale output on every analyze run ([28e79d2](https://github.com/Landparty/mocky-mock-vscode/commit/28e79d20dd0cb45ece2fe0705aab93d123e0d91e))
+* use one resource-scoped config for executablePath and copybookPaths in analyzeCobol ([69b4b12](https://github.com/Landparty/mocky-mock-vscode/commit/69b4b127a75f4eee566e964b41104f55771473d1))
+
 ## [0.5.0](https://github.com/samdion1994/mocky-mock-vscode/compare/v0.4.2...v0.5.0) (2026-08-07)
 
 

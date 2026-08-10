@@ -19,7 +19,6 @@ body {
 .depth-chips { display: flex; gap: 6px; margin-bottom: 8px; }
 .chip { opacity: 0.5; cursor: pointer; }
 .chip-active { opacity: 1; font-weight: 600; }
-
 /* Paragraph tree: a 3-column CSS Grid (name | badges | line-number).
    Every row's cells are appended directly as children of .tree with no
    intermediate wrapper divs -- indentation is a per-cell inline

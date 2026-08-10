@@ -7,7 +7,6 @@ import {
   checkDocker,
   getDockerDesktopLaunchCommand,
   resolveExecutablePath,
-  resolveReleaseAssetName,
 } from './checks';
 
 export interface ReadyResult {
@@ -109,25 +108,6 @@ export class EnvironmentManager {
   private async installMockymock(executablePath: string): Promise<boolean> {
     this.setStatus('$(sync~spin) mockymock: installing CLI…');
 
-    // Prefer downloading the prebuilt single-file executable from the latest
-    // GitHub Release over the uv/git path below: it needs no Python/uv
-    // toolchain and no separate auth for the cobolparser dependency (it's
-    // compiled in already -- see the mocky-mock repo's PUBLISHING.md), so
-    // it's both faster and has fewer ways to fail. It still requires gh to
-    // be installed and authenticated with read access to the (private)
-    // mocky-mock repo, same as the uv path requires git credentials for it
-    // -- this doesn't remove the need for repo access, it just removes the
-    // need for a full Python build on top of it. Silently falls through to
-    // the uv path below if gh isn't present, there's no release asset for
-    // this OS/arch yet, or the download fails for any other reason.
-    const ghOk = await checkCommandAvailable(runCommand, 'gh', ['--version']);
-    if (ghOk) {
-      const installedViaGh = await this.installMockymockViaGhRelease();
-      if (installedViaGh) {
-        return true;
-      }
-    }
-
     const uvOk = await checkCommandAvailable(runCommand, 'uv', ['--version']);
     if (!uvOk) {
       const choice = await vscode.window.showWarningMessage(
@@ -145,7 +125,7 @@ export class EnvironmentManager {
         const result = await runCommand('uv', [
           'tool',
           'install',
-          'git+https://github.com/samdion1994/mocky-mock.git',
+          'git+https://github.com/Landparty/mocky-mock.git',
         ]);
         if (result.code !== 0) {
           vscode.window.showErrorMessage(
@@ -169,54 +149,6 @@ export class EnvironmentManager {
     );
   }
 
-  // Downloads the prebuilt onefile executable from mocky-mock's latest
-  // GitHub Release via `gh release download` and points the
-  // mockymock.executablePath setting at it. Returns false (never throws)
-  // for any reason the caller should fall back to the uv/git path instead:
-  // no matching release asset for this OS/arch, gh not authenticated, no
-  // releases published yet, network failure, etc.
-  private async installMockymockViaGhRelease(): Promise<boolean> {
-    const assetName = resolveReleaseAssetName(process.platform, process.arch);
-    if (!assetName) {
-      return false;
-    }
-    const destDir = path.join(this.context.globalStorageUri.fsPath, 'bin');
-    return vscode.window.withProgress(
-      { location: vscode.ProgressLocation.Notification, title: 'Downloading mockymock CLI from the latest GitHub Release…' },
-      async () => {
-        await vscode.workspace.fs.createDirectory(vscode.Uri.file(destDir));
-        const result = await runCommand('gh', [
-          'release',
-          'download',
-          '--repo',
-          'samdion1994/mocky-mock',
-          '--pattern',
-          assetName,
-          '--dir',
-          destDir,
-          '--clobber',
-        ]);
-        if (result.code !== 0) {
-          return false;
-        }
-        const downloadedPath = path.join(destDir, assetName);
-        if (process.platform !== 'win32') {
-          const chmodResult = await runCommand('chmod', ['+x', downloadedPath]);
-          if (chmodResult.code !== 0) {
-            return false;
-          }
-        }
-        const nowAvailable = await checkCommandAvailable(runCommand, downloadedPath, ['--version']);
-        if (!nowAvailable) {
-          return false;
-        }
-        await vscode.workspace
-          .getConfiguration('mockymock')
-          .update('executablePath', downloadedPath, vscode.ConfigurationTarget.Global);
-        return true;
-      }
-    );
-  }
 
   private async startDockerDesktopAndWait(): Promise<boolean> {
     const launch = getDockerDesktopLaunchCommand(process.platform);
