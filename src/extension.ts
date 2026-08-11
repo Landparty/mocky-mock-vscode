@@ -25,6 +25,8 @@ import {
 } from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
+import { activateOutlineProvider } from './outline/outlineProvider';
+import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
@@ -45,6 +47,19 @@ async function fileExists(fsPath: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// onLanguage:cobol (added alongside the Outline provider) now activates the
+// extension, and therefore makes the Boundaries view reachable via
+// mockymock.cobolOpen, in a workspace with no mockymock .cut tests at all.
+// Without this check, the debounced auto-refresh below would spawn
+// `mockymock fixtures` for someone who just opened an unrelated COBOL file.
+// Explicit user actions (the Refresh command, Generate .cut) are
+// unaffected -- they call provider.refresh() directly, bypassing this
+// gate entirely (see the comment above scheduleRefresh).
+async function isCutWorkspace(): Promise<boolean> {
+  const [cutFile] = await vscode.workspace.findFiles('**/*.cut', CUT_DISCOVERY_EXCLUDE_GLOB, 1);
+  return cutFile !== undefined;
 }
 
 // InputBox validator: blank is valid (means "no fixed seed" -- omitted from
@@ -273,8 +288,10 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       if (!view.visible) return;
+      if (!(await isCutWorkspace())) return;
+      if (!view.visible) return; // re-check: the workspace scan above can outlive the panel being visible
       const activeCblPath = resolveActiveCblPath();
       const newEditorIsCobol = activeCblPath !== undefined;
       if (newEditorIsCobol) {
@@ -307,13 +324,15 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
 
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => scheduleRefresh()));
   context.subscriptions.push(
-    view.onDidChangeVisibility((e) => {
+    view.onDidChangeVisibility(async (e) => {
       // Catch-up for whatever the visibility gate above skipped while
       // hidden: only fetch when there's a real active .cbl that the
       // committed model doesn't already match -- never clears to the
       // welcome state on its own (that would break the Task 2 pinning rule
       // for a non-.cbl active editor).
       if (!e.visible) return;
+      if (!(await isCutWorkspace())) return;
+      if (!view.visible) return; // re-check: the workspace scan above can outlive the panel being visible
       const activeCblPath = resolveActiveCblPath();
       if (activeCblPath !== undefined && activeCblPath !== provider.cblPath) {
         void provider.refresh(activeCblPath);
@@ -354,8 +373,10 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       if (!provider.visible) return;
+      if (!(await isCutWorkspace())) return;
+      if (!provider.visible) return; // re-check: the workspace scan above can outlive the view being visible
       const activeCblPath = resolveActiveCblPath();
       const newEditorIsCobol = activeCblPath !== undefined;
       if (newEditorIsCobol) {
@@ -418,6 +439,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCobolViewVisibility(context);
   activateBoundariesView(context, environmentManager);
   activateParagraphTreeView(context);
+  activateOutlineProvider(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(

@@ -11,6 +11,7 @@ import {
   permissionDeniedMessageForPath,
   resolveExecutablePath,
 } from './checks';
+import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 
 export interface ReadyResult {
   ok: boolean;
@@ -27,7 +28,29 @@ export class EnvironmentManager {
     this.statusBarItem.name = 'mockymock';
     this.statusBarItem.command = 'mockymock.checkEnvironment';
     context.subscriptions.push(this.statusBarItem);
+    // Text-only, no show(): activateIfCutWorkspace() below decides whether
+    // the item is ever revealed at startup, but ensureReady() can also
+    // reveal it later (e.g. an explicit "Check Environment Status" click in
+    // a workspace with no .cut file yet) -- setting real text here up front
+    // means that later show() never exposes a blank item while the CLI/
+    // Docker probe is still in flight.
     this.setStatus('$(sync) mockymock: checking…', 'Checking for the mockymock CLI and Docker…');
+    void this.activateIfCutWorkspace();
+  }
+
+  // `onLanguage:cobol` (added alongside the Outline provider) now activates
+  // the extension for ANY opened .cbl/.cob/.cobol file, even in a workspace
+  // with no mockymock .cut tests at all -- unlike the original
+  // workspaceContains:**/*.cut activation event, which only ever fired in a
+  // real mockymock workspace. Without this check, opening a random COBOL
+  // file anywhere would show an uninvited "mockymock: checking…" status bar
+  // item and spawn a CLI --version probe. Reuses the same "does a .cut file
+  // exist anywhere in the workspace" signal the old activation event relied
+  // on, via the same CUT_DISCOVERY_EXCLUDE_GLOB testController.ts uses for
+  // its own findFiles('**/*.cut', ...) scan.
+  private async activateIfCutWorkspace(): Promise<void> {
+    const [cutFile] = await vscode.workspace.findFiles('**/*.cut', CUT_DISCOVERY_EXCLUDE_GLOB, 1);
+    if (!cutFile) return;
     this.statusBarItem.show();
     // ensureReady() (CLI install, Docker launch) only ever runs as a side
     // effect of an actual test run, so without this the "checking…" label
@@ -71,6 +94,7 @@ export class EnvironmentManager {
   }
 
   async ensureReady(): Promise<ReadyResult> {
+    this.statusBarItem.show();
     const executablePath = resolveExecutablePath(
       vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
       this.context.extensionPath

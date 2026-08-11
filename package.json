@@ -18,6 +18,7 @@
   ],
   "activationEvents": [
     "workspaceContains:**/*.cut",
+    "onLanguage:cobol",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
