@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.4...v0.8.0) (2026-08-11)
+
+
+### Features
+
+* record cobolparser version and pull its latest release in build-and-release ([40be121](https://github.com/Landparty/mocky-mock-vscode/commit/40be1213f28e4aced208b514e32dd9d07464251c))
+
+
+### Bug Fixes
+
+* hide COBOL side views until a COBOL file is open ([3e8b0e2](https://github.com/Landparty/mocky-mock-vscode/commit/3e8b0e26c7e0e431c59965d6cd68667dec683458))
+* hide COBOL side views until a COBOL file is open ([ad1b094](https://github.com/Landparty/mocky-mock-vscode/commit/ad1b0946d734a774ff6ef4b66416596dc8335f00))
+* rewrite release-notes provenance lines instead of append-if-missing ([7842e1b](https://github.com/Landparty/mocky-mock-vscode/commit/7842e1b74322b2dec8e5343c285f022fb4f66548))
+* stop filtering open-COBOL-tab check to scheme === 'file' ([d941cb8](https://github.com/Landparty/mocky-mock-vscode/commit/d941cb8729179fc573505fa4f2554973790b2da3))
+
 ## [0.7.4](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.3...v0.7.4) (2026-08-10)
 
 
