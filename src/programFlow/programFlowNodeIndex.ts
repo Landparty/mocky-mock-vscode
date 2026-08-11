@@ -22,3 +22,22 @@ export function buildLineIndex(report: ProgramFlowReport): Record<string, number
   }
   return index;
 }
+
+// Mermaid's rendered node DOM ids look like "<diagramId>-flowchart-<nodeId>-<n>"
+// -- the diagram id (the first argument passed to mermaid.render()) is
+// prepended in front of the "flowchart-" marker, not at the string start
+// (see FlowDB.lookUpDomId() in mermaid's flowDb: domId is
+// "flowchart-" + id + "-" + counter, then optionally re-prefixed with
+// "<diagramId>-" for uniqueness across multiple diagrams on one page).
+// sanitizeNodeId() above never produces a "-" inside <nodeId> (every
+// non-alphanumeric-non-underscore character, including "-", becomes "_"),
+// so the trailing "-<n>" mermaid appends is unambiguous to strip.
+//
+// Shared between the webview click handler (media/programFlow/main.ts)
+// and its regression test so the two can't drift apart.
+const MERMAID_NODE_ID_PATTERN = /flowchart-(.+)-\d+$/;
+
+export function parseMermaidNodeId(domId: string): string | undefined {
+  const match = MERMAID_NODE_ID_PATTERN.exec(domId);
+  return match ? match[1] : undefined;
+}

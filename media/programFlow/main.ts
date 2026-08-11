@@ -1,6 +1,6 @@
 // media/programFlow/main.ts
 import mermaid from 'mermaid';
-import { buildLineIndex } from '../../src/programFlow/programFlowNodeIndex';
+import { buildLineIndex, parseMermaidNodeId } from '../../src/programFlow/programFlowNodeIndex';
 import { formatSummaryLine, ProgramFlowSummary } from '../../src/programFlow/programFlowSummary';
 import type { ProgramFlowReport } from '../../src/paragraphTree/programFlowModel';
 
@@ -22,9 +22,9 @@ function themeName(): 'dark' | 'default' {
     : 'default';
 }
 
-mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', theme: themeName() });
-
 function renderEmpty(): void {
+  activePanZoomCleanup?.();
+  activePanZoomCleanup = undefined;
   root.innerHTML = `
     <div class="empty-state">
       <p>Open a .cbl file to draw its program flow.</p>
@@ -36,6 +36,8 @@ function renderEmpty(): void {
 }
 
 function renderError(message: string, hasDetail: boolean): void {
+  activePanZoomCleanup?.();
+  activePanZoomCleanup = undefined;
   root.innerHTML = `
     <div class="error-state">
       <p>${escapeHtml(message)}</p>
@@ -66,6 +68,15 @@ const LEGEND_HTML = `
 let panZoomState = { scale: 1, x: 0, y: 0 };
 let activePanZoomCleanup: (() => void) | undefined;
 
+// Recorded on every mousedown inside the pan/zoom container so the click
+// handler below can tell a real click from the native `click` a
+// drag-to-pan gesture also fires on mouseup. `undefined` means "we never
+// saw a mousedown before this click" -- treat that as a real click (fail
+// open) rather than silently eating it, since a missed mousedown must
+// never re-kill click-to-reveal.
+let pointerDownAt: { x: number; y: number } | undefined;
+const DRAG_CLICK_THRESHOLD_PX = 5;
+
 function attachPanZoom(container: HTMLElement, svgWrapper: HTMLElement): void {
   activePanZoomCleanup?.();
 
@@ -84,6 +95,7 @@ function attachPanZoom(container: HTMLElement, svgWrapper: HTMLElement): void {
   const onMouseDown = (e: MouseEvent) => {
     dragging = true;
     last = { x: e.clientX, y: e.clientY };
+    pointerDownAt = { x: e.clientX, y: e.clientY };
   };
   const onMouseUp = () => { dragging = false; };
   const onMouseMove = (e: MouseEvent) => {
@@ -107,7 +119,17 @@ function attachPanZoom(container: HTMLElement, svgWrapper: HTMLElement): void {
   };
 }
 
+// Guards against two `diagram` messages arriving in quick succession (e.g.
+// rapid refresh-command clicks) starting overlapping mermaid.render() calls
+// against the same fixed element id, which could resolve out of order.
+// Every render increments the token and captures its own value; only the
+// render whose captured token still matches the (module-level) current
+// token when its render() promise resolves is allowed to touch the DOM.
+let renderToken = 0;
+
 async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowReport; summary: ProgramFlowSummary; programName: string }): Promise<void> {
+  const token = ++renderToken;
+
   root.innerHTML = `
     <div class="header">PROGRAM FLOW — ${escapeHtml(msg.programName)}</div>
     <div class="subtitle">${escapeHtml(formatSummaryLine(msg.summary))}</div>
@@ -119,25 +141,40 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
   const container = document.getElementById('diagram-container')!;
   const panEl = document.getElementById('diagram-pan')!;
 
+  // Recomputed on every render (not once at module load) so a live VS Code
+  // light/dark theme toggle re-themes the next diagram -- the webview panel
+  // uses retainContextWhenHidden: true, so this module is essentially never
+  // reloaded within a session.
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', theme: themeName() });
+
+  let svg: string;
   try {
-    const { svg } = await mermaid.render('program-flow-svg', msg.mermaidText);
-    panEl.innerHTML = svg;
+    ({ svg } = await mermaid.render('program-flow-svg', msg.mermaidText));
   } catch (err) {
+    if (token !== renderToken) return; // superseded by a newer render; discard silently
     renderError(`Mermaid could not render this diagram: ${err instanceof Error ? err.message : String(err)}`, false);
     return;
   }
 
+  if (token !== renderToken) return; // superseded by a newer render; discard silently
+
+  panEl.innerHTML = svg;
   attachPanZoom(container, panEl);
 
   const lineIndex = buildLineIndex(msg.report);
 
   panEl.addEventListener('click', (e) => {
-    const target = (e.target as Element).closest('[id^="flowchart-"]');
+    if (pointerDownAt) {
+      const dx = Math.abs(e.clientX - pointerDownAt.x);
+      const dy = Math.abs(e.clientY - pointerDownAt.y);
+      if (dx > DRAG_CLICK_THRESHOLD_PX || dy > DRAG_CLICK_THRESHOLD_PX) {
+        return; // this click terminated a drag-to-pan gesture, not a real click
+      }
+    }
+    const target = (e.target as Element).closest('.node[id]');
     if (!target || !target.id) return;
-    // Mermaid's flowchart node ids are "flowchart-<nodeId>-<n>" -- strip
-    // both the fixed prefix and the trailing "-<n>" mermaid appends.
-    const withoutPrefix = target.id.replace(/^flowchart-/, '');
-    const nodeId = withoutPrefix.replace(/-\d+$/, '');
+    const nodeId = parseMermaidNodeId(target.id);
+    if (nodeId === undefined) return;
     const line = lineIndex[nodeId];
     if (line !== undefined) {
       vscode.postMessage({ type: 'reveal', line });
