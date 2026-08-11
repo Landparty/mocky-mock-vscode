@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.9.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.8.0...v0.9.0) (2026-08-11)
+
+
+### Features
+
+* add COBOL outline model (DIVISION/SECTION/paragraph/data-item scan) ([a020cd8](https://github.com/Landparty/mocky-mock-vscode/commit/a020cd8e7347853e6375c25e8064e4890e8c1b28))
+* add copybook detection heuristic ([b637a13](https://github.com/Landparty/mocky-mock-vscode/commit/b637a13f8170ae32bd68c62abb7d91d39c1220a5))
+* add Generate Data from Copybook command to editor title bar ([01c78ec](https://github.com/Landparty/mocky-mock-vscode/commit/01c78ec46166fb62dedbe305bd294c5dc0d663bd))
+* add generate-data CLI runner ([d29a517](https://github.com/Landparty/mocky-mock-vscode/commit/d29a517485c0b68eb7a61f8e3bb5cbb1d7202709))
+* register COBOL DocumentSymbolProvider for the Outline panel/breadcrumbs ([d7b9131](https://github.com/Landparty/mocky-mock-vscode/commit/d7b9131caa04b6cc3163c658b00e3cb2fc6d52fe))
+* register Generate Data from Copybook command ([1c30770](https://github.com/Landparty/mocky-mock-vscode/commit/1c30770c82855e0f42f995489378811fa67a53b5))
+
+
+### Bug Fixes
+
+* activate extension for COBOL-only workspaces without spamming the status bar ([c5d655d](https://github.com/Landparty/mocky-mock-vscode/commit/c5d655d1aca5ec872d2432fa54fc138b0faca367))
+* address Copilot PR review comments ([a037207](https://github.com/Landparty/mocky-mock-vscode/commit/a037207124cf9bfbad6dfe071876af24c76d2ef1))
+* address final review findings (cpy activation, gen-data capability probe, context-key drift test, palette guard) ([5f4f378](https://github.com/Landparty/mocky-mock-vscode/commit/5f4f378057613ad02a0ae89bd0f62f4aa4533861))
+* extend outline paragraph exclusions and harden resolveProgramName ([7093de4](https://github.com/Landparty/mocky-mock-vscode/commit/7093de47ba424f27977c4e9cde733b2afc679e30))
+* recognize floating *&gt; comments and ID DIVISION abbreviation in outline ([5c81cb4](https://github.com/Landparty/mocky-mock-vscode/commit/5c81cb4b2e76556824496e59382a8de3d15bc97e))
+
 ## [0.8.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.7.4...v0.8.0) (2026-08-11)
 
 
