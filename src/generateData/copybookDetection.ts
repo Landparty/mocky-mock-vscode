@@ -21,8 +21,38 @@ export function looksLikeCobolCandidate(fsPath: string, languageId?: string): bo
 // program using it still declares a PROGRAM-ID.
 const PROGRAM_MARKER_PATTERN = /\b(IDENTIFICATION\s+DIVISION|PROGRAM-ID)\b/i;
 
+// Strips the two comment forms this heuristic can cheaply recognize without
+// a real fixed-format preprocessor, so a comment merely mentioning
+// "PROGRAM-ID" (e.g. "*> no PROGRAM-ID is defined") doesn't get read as an
+// actual header statement:
+//   - free-format trailing comments: "*>" to end of line, wherever it
+//     appears on the line
+//   - whole-line comments: any line whose first non-blank character is "*"
+//     (covers the common free-format full-line convention, and fixed-format
+//     lines that happen to have no sequence-number prefix before column 7)
+// This is intentionally bounded, not a full parser: a fixed-format file
+// that still carries a sequence-number prefix in columns 1-6 puts its
+// comment indicator past column 7, past this function's "first non-blank
+// character" check, and a string/figurative-literal mentioning
+// "PROGRAM-ID" (e.g. MOVE "PROGRAM-ID" TO WS-FIELD) is not stripped either.
+// Both are accepted, rarer gaps in an already-approximate sniff -- normalizing
+// fixed-format columns or tokenizing string literals is cobolparser's job,
+// not this lightweight editor-side gate's.
+function stripCommentsForDetection(text: string): string {
+  return text
+    .split('\n')
+    .map((line) => {
+      if (line.trimStart().startsWith('*')) {
+        return '';
+      }
+      const inlineCommentIndex = line.indexOf('*>');
+      return inlineCommentIndex === -1 ? line : line.slice(0, inlineCommentIndex);
+    })
+    .join('\n');
+}
+
 export function looksLikeCopybook(text: string): boolean {
-  return !PROGRAM_MARKER_PATTERN.test(text);
+  return !PROGRAM_MARKER_PATTERN.test(stripCommentsForDetection(text));
 }
 
 // package.json's `contributes.menus.editor/title[].when` reads this exact

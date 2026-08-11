@@ -80,6 +80,21 @@ export function activateGenerateDataCommand(context: vscode.ExtensionContext): v
         );
         return;
       }
+      // The copybook guard above (and the icon's own visibility) reads the
+      // in-memory buffer via document.getText(), but the CLI below reads
+      // the file from disk via fsPath -- for a dirty (unsaved) editor those
+      // two can disagree, silently generating data for a stale record
+      // layout with no indication anything was wrong. Reject rather than
+      // guess: no implicit save (that would change disk contents the user
+      // never asked to persist) and no temp-file detour (would need its own
+      // cleanup and still wouldn't match what the user thinks they're
+      // generating from).
+      if (editor.document.isDirty) {
+        vscode.window.showErrorMessage(
+          'mockymock: save this copybook before generating data -- unsaved changes would not be reflected.'
+        );
+        return;
+      }
       const activePath = editor.document.uri.fsPath;
 
       const config = vscode.workspace.getConfiguration('mockymock', editor.document.uri);

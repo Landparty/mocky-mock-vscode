@@ -67,4 +67,30 @@ describe('looksLikeCopybook', () => {
   it('returns true for empty text', () => {
     assert.strictEqual(looksLikeCopybook(''), true);
   });
+
+  it('ignores a free-format trailing comment mentioning PROGRAM-ID', () => {
+    const source = `
+       01  CUSTOMER-RECORD.
+           05  CUST-ID       PIC 9(6).   *> no PROGRAM-ID is defined
+`;
+    assert.strictEqual(looksLikeCopybook(source), true);
+  });
+
+  it('ignores a whole-line comment mentioning IDENTIFICATION DIVISION', () => {
+    const source = `
+      *> Note: this copybook has no IDENTIFICATION DIVISION of its own.
+       01  CUSTOMER-RECORD.
+           05  CUST-ID       PIC 9(6).
+`;
+    assert.strictEqual(looksLikeCopybook(source), true);
+  });
+
+  it('still flags a real header even when a decoy comment precedes it', () => {
+    const source = `
+      *> PROGRAM-ID mentioned here first, in a comment
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. PROG1.
+`;
+    assert.strictEqual(looksLikeCopybook(source), false);
+  });
 });
