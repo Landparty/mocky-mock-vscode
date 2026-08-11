@@ -19,6 +19,7 @@ import { BundleError } from './boundaries/bundleClient';
 import { shouldClearOnEditorChange } from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
+import { ProgramFlowViewProvider } from './programFlow/programFlowViewProvider';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
@@ -357,6 +358,48 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
   );
 }
 
+function activateProgramFlowView(context: vscode.ExtensionContext): void {
+  const provider = new ProgramFlowViewProvider(context);
+
+  let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleRefresh(): void {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      if (!provider.visible) return;
+      const activeCblPath = resolveActiveCblPath();
+      const newEditorIsCobol = activeCblPath !== undefined;
+      if (newEditorIsCobol) {
+        if (activeCblPath !== provider.cblPath) {
+          void provider.refresh(activeCblPath);
+        }
+      } else if (shouldClearOnEditorChange(provider.cblPath !== undefined, newEditorIsCobol)) {
+        void provider.refresh(undefined);
+      }
+    }, TREE_VIEW_REFRESH_DEBOUNCE_MS);
+  }
+  context.subscriptions.push({
+    dispose: () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+    },
+  });
+
+  provider.onVisible = scheduleRefresh;
+
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider('mockymock.programFlow', provider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    })
+  );
+
+  context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => scheduleRefresh()));
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mockymock.programFlow.refresh', () => {
+      void provider.refresh(resolveActiveCblPath());
+    })
+  );
+}
+
 export function activate(context: vscode.ExtensionContext) {
   // Best-effort, macOS-only, fire-and-forget -- see macSelfHeal.ts for why
   // this exists (Gatekeeper). Deliberately NOT awaited: activate() must
@@ -375,6 +418,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateAnalyzeCobolCommand(context);
   activateBoundariesView(context, environmentManager);
   activateParagraphTreeView(context);
+  activateProgramFlowView(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(

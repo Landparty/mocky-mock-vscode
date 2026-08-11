@@ -60,6 +60,12 @@
         "title": "Refresh Paragraph Tree",
         "category": "mockymock",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "mockymock.programFlow.refresh",
+        "title": "Refresh Program Flow",
+        "category": "mockymock",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -74,6 +80,12 @@
           "name": "Paragraph Tree",
           "type": "webview",
           "icon": "$(list-tree)"
+        },
+        {
+          "id": "mockymock.programFlow",
+          "name": "Program Flow",
+          "type": "webview",
+          "icon": "$(type-hierarchy-sub)"
         }
       ]
     },
@@ -103,6 +115,11 @@
         {
           "command": "mockymock.paragraphTree.refresh",
           "when": "view == mockymock.paragraphTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.programFlow.refresh",
+          "when": "view == mockymock.programFlow",
           "group": "navigation@1"
         }
       ]
@@ -200,7 +217,7 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree",
+    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree && tsc --noEmit -p ./media/programFlow",
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",
@@ -219,6 +236,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.3.4"
+    "fast-xml-parser": "^4.3.4",
+    "mermaid": "^11.16.1"
   }
 }
