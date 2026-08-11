@@ -311,15 +311,16 @@ jobs:
           [ "$BODY" = "null" ] && BODY=""
           LINE1="Built from mocky-mock ${MOCKYMOCK_TAG}."
           LINE2="Uses cobol-parser ${COBOLPARSER_TAG} (latest release, overriding mocky-mock's pin)."
-          CHANGED=0
-          for LINE in "$LINE1" "$LINE2"; do
-            if [ "${BODY#*"$LINE"}" = "$BODY" ]; then
-              BODY="$(printf '%s\n\n%s\n' "$BODY" "$LINE")"
-              CHANGED=1
-            fi
-          done
-          if [ "$CHANGED" = "1" ]; then
-            printf '%s' "$BODY" | gh release edit "$TAG" --notes-file -
+          # Strip any provenance lines a prior dispatch of this same release
+          # already recorded before re-adding the current ones. mocky-mock or
+          # cobol-parser can cut a new release between re-dispatches (e.g. a
+          # re-run to fix a bad build), so appending only when the exact line
+          # is missing would leave the old (now-wrong) tag recorded alongside
+          # the new one -- always rewrite instead of conditionally appending.
+          STRIPPED="$(printf '%s\n' "$BODY" | grep -Ev '^Built from mocky-mock |^Uses cobol-parser ' | awk 'NF{blank=0} !NF{blank++} blank<2')"
+          NEW_BODY="$(printf '%s\n\n%s\n%s' "$STRIPPED" "$LINE1" "$LINE2")"
+          if [ "$NEW_BODY" != "$BODY" ]; then
+            printf '%s' "$NEW_BODY" | gh release edit "$TAG" --notes-file -
           fi
 
   publish-marketplace:
