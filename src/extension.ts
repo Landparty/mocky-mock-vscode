@@ -290,6 +290,7 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
     refreshTimer = setTimeout(async () => {
       if (!view.visible) return;
       if (!(await isCutWorkspace())) return;
+      if (!view.visible) return; // re-check: the workspace scan above can outlive the panel being visible
       const activeCblPath = resolveActiveCblPath();
       const newEditorIsCobol = activeCblPath !== undefined;
       if (newEditorIsCobol) {
@@ -330,6 +331,7 @@ function activateBoundariesView(context: vscode.ExtensionContext, environmentMan
       // for a non-.cbl active editor).
       if (!e.visible) return;
       if (!(await isCutWorkspace())) return;
+      if (!view.visible) return; // re-check: the workspace scan above can outlive the panel being visible
       const activeCblPath = resolveActiveCblPath();
       if (activeCblPath !== undefined && activeCblPath !== provider.cblPath) {
         void provider.refresh(activeCblPath);
