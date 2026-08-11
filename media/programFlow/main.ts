@@ -64,32 +64,47 @@ const LEGEND_HTML = `
   </div>`;
 
 let panZoomState = { scale: 1, x: 0, y: 0 };
+let activePanZoomCleanup: (() => void) | undefined;
 
 function attachPanZoom(container: HTMLElement, svgWrapper: HTMLElement): void {
+  activePanZoomCleanup?.();
+
   panZoomState = { scale: 1, x: 0, y: 0 };
   const apply = () => {
     svgWrapper.style.transform = `translate(${panZoomState.x}px, ${panZoomState.y}px) scale(${panZoomState.scale})`;
   };
-  container.addEventListener('wheel', (e) => {
+  const onWheel = (e: WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? 0.9 : 1.1;
     panZoomState.scale = Math.min(4, Math.max(0.2, panZoomState.scale * delta));
     apply();
-  }, { passive: false });
+  };
   let dragging = false;
   let last = { x: 0, y: 0 };
-  container.addEventListener('mousedown', (e) => {
+  const onMouseDown = (e: MouseEvent) => {
     dragging = true;
     last = { x: e.clientX, y: e.clientY };
-  });
-  window.addEventListener('mouseup', () => { dragging = false; });
-  window.addEventListener('mousemove', (e) => {
+  };
+  const onMouseUp = () => { dragging = false; };
+  const onMouseMove = (e: MouseEvent) => {
     if (!dragging) return;
     panZoomState.x += e.clientX - last.x;
     panZoomState.y += e.clientY - last.y;
     last = { x: e.clientX, y: e.clientY };
     apply();
-  });
+  };
+
+  container.addEventListener('wheel', onWheel, { passive: false });
+  container.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mouseup', onMouseUp);
+  window.addEventListener('mousemove', onMouseMove);
+
+  activePanZoomCleanup = () => {
+    container.removeEventListener('wheel', onWheel);
+    container.removeEventListener('mousedown', onMouseDown);
+    window.removeEventListener('mouseup', onMouseUp);
+    window.removeEventListener('mousemove', onMouseMove);
+  };
 }
 
 async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowReport; summary: ProgramFlowSummary; programName: string }): Promise<void> {
