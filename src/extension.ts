@@ -197,18 +197,25 @@ async function runGenerateCutCommand(
   }
 }
 
-// Every currently-open editor tab's file path, across all groups -- used
-// (only) to decide whether any of them is COBOL, not to pick which one to
-// show (that's resolveActiveCblPath's job). tabGroups over
-// workspace.textDocuments deliberately: the latter also lists documents
-// opened programmatically without ever being shown in a tab, which would
-// report COBOL as "open" when nothing visible actually is.
+// Every currently-open editor tab's path, across all groups -- used (only)
+// to decide whether any of them is COBOL, not to pick which one to show
+// (that's resolveActiveCblPath's job). tabGroups over workspace.textDocuments
+// deliberately: the latter also lists documents opened programmatically
+// without ever being shown in a tab, which would report COBOL as "open" when
+// nothing visible actually is.
+//
+// Unlike resolveActiveCblPath (which needs a real local `fsPath` to invoke
+// the CLI on), this does NOT filter to scheme === 'file': isCobolPath only
+// inspects the trailing extension, so `.path` works the same for a
+// vscode-remote or virtual-filesystem tab as for a local one. Filtering to
+// 'file' here would leave the views permanently hidden in Remote/virtual-FS
+// workspaces even with a COBOL file open, defeating the point of this gate.
 function openTabPaths(): string[] {
   const paths: string[] = [];
   for (const group of vscode.window.tabGroups.all) {
     for (const tab of group.tabs) {
-      if (tab.input instanceof vscode.TabInputText && tab.input.uri.scheme === 'file') {
-        paths.push(tab.input.uri.fsPath);
+      if (tab.input instanceof vscode.TabInputText) {
+        paths.push(tab.input.uri.path);
       }
     }
   }
