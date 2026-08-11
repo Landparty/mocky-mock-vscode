@@ -16,17 +16,17 @@ import { BoundariesTreeProvider, BoundaryTreeNode } from './boundaries/boundarie
 import { placeholderArgs } from './boundaries/boundariesModel';
 import { runGenerate, resolveOutPath, GenerateOptions, GenerateResult } from './boundaries/generateCut';
 import { BundleError } from './boundaries/bundleClient';
-import { shouldClearOnEditorChange } from './boundaries/viewRefreshPolicy';
+import {
+  COBOL_VIEWS_CONTEXT_KEY,
+  hasCobolTabOpen,
+  isCobolPath,
+  shouldClearOnEditorChange,
+} from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
-
-function isCobolPath(fsPath: string): boolean {
-  const lower = fsPath.toLowerCase();
-  return lower.endsWith('.cbl') || lower.endsWith('.cob') || lower.endsWith('.cobol');
-}
 
 // Active editor -> the .cbl path the Boundaries and Paragraph Tree views
 // should show, or undefined (welcome/empty state) for anything else -- a
@@ -195,6 +195,46 @@ async function runGenerateCutCommand(
       `mockymock generate: seed ${result.seed} (enter it in the seed prompt to replay this run).`
     );
   }
+}
+
+// Every currently-open editor tab's path, across all groups -- used (only)
+// to decide whether any of them is COBOL, not to pick which one to show
+// (that's resolveActiveCblPath's job). tabGroups over workspace.textDocuments
+// deliberately: the latter also lists documents opened programmatically
+// without ever being shown in a tab, which would report COBOL as "open" when
+// nothing visible actually is.
+//
+// Unlike resolveActiveCblPath (which needs a real local `fsPath` to invoke
+// the CLI on), this does NOT filter to scheme === 'file': isCobolPath only
+// inspects the trailing extension, so `.path` works the same for a
+// vscode-remote or virtual-filesystem tab as for a local one. Filtering to
+// 'file' here would leave the views permanently hidden in Remote/virtual-FS
+// workspaces even with a COBOL file open, defeating the point of this gate.
+function openTabPaths(): string[] {
+  const paths: string[] = [];
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText) {
+        paths.push(tab.input.uri.path);
+      }
+    }
+  }
+  return paths;
+}
+
+// Gates package.json's `when": "mockymock.cobolOpen"` on both side views:
+// they should exist in the Explorer only while some COBOL tab is open, and
+// disappear again once the last one closes (see hasCobolTabOpen's doc
+// comment for why this is a live check, not a latch). onDidChangeTabs
+// covers open/close/move of tabs, which is exactly the set this recomputes
+// from -- switching focus between already-open tabs doesn't change that set,
+// so no separate onDidChangeActiveTextEditor listener is needed here.
+function activateCobolViewVisibility(context: vscode.ExtensionContext): void {
+  function update(): void {
+    void vscode.commands.executeCommand('setContext', COBOL_VIEWS_CONTEXT_KEY, hasCobolTabOpen(openTabPaths()));
+  }
+  update();
+  context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(update));
 }
 
 function activateBoundariesView(context: vscode.ExtensionContext, environmentManager: EnvironmentManager): void {
@@ -373,6 +413,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateLintDiagnostics(context);
   activateExportMainframeCommand(context);
   activateAnalyzeCobolCommand(context);
+  activateCobolViewVisibility(context);
   activateBoundariesView(context, environmentManager);
   activateParagraphTreeView(context);
 

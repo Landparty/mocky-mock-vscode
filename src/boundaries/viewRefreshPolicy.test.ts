@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { shouldClearOnEditorChange } from './viewRefreshPolicy';
+import { hasCobolTabOpen, isCobolPath, shouldClearOnEditorChange } from './viewRefreshPolicy';
 
 describe('shouldClearOnEditorChange', () => {
   it('never clears when the new active editor is a .cbl/.cob (that path is handled by fetching)', () => {
@@ -22,5 +22,33 @@ describe('shouldClearOnEditorChange', () => {
     // undefined) on modelGuard, so "hasModel" is false here too -- same
     // branch as "never loaded", by design.
     assert.strictEqual(shouldClearOnEditorChange(false, false), true);
+  });
+});
+
+describe('isCobolPath', () => {
+  it('accepts .cbl, .cob, and .cobol, case-insensitively', () => {
+    assert.ok(isCobolPath('/repo/FOO.cbl'));
+    assert.ok(isCobolPath('/repo/foo.COB'));
+    assert.ok(isCobolPath('/repo/foo.Cobol'));
+  });
+
+  it('rejects everything else, including the paired .cut', () => {
+    assert.strictEqual(isCobolPath('/repo/foo.cut'), false);
+    assert.strictEqual(isCobolPath('/repo/README.md'), false);
+  });
+});
+
+describe('hasCobolTabOpen', () => {
+  it('is false with no open tabs', () => {
+    assert.strictEqual(hasCobolTabOpen([]), false);
+  });
+
+  it('is false when open tabs are all non-COBOL', () => {
+    assert.strictEqual(hasCobolTabOpen(['/repo/foo.cut', '/repo/README.md']), false);
+  });
+
+  it('is true when at least one open tab is COBOL, regardless of position', () => {
+    assert.strictEqual(hasCobolTabOpen(['/repo/foo.cbl']), true);
+    assert.strictEqual(hasCobolTabOpen(['/repo/README.md', '/repo/foo.cbl', '/repo/foo.cut']), true);
   });
 });
