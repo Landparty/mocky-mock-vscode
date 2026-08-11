@@ -24,6 +24,7 @@ import {
 } from './boundaries/viewRefreshPolicy';
 import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
+import { activateOutlineProvider } from './outline/outlineProvider';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
@@ -416,6 +417,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCobolViewVisibility(context);
   activateBoundariesView(context, environmentManager);
   activateParagraphTreeView(context);
+  activateOutlineProvider(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
