@@ -3,24 +3,24 @@ import { fetchProgramFlow, ProgramFlowFetchError } from './programFlowClient';
 import { CommandRunner } from '../environment/commandRunner';
 
 describe('fetchProgramFlow', () => {
-  it('invokes mockymock analyze program-flow and parses the JSON report', async () => {
+  it('invokes mockymock analyze program-flow without --copybook-path, so reported lines stay relative to the on-disk file', async () => {
     const fakeRun: CommandRunner = async (cmd, args) => {
       assert.equal(cmd, 'mockymock');
-      assert.deepEqual(args, ['analyze', 'program-flow', '/p/PROG.cbl', '--compact', '--copybook-path', '/copy']);
+      assert.deepEqual(args, ['analyze', 'program-flow', '/p/PROG.cbl', '--compact']);
       return {
         code: 0,
         stdout: '{"program_name":"PROG","nodes":[],"edges":[],"entry_points":[],"unreachable_nodes":[]}',
         stderr: '',
       };
     };
-    const report = await fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl', ['/copy']);
+    const report = await fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl');
     assert.equal(report.program_name, 'PROG');
   });
 
   it('throws ProgramFlowFetchError with stderr on nonzero exit', async () => {
     const fakeRun: CommandRunner = async () => ({ code: 1, stdout: '', stderr: 'error: File not found\nmore detail\n' });
     await assert.rejects(
-      () => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl', []),
+      () => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl'),
       (err: unknown) => {
         assert.ok(err instanceof ProgramFlowFetchError);
         assert.equal(err.message, 'error: File not found');
@@ -32,11 +32,11 @@ describe('fetchProgramFlow', () => {
 
   it('throws ProgramFlowFetchError on invalid JSON', async () => {
     const fakeRun: CommandRunner = async () => ({ code: 0, stdout: 'not json', stderr: '' });
-    await assert.rejects(() => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl', []), ProgramFlowFetchError);
+    await assert.rejects(() => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl'), ProgramFlowFetchError);
   });
 
   it('throws ProgramFlowFetchError when required arrays are missing', async () => {
     const fakeRun: CommandRunner = async () => ({ code: 0, stdout: '{"program_name":"PROG"}', stderr: '' });
-    await assert.rejects(() => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl', []), ProgramFlowFetchError);
+    await assert.rejects(() => fetchProgramFlow(fakeRun, 'mockymock', '/p/PROG.cbl'), ProgramFlowFetchError);
   });
 });

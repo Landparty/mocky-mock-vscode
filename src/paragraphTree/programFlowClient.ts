@@ -13,10 +13,15 @@ export class ProgramFlowFetchError extends Error {
 export async function fetchProgramFlow(
   run: CommandRunner,
   executablePath: string,
-  cblPath: string,
-  copybookPaths: string[]
+  cblPath: string
 ): Promise<ProgramFlowReport> {
-  const result = await runAnalyze(executablePath, 'program-flow', cblPath, copybookPaths, run);
+  // Deliberately never pass --copybook-path here. program-flow only reports
+  // PROCEDURE DIVISION structure (paragraphs/PERFORM/GO TO/CALL edges), which
+  // doesn't need DATA DIVISION field resolution -- but cobolparser's
+  // SourceLocation.line values are relative to the copybook-*expanded* text,
+  // not the file on disk. Expanding would shift every reported line number
+  // by however many lines the copybooks add, breaking click-to-navigate.
+  const result = await runAnalyze(executablePath, 'program-flow', cblPath, [], run);
   if (result.exitCode !== 0) {
     throw new ProgramFlowFetchError(
       firstNonEmptyLine(result.stderr) ?? 'mockymock analyze program-flow failed',

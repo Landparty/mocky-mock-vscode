@@ -177,7 +177,7 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
     let nextSourceLines: string[] | undefined;
     try {
       const uri = vscode.Uri.file(cblPath);
-      const { executablePath, copybookPaths } = resolveInvocationConfig(this.context, uri);
+      const { executablePath } = resolveInvocationConfig(this.context, uri);
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
@@ -190,7 +190,7 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
         );
       }
 
-      const report = await fetchProgramFlow(runCommand, executablePath, cblPath, copybookPaths);
+      const report = await fetchProgramFlow(runCommand, executablePath, cblPath);
       const doc = await vscode.workspace.openTextDocument(cblPath);
       nextSourceLines = doc.getText().split(/\r?\n/);
       nextModel = buildParagraphTree(report, nextSourceLines);
