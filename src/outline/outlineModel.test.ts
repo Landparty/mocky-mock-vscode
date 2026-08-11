@@ -206,4 +206,31 @@ describe('buildOutline', () => {
     assert.equal(roots.length, 1);
     assert.equal(roots[0].startLine, 2);
   });
+
+  it('excludes structural reserved words (END-EXEC, DECLARATIVES, etc.) from paragraph detection', () => {
+    const lines = [
+      `${AREA_A}IDENTIFICATION DIVISION.`,
+      `${AREA_A}PROGRAM-ID. DEMO.`,
+      `${AREA_A}PROCEDURE DIVISION.`,
+      `${AREA_A}MAIN-PARA.`,
+      `${AREA_A}END-EXEC.`,
+      `${AREA_A}EJECT.`,
+    ];
+
+    const roots = buildOutline(lines);
+    const proc = roots[1];
+    assert.equal(proc.children.length, 1);
+    assert.equal(proc.children[0].name, 'MAIN-PARA');
+  });
+
+  it('fails soft when the resolved PROGRAM-ID name is actually a reserved word, not a real name', () => {
+    const lines = [
+      `${AREA_A}IDENTIFICATION DIVISION.`,
+      `${AREA_A}PROGRAM-ID.`,
+      `${AREA_A}AUTHOR. J-DOE.`,
+    ];
+
+    const roots = buildOutline(lines);
+    assert.equal(roots[0].children.length, 0);
+  });
 });

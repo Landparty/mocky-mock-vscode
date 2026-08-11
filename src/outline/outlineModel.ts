@@ -15,6 +15,21 @@
 // with columns 1-6 left blank -- unlike syntaxes/cobol.tmLanguage.json's
 // `^\s*`-anchored grammar rules, which require purely-whitespace lead-in
 // and so never match a sequence-numbered line at all.
+//
+// Tab-indented source is not recognized: a tab character at column 7 is not
+// treated as the fixed-format indicator area, and columns don't line up the
+// way they would with real space-padding. This is an accepted limitation of
+// the column model, not a bug -- it degrades gracefully to an empty/partial
+// outline, never throws. Note this means outline and TextMate-grammar syntax
+// highlighting can disagree on such a file, since the grammar's `^\s*`-
+// anchored rules don't require literal spaces the way this column model does.
+//
+// Built-in DATA/ENVIRONMENT DIVISION section names (WORKING-STORAGE SECTION,
+// etc.) are deliberately normalized to uppercase in the emitted symbol name,
+// since they're fixed reserved words with one canonical form. User-defined
+// PROCEDURE DIVISION section names are deliberately left in the source's
+// original casing, since normalizing a user's own identifier would be wrong.
+// This asymmetry is intentional, not an inconsistency to fix.
 
 export type OutlineNodeKind = 'division' | 'programId' | 'section' | 'dataItem' | 'paragraph';
 
@@ -51,7 +66,8 @@ const PARAGRAPH_EXCLUSIONS = new Set([
   'FILE-CONTROL', 'I-O-CONTROL', 'CONTINUE', 'EXIT', 'GOBACK',
   'END-ADD', 'END-CALL', 'END-COMPUTE', 'END-DELETE', 'END-DIVIDE', 'END-EVALUATE', 'END-IF',
   'END-MULTIPLY', 'END-PERFORM', 'END-READ', 'END-RETURN', 'END-REWRITE', 'END-SEARCH', 'END-START',
-  'END-STRING', 'END-SUBTRACT', 'END-UNSTRING', 'END-WRITE',
+  'END-STRING', 'END-SUBTRACT', 'END-UNSTRING', 'END-WRITE', 'END-EXEC',
+  'EJECT', 'SKIP1', 'SKIP2', 'SKIP3', 'TITLE', 'DECLARATIVES',
 ]);
 
 interface ScannedLine {
@@ -95,7 +111,8 @@ function resolveProgramName(scanned: ScannedLine[], programIdIndex: number): str
     if (candidate.isBlank) continue;
     if (DIVISION_RE.test(candidate.trimmed)) return undefined;
     const match = PROGRAM_NAME_TOKEN_RE.exec(candidate.trimmed);
-    return match ? match[1] : undefined;
+    if (!match) return undefined;
+    return PARAGRAPH_EXCLUSIONS.has(match[1].toUpperCase()) ? undefined : match[1];
   }
   return undefined;
 }
