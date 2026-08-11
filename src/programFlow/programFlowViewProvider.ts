@@ -162,7 +162,7 @@ export class ProgramFlowViewProvider implements vscode.WebviewViewProvider {
       }
 
       const [report, mermaidText] = await Promise.all([
-        fetchProgramFlow(runCommand, executablePath, cblPath, copybookPaths),
+        fetchProgramFlow(runCommand, executablePath, cblPath),
         fetchProgramFlowMermaid(runCommand, executablePath, cblPath, copybookPaths),
       ]);
       nextModel = { mermaidText, report };

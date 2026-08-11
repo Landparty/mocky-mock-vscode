@@ -1,10 +1,12 @@
 name: build-and-release
 
 # Manually-triggered only. Pulls mocky-mock's source (private repo, latest
-# release tag) and this repo's own source, builds the 4 Nuitka mockymock
-# executables from scratch, packages them into the 4 platform-specific
-# vsix files, attaches them to a GitHub Release on this repo, and
-# optionally publishes to the VS Code Marketplace -- all in one dispatch.
+# release tag), then force-installs cobol-parser's own latest release on top
+# (overriding mocky-mock's pinned commit -- see the "resolve" job), and this
+# repo's own source, builds the 4 Nuitka mockymock executables from scratch,
+# packages them into the 4 platform-specific vsix files, attaches them to a
+# GitHub Release on this repo, and optionally publishes to the VS Code
+# Marketplace -- all in one dispatch.
 # Replaces the old three-piece pipeline (mocky-mock's build-executables.yml
 # + publish-public.yml relaying through the public cobol-mocky-mock repo,
 # plus this repo's old release.yml pulling a pinned version from it).
@@ -30,6 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       mockymock_tag: ${{ steps.tag.outputs.tag }}
+      cobolparser_tag: ${{ steps.cobolparser_tag.outputs.tag }}
     steps:
       - name: Resolve mocky-mock's latest release tag
         id: tag
@@ -42,6 +45,22 @@ jobs:
           TAG="$(gh release view --repo Landparty/mocky-mock --json tagName -q .tagName)"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
             || { echo "::error::mocky-mock's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # mockymock-src/pyproject.toml pins cobolparser to a specific tested
+      # commit, not to its latest release -- deliberately, per that file's
+      # own comments (bumped only after confirming compatibility). We
+      # override that pin below with cobolparser's latest release tag so
+      # every vsix ships the newest parser fixes; this is an untested
+      # pairing mocky-mock's own suite never ran against, chosen anyway.
+      - name: Resolve cobol-parser's latest release tag
+        id: cobolparser_tag
+        env:
+          GH_TOKEN: ${{ secrets.VSCE_PAT }}
+        run: |
+          TAG="$(gh release view --repo Landparty/cobol-parser --json tagName -q .tagName)"
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+            || { echo "::error::cobol-parser's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
   build-cli:
@@ -95,6 +114,20 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y patchelf
       - name: Install mockymock (pulls in the pinned cobolparser dependency)
         run: pip install ./mockymock-src
+      # See the "Resolve cobol-parser's latest release tag" step in the
+      # resolve job: deliberately overrides the pin above with cobol-parser's
+      # newest release. --no-deps because cobolparser declares no runtime
+      # dependencies of its own (a resolve here could only ever remove or
+      # duplicate what mockymock-src's install already resolved). The
+      # version print afterward is the only signal that the override
+      # actually took effect -- if a future pinned commit and the latest
+      # tag ever report the same pyproject.toml version, --force-reinstall
+      # succeeding is not proof the code changed, only this printed line is.
+      - name: Force-install cobol-parser's latest release, overriding mocky-mock's pin
+        shell: bash
+        run: |
+          pip install --no-deps --force-reinstall "cobolparser @ git+https://github.com/Landparty/cobol-parser.git@${{ needs.resolve.outputs.cobolparser_tag }}"
+          python -c "import importlib.metadata as m; print('Installed cobolparser version:', m.version('cobolparser'))"
       - name: Install Nuitka
         run: pip install nuitka
       - name: Build onefile executable
@@ -267,17 +300,27 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
-      - name: Record the mocky-mock CLI tag this vsix was built from
+      - name: Record the mocky-mock CLI tag and cobol-parser release this vsix was built from
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
           MOCKYMOCK_TAG="${{ needs.resolve.outputs.mockymock_tag }}"
-          LINE="Built from mocky-mock ${MOCKYMOCK_TAG}."
+          COBOLPARSER_TAG="${{ needs.resolve.outputs.cobolparser_tag }}"
           BODY="$(gh release view "$TAG" --json body -q .body)"
           [ "$BODY" = "null" ] && BODY=""
-          if [ "${BODY#*"$LINE"}" = "$BODY" ]; then
-            printf '%s\n\n%s\n' "$BODY" "$LINE" | gh release edit "$TAG" --notes-file -
+          LINE1="Built from mocky-mock ${MOCKYMOCK_TAG}."
+          LINE2="Uses cobol-parser ${COBOLPARSER_TAG} (latest release, overriding mocky-mock's pin)."
+          # Strip any provenance lines a prior dispatch of this same release
+          # already recorded before re-adding the current ones. mocky-mock or
+          # cobol-parser can cut a new release between re-dispatches (e.g. a
+          # re-run to fix a bad build), so appending only when the exact line
+          # is missing would leave the old (now-wrong) tag recorded alongside
+          # the new one -- always rewrite instead of conditionally appending.
+          STRIPPED="$(printf '%s\n' "$BODY" | grep -Ev '^Built from mocky-mock |^Uses cobol-parser ' | awk 'NF{blank=0} !NF{blank++} blank<2')"
+          NEW_BODY="$(printf '%s\n\n%s\n%s' "$STRIPPED" "$LINE1" "$LINE2")"
+          if [ "$NEW_BODY" != "$BODY" ]; then
+            printf '%s' "$NEW_BODY" | gh release edit "$TAG" --notes-file -
           fi
 
   publish-marketplace:

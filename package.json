@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.7.4",
+  "version": "0.9.0",
   "publisher": "lanparty",
   "private": true,
   "license": "GPL-3.0-only",
@@ -17,7 +17,9 @@
     "Testing"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.cut"
+    "workspaceContains:**/*.cut",
+    "onLanguage:cobol",
+    "onStartupFinished"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -36,6 +38,12 @@
         "command": "mockymock.analyzeCobol",
         "title": "Analyze COBOL File...",
         "category": "mockymock"
+      },
+      {
+        "command": "mockymock.generateData",
+        "title": "Generate Data from Copybook",
+        "category": "mockymock",
+        "icon": "$(table)"
       },
       {
         "command": "mockymock.boundaries.refresh",
@@ -73,19 +81,22 @@
         {
           "id": "mockymock.boundaries",
           "name": "COBOL Boundaries",
-          "icon": "$(symbol-interface)"
+          "icon": "$(symbol-interface)",
+          "when": "mockymock.cobolOpen"
         },
         {
           "id": "mockymock.paragraphTree",
           "name": "Paragraph Tree",
           "type": "webview",
-          "icon": "$(list-tree)"
+          "icon": "$(list-tree)",
+          "when": "mockymock.cobolOpen"
         },
         {
           "id": "mockymock.programFlow",
           "name": "Program Flow",
           "type": "webview",
-          "icon": "$(type-hierarchy-sub)"
+          "icon": "$(type-hierarchy-sub)",
+          "when": "mockymock.cobolOpen"
         }
       ]
     },
@@ -96,6 +107,13 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "mockymock.generateData",
+          "when": "mockymock.activeEditorIsCopybook",
+          "group": "navigation"
+        }
+      ],
       "view/title": [
         {
           "command": "mockymock.boundaries.generateCut",
