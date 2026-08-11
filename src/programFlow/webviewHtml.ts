@@ -1,12 +1,10 @@
 // Pure HTML-string builder, no `vscode` import -- same split as
 // paragraphTree/webviewHtml.ts.
+import { randomBytes } from 'crypto';
+
 export function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let text = '';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
+  // 16 bytes => 32 hex chars.
+  return randomBytes(16).toString('hex');
 }
 
 export interface WebviewHtmlOptions {

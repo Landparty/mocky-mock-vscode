@@ -145,7 +145,7 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
   // light/dark theme toggle re-themes the next diagram -- the webview panel
   // uses retainContextWhenHidden: true, so this module is essentially never
   // reloaded within a session.
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'loose', theme: themeName() });
+  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: themeName() });
 
   let svg: string;
   try {

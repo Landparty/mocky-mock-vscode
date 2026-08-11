@@ -35,6 +35,7 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
 
   let dom: JSDOM;
   let installedGlobals: Partial<Record<string, unknown>>;
+  let installedNavigatorDescriptor: PropertyDescriptor | undefined;
 
   before(async function () {
     dom = new JSDOM('<!DOCTYPE html><html><body><div id="root"></div></body></html>', {
@@ -59,10 +60,10 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
       }
     }
 
+    installedNavigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
     installedGlobals = {
       window: (globalThis as Record<string, unknown>).window,
       document: (globalThis as Record<string, unknown>).document,
-      navigator: (globalThis as Record<string, unknown>).navigator,
       SVGElement: (globalThis as Record<string, unknown>).SVGElement,
       Element: (globalThis as Record<string, unknown>).Element,
       HTMLElement: (globalThis as Record<string, unknown>).HTMLElement,
@@ -109,14 +110,14 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
     for (const [key, value] of Object.entries(installedGlobals)) {
       if (value === undefined) {
         delete g[key];
-      } else if (key === 'navigator') {
-        // Node defines the real `globalThis.navigator` as a non-writable
-        // accessor -- a plain assignment throws, so restore it the same
-        // way it was overridden in before().
-        Object.defineProperty(globalThis, 'navigator', { value, configurable: true });
       } else {
         g[key] = value;
       }
+    }
+    if (installedNavigatorDescriptor) {
+      Object.defineProperty(globalThis, 'navigator', installedNavigatorDescriptor);
+    } else {
+      delete g.navigator;
     }
   });
 

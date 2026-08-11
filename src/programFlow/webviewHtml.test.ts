@@ -13,7 +13,7 @@ describe('buildWebviewHtml (Program Flow)', () => {
     assert.match(html, /<title>Program Flow<\/title>/);
   });
 
-  it('nonce is 32 characters of [A-Za-z0-9]', () => {
-    assert.match(getNonce(), /^[A-Za-z0-9]{32}$/);
+  it('nonce is 32 hex characters', () => {
+    assert.match(getNonce(), /^[a-f0-9]{32}$/);
   });
 });
