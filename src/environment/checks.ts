@@ -63,6 +63,19 @@ export async function supportsAnalyzeCommand(run: CommandRunner, executablePath:
   return result.code === 0 && result.stdout.includes('COBOL_PARSER_ARGS');
 }
 
+// Same "check first, degrade gracefully" pattern as supportsAnalyzeCommand,
+// but for the `gen-data` cobol-parser subcommand specifically -- reached via
+// mockymock's `analyze` passthrough. supportsAnalyzeCommand alone would pass
+// on any mockymock build whose *pinned cobolparser* predates `gen-data`,
+// which then fails at runtime with argparse's "invalid choice: 'gen-data'"
+// instead of a clean upgrade message. `analyze gen-data --help` exits 0
+// (argparse short-circuits --help before validating other args) exactly
+// when gen-data exists in that build's cobolparser.
+export async function supportsGenerateDataCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  const result = await run(executablePath, ['analyze', 'gen-data', '--help']);
+  return result.code === 0;
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable
