@@ -1,4 +1,5 @@
 // media/programFlow/main.ts
+import DOMPurify from 'dompurify';
 import mermaid from 'mermaid';
 import { buildLineIndex, parseMermaidNodeId } from '../../src/programFlow/programFlowNodeIndex';
 import { formatSummaryLine, ProgramFlowSummary } from '../../src/programFlow/programFlowSummary';
@@ -158,12 +159,7 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
 
   if (token !== renderToken) return; // superseded by a newer render; discard silently
 
-  const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
-  if (parsedSvg.tagName.toLowerCase() !== 'svg') {
-    renderError('Mermaid returned invalid SVG.', false);
-    return;
-  }
-  panEl.replaceChildren(document.importNode(parsedSvg, true));
+  panEl.innerHTML = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
   attachPanZoom(container, panEl);
 
   const lineIndex = buildLineIndex(msg.report);
