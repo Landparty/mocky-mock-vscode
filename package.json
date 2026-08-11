@@ -17,7 +17,8 @@
     "Testing"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.cut"
+    "workspaceContains:**/*.cut",
+    "onLanguage:cobol"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -36,6 +37,12 @@
         "command": "mockymock.analyzeCobol",
         "title": "Analyze COBOL File...",
         "category": "mockymock"
+      },
+      {
+        "command": "mockymock.generateData",
+        "title": "Generate Data from Copybook",
+        "category": "mockymock",
+        "icon": "$(table)"
       },
       {
         "command": "mockymock.boundaries.refresh",
@@ -86,6 +93,13 @@
       }
     ],
     "menus": {
+      "editor/title": [
+        {
+          "command": "mockymock.generateData",
+          "when": "mockymock.activeEditorIsCopybook",
+          "group": "navigation"
+        }
+      ],
       "view/title": [
         {
           "command": "mockymock.boundaries.generateCut",
