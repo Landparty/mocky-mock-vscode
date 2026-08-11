@@ -67,13 +67,15 @@
         {
           "id": "mockymock.boundaries",
           "name": "COBOL Boundaries",
-          "icon": "$(symbol-interface)"
+          "icon": "$(symbol-interface)",
+          "when": "mockymock.cobolOpen"
         },
         {
           "id": "mockymock.paragraphTree",
           "name": "Paragraph Tree",
           "type": "webview",
-          "icon": "$(list-tree)"
+          "icon": "$(list-tree)",
+          "when": "mockymock.cobolOpen"
         }
       ]
     },
