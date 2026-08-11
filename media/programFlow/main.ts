@@ -158,7 +158,12 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
 
   if (token !== renderToken) return; // superseded by a newer render; discard silently
 
-  panEl.innerHTML = svg;
+  const parsedSvg = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
+  if (parsedSvg.tagName.toLowerCase() !== 'svg') {
+    renderError('Mermaid returned invalid SVG.', false);
+    return;
+  }
+  panEl.replaceChildren(document.importNode(parsedSvg, true));
   attachPanZoom(container, panEl);
 
   const lineIndex = buildLineIndex(msg.report);
