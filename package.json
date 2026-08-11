@@ -17,7 +17,8 @@
     "Testing"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.cut"
+    "workspaceContains:**/*.cut",
+    "onLanguage:cobol"
   ],
   "main": "./out/extension.js",
   "contributes": {
