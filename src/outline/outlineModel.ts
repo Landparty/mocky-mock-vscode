@@ -2,9 +2,14 @@
 //
 // Pure text scan -> VS Code Outline tree, no `vscode` import (repo
 // convention -- see paragraphTree/programFlowModel.ts). Targets IBM
-// Enterprise COBOL FIXED FORMAT ONLY: free format (`>>SOURCE FORMAT
-// FREE`, `*>` inline comments) is out of scope, behavior on a
-// free-format file is undefined/best-effort.
+// Enterprise COBOL FIXED FORMAT ONLY: the `>>SOURCE FORMAT FREE` directive
+// and free-format source generally are out of scope, behavior on a
+// free-format file is undefined/best-effort. A whole-line floating `*>`
+// comment (the sole content of a line, as the first text in Area A or
+// Area B) IS recognized and treated as blank -- this is a legitimate fixed-
+// format comment form, not a free-format feature. An inline trailing `*>`
+// comment after real code on the same line is NOT stripped or otherwise
+// handled specially.
 //
 // The core correctness mechanism is column position, not indentation
 // heuristics: DIVISION headers, SECTION headers, PROGRAM-ID, 01/77-level
@@ -46,7 +51,7 @@ export interface OutlineNode {
 // column-7-stripped code content produced by scanLine.
 const AREA_A_WIDTH = 4;
 
-const DIVISION_RE = /^(IDENTIFICATION|ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION\b/i;
+const DIVISION_RE = /^(IDENTIFICATION|ID|ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION\b/i;
 const BUILTIN_SECTION_RE = /^(CONFIGURATION|INPUT-OUTPUT|FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE)\s+SECTION\b/i;
 const NAMED_SECTION_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\s+SECTION\b/i;
 const PROGRAM_ID_RE = /^PROGRAM-ID\s*\.\s*(.*)$/i;
@@ -72,7 +77,7 @@ const PARAGRAPH_EXCLUSIONS = new Set([
 
 interface ScannedLine {
   lineNumber: number; // 1-indexed
-  isBlank: boolean; // a column-7 `*`/`/` comment, or nothing but whitespace in columns 8-72
+  isBlank: boolean; // a column-7 `*`/`/` comment, a whole-line floating `*>` comment, or nothing but whitespace in columns 8-72
   startsInAreaA: boolean;
   trimmed: string; // columns 8-72, leading/trailing whitespace stripped; '' when isBlank
 }
@@ -86,6 +91,15 @@ function scanLine(line: string, lineNumber: number): ScannedLine {
   const code = isComment ? '' : line.slice(7, 72); // columns 8-72
   const firstNonBlank = code.search(/\S/);
   if (firstNonBlank === -1) {
+    return { lineNumber, isBlank: true, startsInAreaA: false, trimmed: '' };
+  }
+  // A whole-line floating `*>` comment: `*>` is the very first non-blank
+  // token on the line (Area A or Area B). Treated identically to a
+  // genuinely empty line. Scoped narrowly to this case -- an inline `*>`
+  // comment trailing real code on the same line is left untouched, since
+  // that's not what got flagged and stripping it is a separate, larger
+  // change (would require preserving pre-`*>` code as `trimmed`).
+  if (code.slice(firstNonBlank, firstNonBlank + 2) === '*>') {
     return { lineNumber, isBlank: true, startsInAreaA: false, trimmed: '' };
   }
   return {
@@ -148,9 +162,17 @@ export function buildOutline(sourceLines: string[]): OutlineNode[] {
     const divisionMatch = DIVISION_RE.exec(line.trimmed);
     if (divisionMatch) {
       closeDivision(line.lineNumber - 1);
+      // `ID` is a valid IBM abbreviation for `IDENTIFICATION`; normalize to
+      // the canonical spelling so downstream `openDivision.name ===
+      // 'IDENTIFICATION DIVISION'` checks (PROGRAM-ID parsing, etc.) fire
+      // regardless of which spelling the source used -- same "one
+      // canonical form for a fixed reserved word" convention as built-in
+      // section names (see module header).
+      const divisionWord = divisionMatch[1].toUpperCase();
+      const canonicalDivisionWord = divisionWord === 'ID' ? 'IDENTIFICATION' : divisionWord;
       openDivision = {
         kind: 'division',
-        name: `${divisionMatch[1].toUpperCase()} DIVISION`,
+        name: `${canonicalDivisionWord} DIVISION`,
         startLine: line.lineNumber,
         endLine: lastLine,
         children: [],

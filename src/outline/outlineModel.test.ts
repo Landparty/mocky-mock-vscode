@@ -233,4 +233,32 @@ describe('buildOutline', () => {
     const roots = buildOutline(lines);
     assert.equal(roots[0].children.length, 0);
   });
+
+  it('skips a whole-line floating *> comment between a split PROGRAM-ID and its name', () => {
+    const lines = [
+      `${AREA_A}IDENTIFICATION DIVISION.`,
+      `${AREA_A}PROGRAM-ID.`,
+      `${AREA_A}*> internal note`,
+      `${AREA_A}IC101A.`,
+    ];
+
+    const roots = buildOutline(lines);
+    assert.equal(roots[0].children.length, 1);
+    assert.equal(roots[0].children[0].kind, 'programId');
+    assert.equal(roots[0].children[0].name, 'IC101A');
+  });
+
+  it('recognizes ID DIVISION as an abbreviation for IDENTIFICATION DIVISION', () => {
+    const lines = [
+      `${AREA_A}ID DIVISION.`,
+      `${AREA_A}PROGRAM-ID. DEMO.`,
+      `${AREA_A}PROCEDURE DIVISION.`,
+    ];
+
+    const roots = buildOutline(lines);
+    assert.equal(roots[0].name, 'IDENTIFICATION DIVISION');
+    assert.equal(roots[0].children.length, 1);
+    assert.equal(roots[0].children[0].name, 'DEMO');
+    assert.equal(roots[1].name, 'PROCEDURE DIVISION');
+  });
 });
