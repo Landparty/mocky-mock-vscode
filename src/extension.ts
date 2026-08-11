@@ -372,8 +372,10 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       if (!provider.visible) return;
+      if (!(await isCutWorkspace())) return;
+      if (!provider.visible) return; // re-check: the workspace scan above can outlive the view being visible
       const activeCblPath = resolveActiveCblPath();
       const newEditorIsCobol = activeCblPath !== undefined;
       if (newEditorIsCobol) {
