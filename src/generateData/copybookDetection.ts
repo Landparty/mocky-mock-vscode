@@ -24,3 +24,10 @@ const PROGRAM_MARKER_PATTERN = /\b(IDENTIFICATION\s+DIVISION|PROGRAM-ID)\b/i;
 export function looksLikeCopybook(text: string): boolean {
   return !PROGRAM_MARKER_PATTERN.test(text);
 }
+
+// package.json's `contributes.menus.editor/title[].when` reads this exact
+// string -- keep it in this vscode-free file (not generateData.ts, which
+// imports vscode and so can't be exercised by mocha) so the manifest and
+// this constant can't drift apart with no error anywhere. See
+// copybookIconContribution.test.ts.
+export const COPYBOOK_ICON_CONTEXT_KEY = 'mockymock.activeEditorIsCopybook';

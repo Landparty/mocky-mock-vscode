@@ -18,7 +18,8 @@
   ],
   "activationEvents": [
     "workspaceContains:**/*.cut",
-    "onLanguage:cobol"
+    "onLanguage:cobol",
+    "workspaceContains:**/*.cpy"
   ],
   "main": "./out/extension.js",
   "contributes": {

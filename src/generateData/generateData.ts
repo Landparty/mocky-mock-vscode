@@ -1,15 +1,9 @@
 import * as vscode from 'vscode';
 import { runCommand } from '../environment/commandRunner';
-import { describeRefreshError, resolveExecutablePath, supportsAnalyzeCommand } from '../environment/checks';
+import { describeRefreshError, resolveExecutablePath, supportsGenerateDataCommand } from '../environment/checks';
 import { firstNonEmptyLine } from '../environment/textUtils';
-import { looksLikeCobolCandidate, looksLikeCopybook } from './copybookDetection';
+import { COPYBOOK_ICON_CONTEXT_KEY, looksLikeCobolCandidate, looksLikeCopybook } from './copybookDetection';
 import { runGenerateData } from './generateDataRunner';
-
-// package.json's `contributes.menus.editor/title[].when` reads this exact
-// string -- keep it in one place so the manifest and this file's
-// setContext call can't drift apart (a typo in either silently hides the
-// icon forever, with no error anywhere).
-export const COPYBOOK_ICON_CONTEXT_KEY = 'mockymock.activeEditorIsCopybook';
 
 const CONTEXT_UPDATE_DEBOUNCE_MS = 300;
 
@@ -80,26 +74,26 @@ export function activateGenerateDataCommand(context: vscode.ExtensionContext): v
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.generateData', async () => {
       const editor = vscode.window.activeTextEditor;
-      const activePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
-      if (!editor || !activePath) {
+      if (!editor || !computeIsCopybook(editor.document)) {
         vscode.window.showErrorMessage(
           'mockymock: open a copybook file first, then run "Generate Data from Copybook".'
         );
         return;
       }
+      const activePath = editor.document.uri.fsPath;
 
       const config = vscode.workspace.getConfiguration('mockymock', editor.document.uri);
       const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
 
-      const supportsGenerateData = await supportsAnalyzeCommand(runCommand, executablePath);
+      const supportsGenerateData = await supportsGenerateDataCommand(runCommand, executablePath);
       if (!supportsGenerateData) {
-        // supportsAnalyzeCommand's false could mean "found but too old" or
-        // "not found at all" -- a second, cheap probe distinguishes them,
+        // supportsGenerateDataCommand's false could mean "found but too old"
+        // or "not found at all" -- a second, cheap probe distinguishes them,
         // same pattern analyzeCobol.ts uses.
         const probe = await runCommand(executablePath, ['--version']);
         const message = describeRefreshError(
           `mockymock at "${executablePath}" is too old to support generating data from a copybook ` +
-            '(needs the analyze subcommand). Upgrade mockymock and try again.',
+            "(needs cobol-parser's gen-data command). Upgrade mockymock and try again.",
           probe.stderr
         );
         vscode.window.showErrorMessage(message);
