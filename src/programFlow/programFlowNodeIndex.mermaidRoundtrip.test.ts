@@ -174,14 +174,14 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
     mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', htmlLabels: false });
 
     const [a, b] = ['MAIN-LOGIC', 'SUB-ROUTINE'].map(sanitizeNodeId);
-    const mermaidText = `flowchart TD\n  ${a}[MAIN-LOGIC] --> ${b}[SUB-ROUTINE]\n`;
+    const mermaidText = `flowchart TD\n  ${a}[MAIN-LOGIC] -->|PERFORM| ${b}[SUB-ROUTINE]\n`;
     const { svg } = await mermaid.render('program-flow-label-svg', mermaidText);
 
     const sanitized = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
 
     assert.ok(
-      sanitized.includes('MAIN-LOGIC') && sanitized.includes('SUB-ROUTINE'),
-      `expected both node labels to survive sanitization, got: ${sanitized}`
+      sanitized.includes('MAIN-LOGIC') && sanitized.includes('SUB-ROUTINE') && sanitized.includes('PERFORM'),
+      `expected both node labels and the edge label to survive sanitization, got: ${sanitized}`
     );
   });
 });
