@@ -146,7 +146,21 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
   // light/dark theme toggle re-themes the next diagram -- the webview panel
   // uses retainContextWhenHidden: true, so this module is essentially never
   // reloaded within a session.
-  mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: themeName() });
+  // htmlLabels must be off: Mermaid's default flowchart labels are rendered
+  // via <foreignObject><div>...</div></foreignObject>, and DOMPurify's
+  // svg/svgFilters profiles strip foreignObject (a known HTML-in-SVG
+  // injection vector) along with its text content -- with htmlLabels on,
+  // every node/edge label below survives the render but is silently erased
+  // by the sanitize call, leaving unlabeled shapes. Plain SVG <text> labels
+  // survive sanitization intact. (Note: this is the top-level `htmlLabels`
+  // key, not the deprecated `flowchart.htmlLabels` -- the nested form is a
+  // no-op on the installed Mermaid version.)
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: themeName(),
+    htmlLabels: false,
+  });
 
   let svg: string;
   try {

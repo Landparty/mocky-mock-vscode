@@ -256,6 +256,7 @@
     "typescript": "^5.3.3"
   },
   "dependencies": {
+    "dompurify": "^3.3.3",
     "fast-xml-parser": "^4.3.4",
     "mermaid": "^11.16.1"
   }

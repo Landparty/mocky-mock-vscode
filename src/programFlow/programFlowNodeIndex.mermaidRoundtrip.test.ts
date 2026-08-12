@@ -124,7 +124,11 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
   it('renders each sanitized node id as the <nodeId> segment of Mermaid\'s DOM id, matching parseMermaidNodeId()', async function () {
     const mermaidModule = await importESM('mermaid');
     const mermaid = mermaidModule.default;
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+    // securityLevel must match media/programFlow/main.ts's production config
+    // ('strict') -- this is the one setting under test here, since a
+    // security-level-driven change to how Mermaid renders/ids nodes would
+    // otherwise slip past this contract test.
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict' });
 
     // Two paragraph names exercising both sanitizeNodeId() branches:
     // hyphens -> underscores, and a leading digit getting the "N_" guard.
@@ -148,6 +152,36 @@ describe('sanitizeNodeId <-> Mermaid DOM id round trip', function () {
       `parseMermaidNodeId() did not recover the sanitized node ids from Mermaid's rendered DOM ids: ${JSON.stringify(
         nodeEls.map((el) => el.id)
       )}`
+    );
+  });
+
+  it('keeps node/edge label text readable through the actual production render -> sanitize pipeline', async function () {
+    // Regression test for a bug where DOMPurify's svg/svgFilters profiles
+    // silently strip Mermaid's <foreignObject>-based flowchart labels along
+    // with their text -- the diagram would render with correctly colored/
+    // dashed edges but zero readable paragraph names or edge labels. This
+    // exercises the exact mermaid.initialize()/DOMPurify.sanitize() call
+    // shape media/programFlow/main.ts uses, including the htmlLabels: false
+    // setting that keeps labels on plain SVG <text> (which the sanitizer
+    // profile below does not strip).
+    const mermaidModule = await importESM('mermaid');
+    const mermaid = mermaidModule.default;
+    const DOMPurifyModule = (await importESM('dompurify')) as unknown as {
+      default: (window: unknown) => { sanitize: (svg: string, opts: unknown) => string };
+    };
+    const DOMPurify = DOMPurifyModule.default(dom.window);
+
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default', htmlLabels: false });
+
+    const [a, b] = ['MAIN-LOGIC', 'SUB-ROUTINE'].map(sanitizeNodeId);
+    const mermaidText = `flowchart TD\n  ${a}[MAIN-LOGIC] --> ${b}[SUB-ROUTINE]\n`;
+    const { svg } = await mermaid.render('program-flow-label-svg', mermaidText);
+
+    const sanitized = DOMPurify.sanitize(svg, { USE_PROFILES: { svg: true, svgFilters: true } });
+
+    assert.ok(
+      sanitized.includes('MAIN-LOGIC') && sanitized.includes('SUB-ROUTINE'),
+      `expected both node labels to survive sanitization, got: ${sanitized}`
     );
   });
 });

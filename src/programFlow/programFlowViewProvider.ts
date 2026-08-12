@@ -148,7 +148,7 @@ export class ProgramFlowViewProvider implements vscode.WebviewViewProvider {
     let nextError: ErrorState | undefined;
     try {
       const uri = vscode.Uri.file(cblPath);
-      const { executablePath, copybookPaths } = resolveInvocationConfig(this.context, uri);
+      const { executablePath } = resolveInvocationConfig(this.context, uri);
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
@@ -163,7 +163,7 @@ export class ProgramFlowViewProvider implements vscode.WebviewViewProvider {
 
       const [report, mermaidText] = await Promise.all([
         fetchProgramFlow(runCommand, executablePath, cblPath),
-        fetchProgramFlowMermaid(runCommand, executablePath, cblPath, copybookPaths),
+        fetchProgramFlowMermaid(runCommand, executablePath, cblPath),
       ]);
       nextModel = { mermaidText, report };
     } catch (err) {

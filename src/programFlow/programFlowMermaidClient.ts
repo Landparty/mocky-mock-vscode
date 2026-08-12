@@ -16,11 +16,15 @@ export class ProgramFlowMermaidFetchError extends Error {
 export async function fetchProgramFlowMermaid(
   run: CommandRunner,
   executablePath: string,
-  cblPath: string,
-  copybookPaths: string[]
+  cblPath: string
 ): Promise<string> {
+  // Deliberately never pass --copybook-path -- see the identical rationale
+  // on fetchProgramFlow (src/paragraphTree/programFlowClient.ts): expanding
+  // copybooks shifts line numbers and can introduce PROCEDURE DIVISION
+  // paragraphs the JSON report (built without expansion) doesn't know
+  // about, desyncing buildLineIndex()'s click-to-reveal targets from what's
+  // actually drawn.
   const args = ['analyze', 'program-flow', cblPath, '--format', 'mermaid'];
-  for (const p of copybookPaths) args.push('--copybook-path', p);
   const result = await run(executablePath, args);
   if (result.code !== 0) {
     throw new ProgramFlowMermaidFetchError(
