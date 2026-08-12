@@ -5,7 +5,7 @@ import * as path from 'path';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { runCommand } from '../environment/commandRunner';
 import { resolveExecutablePath } from '../environment/checks';
-import { parseLintOutput } from './lintOutput';
+import { cutRelativeLine, parseLintOutput } from './lintOutput';
 
 // Runs `mockymock lint` (pure static analysis, zero Docker) on every open or
 // saved .cut file whose paired .cbl exists, and publishes the problems as
@@ -74,7 +74,8 @@ export function activateLintDiagnostics(context: vscode.ExtensionContext): void 
       collection.set(
         document.uri,
         problems.map((problem) => {
-          const zeroBased = problem.line !== null ? Math.max(0, problem.line - 1) : 0;
+          const cutLine = cutRelativeLine(problem);
+          const zeroBased = cutLine !== null ? Math.max(0, cutLine - 1) : 0;
           const lineLength =
             zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
           const diagnostic = new vscode.Diagnostic(
