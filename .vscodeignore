@@ -40,5 +40,3 @@ out/**
 !out/extension.js
 !out/media/paragraphTree/main.js
 !out/media/paragraphTree/styles.css
-!out/media/programFlow/main.js
-!out/media/programFlow/styles.css

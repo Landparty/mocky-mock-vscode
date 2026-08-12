@@ -43,21 +43,12 @@ export interface FlowEdge {
   range_members?: string[];
 }
 
-export interface CycleDetail {
-  nodes: string[];
-  kind: 'PERFORM_RECURSION' | 'GOTO_LOOP' | 'FALL_THROUGH' | 'MIXED';
-  length: number;
-  self_recursive: boolean;
-  edge_types: string[];
-}
-
 export interface ProgramFlowReport {
   program_name: string;
   nodes: FlowNode[];
   edges: FlowEdge[];
   entry_points: string[];
   unreachable_nodes: string[];
-  cycle_details?: CycleDetail[];
 }
 
 export interface ParagraphBadges {

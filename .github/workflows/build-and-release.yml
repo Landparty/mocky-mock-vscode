@@ -56,7 +56,7 @@ jobs:
       - name: Resolve cobol-parser's latest release tag
         id: cobolparser_tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.VSCE_PAT }}
         run: |
           TAG="$(gh release view --repo Landparty/cobol-parser --json tagName -q .tagName)"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
