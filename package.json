@@ -68,6 +68,12 @@
         "title": "Refresh Paragraph Tree",
         "category": "mockymock",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "mockymock.programFlow.refresh",
+        "title": "Refresh Program Flow",
+        "category": "mockymock",
+        "icon": "$(refresh)"
       }
     ],
     "views": {
@@ -83,6 +89,13 @@
           "name": "Paragraph Tree",
           "type": "webview",
           "icon": "$(list-tree)",
+          "when": "mockymock.cobolOpen"
+        },
+        {
+          "id": "mockymock.programFlow",
+          "name": "Program Flow",
+          "type": "webview",
+          "icon": "$(type-hierarchy-sub)",
           "when": "mockymock.cobolOpen"
         }
       ]
@@ -120,6 +133,11 @@
         {
           "command": "mockymock.paragraphTree.refresh",
           "when": "view == mockymock.paragraphTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.programFlow.refresh",
+          "when": "view == mockymock.programFlow",
           "group": "navigation@1"
         }
       ]
@@ -217,7 +235,7 @@
     }
   },
   "scripts": {
-    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree",
+    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree && tsc --noEmit -p ./media/programFlow",
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",
@@ -226,16 +244,20 @@
     "package": "vsce package"
   },
   "devDependencies": {
+    "@types/jsdom": "^30.0.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.88.0",
     "@vscode/vsce": "^2.24.0",
     "esbuild": "^0.28.1",
+    "jsdom": "^29.1.1",
     "mocha": "^10.3.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.3.3"
   },
   "dependencies": {
-    "fast-xml-parser": "^4.3.4"
+    "dompurify": "^3.3.3",
+    "fast-xml-parser": "^4.3.4",
+    "mermaid": "^11.16.1"
   }
 }
