@@ -55,6 +55,19 @@ export async function fetchBundle(
       `bundle_version ${bundle.bundle_version} is not supported — update the extension or the mockymock CLI`
     );
   }
+  // Shape check on the fields buildViewModel actually iterates -- same
+  // pattern as fetchProgramFlow's nodes/edges/entry_points check. Without
+  // it, a CLI drift that keeps bundle_version 1 surfaces in the tree's
+  // error node as a raw "bundle.scenarios is not iterable" TypeError.
+  if (
+    !Array.isArray(bundle.scenarios) ||
+    !Array.isArray(bundle.unresolved) ||
+    bundle.scenarios.some((s) => !Array.isArray(s?.fixtures))
+  ) {
+    throw new BundleError(
+      'mockymock fixtures output is missing scenarios/fixtures/unresolved — update the extension or the mockymock CLI'
+    );
+  }
 
   return bundle;
 }

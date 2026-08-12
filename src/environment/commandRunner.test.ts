@@ -9,6 +9,31 @@ describe('quoteArgForWindowsShell', () => {
   it('quotes an argument containing a space', () => {
     assert.strictEqual(quoteArgForWindowsShell('C:\\Users\\Sam Dion\\PROG.cbl'), '"C:\\Users\\Sam Dion\\PROG.cbl"');
   });
+
+  it('quotes every cmd.exe metacharacter that is legal in a Windows path', () => {
+    // Unquoted, cmd.exe would split `C:\R&D\prog.cbl` into two commands at
+    // the `&` -- reproduced in the 2026-08-12 audit (finding C1).
+    for (const arg of [
+      'C:\\R&D\\prog.cbl',
+      'C:\\a|b\\prog.cbl',
+      'C:\\a^b\\prog.cbl',
+      'C:\\Q1 (draft)\\prog.cbl',
+      'a<b',
+      'a>b',
+    ]) {
+      assert.strictEqual(quoteArgForWindowsShell(arg), `"${arg}"`);
+    }
+  });
+
+  it('escapes an embedded double quote as "" (cmd.exe convention), not \\"', () => {
+    // `\"` would let cmd.exe close the quoted span early and expose the rest
+    // to metachar parsing -- backslash has no escaping power in cmd.exe.
+    assert.strictEqual(quoteArgForWindowsShell('say "hi"'), '"say ""hi"""');
+  });
+
+  it('quotes an empty argument so it does not vanish from the joined command line', () => {
+    assert.strictEqual(quoteArgForWindowsShell(''), '""');
+  });
 });
 
 describe('describeSpawnError', () => {

@@ -144,7 +144,11 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
     if (!cblPath) return;
     const doc = await vscode.workspace.openTextDocument(cblPath);
     const editor = await vscode.window.showTextDocument(doc, { preserveFocus: false });
-    const range = new vscode.Range(line - 1, 0, line - 1, 0);
+    // Clamp: vscode.Range throws IllegalArgument on a negative line, and this
+    // `line` crossed the webview message boundary un-revalidated -- a 0 here
+    // would otherwise be an unhandled rejection that eats the click silently.
+    const zeroBased = Math.min(Math.max(0, line - 1), doc.lineCount - 1);
+    const range = new vscode.Range(zeroBased, 0, zeroBased, 0);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
     editor.selection = new vscode.Selection(range.start, range.start);
   }

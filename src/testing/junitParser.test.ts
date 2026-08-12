@@ -10,6 +10,7 @@ describe('parseJUnitXml', () => {
 
     const suite = parseJUnitXml(xml);
 
+    assert.ok(suite);
     assert.strictEqual(suite.name, 'INVUPDT all boundary categories');
     assert.strictEqual(suite.tests, 1);
     assert.strictEqual(suite.cases.length, 1);
@@ -38,6 +39,7 @@ describe('parseJUnitXml', () => {
 
     const suite = parseJUnitXml(xml);
 
+    assert.ok(suite);
     assert.strictEqual(suite.cases.length, 4);
     assert.deepStrictEqual(suite.cases[0], { name: 'case-pass', status: 'passed', messages: [] });
     assert.deepStrictEqual(suite.cases[1], {
@@ -58,5 +60,25 @@ describe('parseJUnitXml', () => {
       status: 'errored',
       messages: ['FAIL for unknown case id 7'],
     });
+  });
+
+  it('returns null for malformed XML instead of throwing', () => {
+    assert.strictEqual(parseJUnitXml('<testsuite name="x"><testcase'), null);
+  });
+
+  it('returns null for a document with no testsuite, instead of an empty suite', () => {
+    // An empty suite here used to make mapResults report every case as
+    // "did not run — an earlier case in this suite crashed".
+    assert.strictEqual(parseJUnitXml('<unrelated/>'), null);
+  });
+
+  it('unwraps a <testsuites> wrapper root to its first suite', () => {
+    const xml = `<testsuites><testsuite name="wrapped" tests="1">
+  <testcase name="a"/>
+</testsuite></testsuites>`;
+    const suite = parseJUnitXml(xml);
+    assert.ok(suite);
+    assert.strictEqual(suite.name, 'wrapped');
+    assert.strictEqual(suite.cases[0].name, 'a');
   });
 });

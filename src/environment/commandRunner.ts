@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { StringDecoder } from 'string_decoder';
 
 export interface CommandResult {
   code: number;
@@ -19,13 +20,34 @@ export type CommandRunner = (
 // joining it into a single command-line string WITHOUT adding any quoting of its own.
 // That means an argument containing a space or a double-quote (e.g. a path under
 // "C:\Users\Sam Dion\...") gets split apart by the shell before mockymock/docker/uv ever
-// sees it. This helper individually quotes such args so they survive that join+re-parse.
-// It must only be applied when shell is actually true (Windows) — with shell:false, Node
-// passes the args array directly to the OS with no shell re-parsing, so quoting there
-// would corrupt the argument instead of protecting it.
+// sees it. The same goes for cmd.exe's metacharacters `& | ^ < > ( )` -- all of them
+// legal in Windows paths -- which an unquoted pass-through lets cmd.exe interpret:
+// `C:\R&D\prog.cbl` becomes "run C:\R, then run D\prog.cbl" (reproduced empirically;
+// the 2026-08-12 audit's C1). Double quotes around the arg make cmd.exe treat all of
+// those literally, so the trigger below quotes on any of them, not just whitespace.
+//
+// Embedded double quotes are escaped as `""`, NOT `\"`: cmd.exe gives `\` no special
+// meaning, so in `"a\"b"` the second `"` CLOSES the quoted span and leaves `b` exposed
+// to metachar parsing, while `""` toggles out and straight back in with nothing exposed
+// (and the C runtime's argv parser reads `""` inside a quoted span as a literal quote).
+// In practice unreachable -- `"` is illegal in Windows filenames and .cut case names
+// can't contain it -- but wrong is wrong.
+//
+// Known residual gap: `%VAR%` expands inside cmd.exe double quotes and cannot be
+// escaped on a non-batch command line at all, so a path containing a spelled-out
+// existing environment variable name between two % signs is still rewritten. There is
+// no complete defense short of shell:false, which would break uv's .cmd shims.
+//
+// This helper must only be applied when shell is actually true (Windows) — with
+// shell:false, Node passes the args array directly to the OS with no shell re-parsing,
+// so quoting there would corrupt the argument instead of protecting it.
+const CMD_NEEDS_QUOTING = /[\s"&|<>^()]/;
 export function quoteArgForWindowsShell(arg: string): string {
-  if (/[\s"]/.test(arg)) {
-    return `"${arg.replace(/"/g, '\\"')}"`;
+  if (arg.length === 0) {
+    return '""'; // an unquoted empty arg would vanish from the joined command line
+  }
+  if (CMD_NEEDS_QUOTING.test(arg)) {
+    return `"${arg.replace(/"/g, '""')}"`;
   }
   return arg;
 }
@@ -64,13 +86,21 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
       resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
       return;
     }
-    child.stdout?.on('data', (d) => {
-      const text = d.toString();
+    // StringDecoder (not Buffer.toString per chunk): a multi-byte UTF-8
+    // character split across two stream chunks would otherwise decode as two
+    // replacement characters -- the decoder buffers the partial sequence and
+    // emits it whole with the next chunk.
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    child.stdout?.on('data', (d: Buffer) => {
+      const text = stdoutDecoder.write(d);
+      if (!text) return;
       stdout += text;
       onOutput?.(text, 'stdout');
     });
-    child.stderr?.on('data', (d) => {
-      const text = d.toString();
+    child.stderr?.on('data', (d: Buffer) => {
+      const text = stderrDecoder.write(d);
+      if (!text) return;
       stderr += text;
       onOutput?.(text, 'stderr');
     });
@@ -81,12 +111,17 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
         stderr: signal?.aborted ? 'run cancelled' : stderr || describeSpawnError(err as NodeJS.ErrnoException),
       })
     );
-    child.on('close', (code) =>
+    child.on('close', (code) => {
+      // Flush any partial multi-byte sequence still buffered in the decoders
+      // (a stream that ended mid-character emits it as replacement chars here
+      // rather than dropping it silently).
+      stdout += stdoutDecoder.end();
+      stderr += stderrDecoder.end();
       resolve({
         code: code ?? -1,
         stdout,
         stderr: signal?.aborted && !stderr ? 'run cancelled' : stderr,
-      })
-    );
+      });
+    });
   });
 };

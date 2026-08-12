@@ -11,7 +11,16 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # windows-latest alongside ubuntu: the extension's primary dev platform
+    # is Windows and commandRunner's shell:true branch (cmd.exe quoting,
+    # .cmd shim spawning) only ever executes there -- the 2026-08-12 audit's
+    # C1 (cmd.exe metacharacter splitting) survived precisely because tests
+    # never ran on Windows.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +44,10 @@ jobs:
       # above is required, or this check would pass vacuously against a
       # missing bundle instead of actually verifying one.
       - name: Verify the packaged .vsix ships the bundle and no source
+        # Linux-only: the script is bash/grep, and packaging content is
+        # platform-independent -- one verification is enough.
+        if: runner.os == 'Linux'
+        shell: bash
         run: |
           npx vsce ls > /tmp/vsix-files.txt
           cat /tmp/vsix-files.txt

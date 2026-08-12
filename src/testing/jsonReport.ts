@@ -125,13 +125,24 @@ export function mapJsonReport(
   const byName = new Map(report.cases.map((c) => [c.name, c]));
   for (const name of expectedCaseNames) {
     const found = byName.get(name);
-    if (!found || found.status === 'not_run') {
+    if (!found) {
+      // Absent from the report entirely. Unlike an explicit not_run entry
+      // (below), the report makes NO claim about why -- most plausibly a
+      // crash cut the suite short, but a discovery/CLI name drift (e.g.
+      // PROVIDER row expansion producing a different "name [row N: ...]"
+      // label) looks identical from here. Don't assert a cause we can't know.
       outcomes.set(name, {
         kind: 'not-run',
-        message:
-          found?.crashDetail
-            ? `did not run — an earlier case in this suite crashed (${found.crashDetail})`
-            : 'did not run — an earlier case in this suite crashed',
+        message: 'did not run — not present in the run report (an earlier crash, or a name mismatch between discovery and the CLI)',
+      });
+      continue;
+    }
+    if (found.status === 'not_run') {
+      outcomes.set(name, {
+        kind: 'not-run',
+        message: found.crashDetail
+          ? `did not run — an earlier case in this suite crashed (${found.crashDetail})`
+          : 'did not run — an earlier case in this suite crashed',
       });
       continue;
     }

@@ -12,6 +12,39 @@ export async function checkCommandAvailable(
   return result.code === 0;
 }
 
+// Positive-result cache for the supports*() capability probes below. Each
+// probe spawns a `--help` process, and the two webview side views re-probe
+// on EVERY refresh -- one editor switch with both views open used to cost
+// two --help spawns before the real work even started. Keyed by
+// (runner, executablePath):
+//  - per-path, so changing mockymock.executablePath self-invalidates (the
+//    new path simply has no entry);
+//  - per-runner via WeakMap, so unit tests injecting fresh fake runners
+//    never see each other's cache (production always passes the same
+//    module-level runCommand);
+//  - POSITIVE results only: a `true` can only go stale by downgrading the
+//    CLI in place (not worth defending), while caching `false` would make
+//    an in-place upgrade invisible until a window reload.
+const capabilityCache = new WeakMap<CommandRunner, Map<string, true>>();
+
+async function probeCapability(
+  run: CommandRunner,
+  executablePath: string,
+  cacheKey: string,
+  probe: () => Promise<boolean>
+): Promise<boolean> {
+  let byKey = capabilityCache.get(run);
+  if (!byKey) {
+    byKey = new Map();
+    capabilityCache.set(run, byKey);
+  }
+  const key = `${cacheKey}:${executablePath}`;
+  if (byKey.get(key)) return true;
+  const ok = await probe();
+  if (ok) byKey.set(key, true);
+  return ok;
+}
+
 // `mockymock run --trace-json PATH` is a flag argparse may not recognize on
 // an older installed CLI -- and an unrecognized flag fails the ENTIRE `run`
 // invocation (argparse exit 2), not just that flag. Probing with `--help`
@@ -21,8 +54,10 @@ export async function checkCommandAvailable(
 // using the flag for real -- exactly the discoverSuites-style "check first,
 // degrade gracefully" pattern, applied to a flag instead of a subcommand.
 export async function supportsTraceFlag(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['run', '--help']);
-  return result.code === 0 && result.stdout.includes('--trace-json');
+  return probeCapability(run, executablePath, 'trace', async () => {
+    const result = await run(executablePath, ['run', '--help']);
+    return result.code === 0 && result.stdout.includes('--trace-json');
+  });
 }
 
 // Same "check first, degrade gracefully" pattern as supportsTraceFlag, but for
@@ -32,8 +67,10 @@ export async function supportsTraceFlag(run: CommandRunner, executablePath: stri
 // (rather than just a zero exit code) also catches the unlikely case of a
 // `debug` subcommand existing without the exact flag this extension needs.
 export async function supportsDebugCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['debug', '--help']);
-  return result.code === 0 && result.stdout.includes('--dap-stdio');
+  return probeCapability(run, executablePath, 'debug', async () => {
+    const result = await run(executablePath, ['debug', '--help']);
+    return result.code === 0 && result.stdout.includes('--dap-stdio');
+  });
 }
 
 // Same "check first, degrade gracefully" pattern as supportsDebugCommand,
@@ -46,8 +83,10 @@ export async function supportsDebugCommand(run: CommandRunner, executablePath: s
 // argparse lists a flag in --help even with no help= text of its own
 // (only help=SUPPRESS would hide it).
 export async function supportsExportCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['export', '--help']);
-  return result.code === 0 && result.stdout.includes('--output');
+  return probeCapability(run, executablePath, 'export', async () => {
+    const result = await run(executablePath, ['export', '--help']);
+    return result.code === 0 && result.stdout.includes('--output');
+  });
 }
 
 // Same "check first, degrade gracefully" pattern as supportsDebugCommand/
@@ -59,8 +98,10 @@ export async function supportsExportCommand(run: CommandRunner, executablePath: 
 // also catches the unlikely case of an `analyze` subcommand existing
 // without the expected passthrough argument.
 export async function supportsAnalyzeCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['analyze', '--help']);
-  return result.code === 0 && result.stdout.includes('COBOL_PARSER_ARGS');
+  return probeCapability(run, executablePath, 'analyze', async () => {
+    const result = await run(executablePath, ['analyze', '--help']);
+    return result.code === 0 && result.stdout.includes('COBOL_PARSER_ARGS');
+  });
 }
 
 // Same "check first, degrade gracefully" pattern as supportsAnalyzeCommand,
@@ -72,8 +113,10 @@ export async function supportsAnalyzeCommand(run: CommandRunner, executablePath:
 // (argparse short-circuits --help before validating other args) exactly
 // when gen-data exists in that build's cobolparser.
 export async function supportsGenerateDataCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  const result = await run(executablePath, ['analyze', 'gen-data', '--help']);
-  return result.code === 0;
+  return probeCapability(run, executablePath, 'gen-data', async () => {
+    const result = await run(executablePath, ['analyze', 'gen-data', '--help']);
+    return result.code === 0;
+  });
 }
 
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';

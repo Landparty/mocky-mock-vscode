@@ -57,9 +57,12 @@ export function mapResults(
   for (const name of expectedCaseNames) {
     const found = byName.get(name);
     if (!found) {
+      // Absent from the JUnit output. A crash cutting the suite short is the
+      // common cause, but a name drift between discovery and the CLI looks
+      // identical from here -- don't assert a cause this mapper can't know.
       outcomes.set(name, {
         kind: 'not-run',
-        message: 'did not run — an earlier case in this suite crashed',
+        message: 'did not run — not present in the run report (an earlier crash, or a name mismatch between discovery and the CLI)',
       });
       continue;
     }

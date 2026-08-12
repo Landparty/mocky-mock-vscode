@@ -39,7 +39,7 @@ describe('mapResults', () => {
     const outcomes = mapResults(['case-a'], suite);
     assert.deepStrictEqual(outcomes.get('case-a'), {
       kind: 'not-run',
-      message: 'did not run — an earlier case in this suite crashed',
+      message: 'did not run — not present in the run report (an earlier crash, or a name mismatch between discovery and the CLI)',
     });
   });
 
