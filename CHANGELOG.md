@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.9.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.0...v0.9.1) (2026-08-12)
+
+
+### Bug Fixes
+
+* address review findings from Program Flow reapply ([915d4f5](https://github.com/Landparty/mocky-mock-vscode/commit/915d4f52ea27b59d0930d038e361f4edb7815da9))
+* restore VSCE_PAT for cross-repo release token, strengthen label test ([18025c9](https://github.com/Landparty/mocky-mock-vscode/commit/18025c9481ab7c7e161c7882bf36fb7d69737f1c))
+* stop mispainting lint diagnostics on .cbl-relative line numbers ([0c0aad6](https://github.com/Landparty/mocky-mock-vscode/commit/0c0aad6b2bdad9841f171dd8cd778d03a2a952e0))
+* stop mispainting lint diagnostics on .cbl-relative line numbers ([b3281d2](https://github.com/Landparty/mocky-mock-vscode/commit/b3281d2b4abed358c2ef78d1297a56e8b8ab0801))
+
 ## [0.9.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.8.0...v0.9.0) (2026-08-11)
 
 
