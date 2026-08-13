@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "publisher": "lanparty",
   "private": true,
   "license": "GPL-3.0-only",

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.6](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.5...v0.9.6) (2026-08-13)
+
+
+### Bug Fixes
+
+* update GITHUB_READ_PAT references to ORG_PAT in build-and-release workflow ([5d3d943](https://github.com/Landparty/mocky-mock-vscode/commit/5d3d9430a19fdb840221db0283ed751e55105f16))
+
 ## [0.9.5](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.4...v0.9.5) (2026-08-13)
 
 
