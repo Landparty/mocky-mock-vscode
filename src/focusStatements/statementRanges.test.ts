@@ -100,6 +100,34 @@ describe('findFocusRanges', () => {
     assert.deepEqual(ranges, []);
   });
 
+  it('does not match CALL as the prefix of a hyphenated paragraph label like CALL-INIT-1', () => {
+    const lines = [
+      `${AREA_A}CALL-INIT-1.`, // 1
+      `${AREA_B}DISPLAY 'HELLO'.`, // 2
+    ];
+
+    assert.deepEqual(findFocusRanges(lines), []);
+  });
+
+  it('does not match CALL as the suffix of a hyphenated paragraph label like INIT-CALL', () => {
+    const lines = [
+      `${AREA_A}INIT-CALL.`, // 1
+      `${AREA_B}DISPLAY 'HELLO'.`, // 2
+    ];
+
+    assert.deepEqual(findFocusRanges(lines), []);
+  });
+
+  it('treats a whole-line floating *> comment as blank, not statement code', () => {
+    const lines = [
+      `${AREA_A}MAIN-PARA.`, // 1
+      `${AREA_B}*> CALL 'SUBPGM' USING WS-PARM.`, // 2
+      `${AREA_A}NEXT-PARA.`, // 3
+    ];
+
+    assert.deepEqual(findFocusRanges(lines), []);
+  });
+
   it('finds multiple separate statements in line order', () => {
     const lines = [
       `${AREA_A}MAIN-PARA.`, // 1

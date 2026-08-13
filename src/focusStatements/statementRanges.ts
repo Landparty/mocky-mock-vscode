@@ -24,16 +24,29 @@ export interface LineRange {
 
 const EXEC_START_RE = /\bEXEC\s+(?:SQL|CICS)\b/i;
 const END_EXEC_RE = /\bEND-EXEC\b/i;
-const CALL_START_RE = /\bCALL\b/i;
+// Plain \bCALL\b would also match inside a hyphenated paragraph/data label
+// like CALL-INIT-1 or INIT-CALL, since \b treats '-' as a word boundary the
+// same as whitespace. The lookbehind/lookahead here require CALL to stand
+// alone -- not adjacent to a letter, digit, OR hyphen on either side -- so
+// only the reserved-word statement verb matches, never a hyphenated name
+// that merely contains it.
+const CALL_START_RE = /(?<![A-Za-z0-9-])CALL(?![A-Za-z0-9-])/i;
 const END_CALL_RE = /\bEND-CALL\b/i;
 const SENTENCE_PERIOD_RE = /\.(?=\s|$)/;
 
 // Columns 1-6 (sequence area) and 73-80 (identification area) are never
-// scanned, matching outlineModel.ts's scanLine.
+// scanned, matching outlineModel.ts's scanLine. A whole-line floating `*>`
+// comment (the sole content of a line, in Area A or Area B) is treated as
+// blank too, same as outlineModel.ts's scanLine -- otherwise a commented-out
+// CALL/EXEC SQL example line would be scanned as real statement code.
 function codeOf(line: string): string {
   const indicator = line.charAt(6); // column 7
   if (indicator === '*' || indicator === '/') return '';
-  return line.slice(7, 72); // columns 8-72
+  const code = line.slice(7, 72); // columns 8-72
+  const firstNonBlank = code.search(/\S/);
+  if (firstNonBlank === -1) return '';
+  if (code.slice(firstNonBlank, firstNonBlank + 2) === '*>') return '';
+  return code;
 }
 
 export function findFocusRanges(sourceLines: string[]): LineRange[] {
