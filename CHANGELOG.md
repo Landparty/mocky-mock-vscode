@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.3](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.2...v0.9.3) (2026-08-13)
+
+
+### Bug Fixes
+
+* crisp program-flow zoom and UTF-8 CLI output decoding ([fe73299](https://github.com/Landparty/mocky-mock-vscode/commit/fe73299e2dff8abcec26606991883a16c9f3b343))
+* crisp program-flow zoom and UTF-8 CLI output decoding ([faf1c12](https://github.com/Landparty/mocky-mock-vscode/commit/faf1c122b509b0446068f915febce5136cee38bf))
+
 ## [0.9.2](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.1...v0.9.2) (2026-08-13)
 
 
