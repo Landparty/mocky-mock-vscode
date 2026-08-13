@@ -39,7 +39,11 @@ body {
 
 .diagram-pan {
   transform-origin: 0 0;
-  will-change: transform;
+  /* No will-change: transform here. It promotes the wrapper to its own
+     compositor layer, which Chromium rasterizes ONCE at scale 1 and then
+     only re-scales as a bitmap -- zooming the diagram in blurred every
+     label into unreadable mush. Without the hint, each wheel-zoom repaints
+     the SVG vectors at the new scale, so text stays crisp at any zoom. */
 }
 
 .legend {
