@@ -86,6 +86,18 @@ describe('runCommand', () => {
     );
   });
 
+  it('forces Python UTF-8 mode on the child while inheriting the parent env', async () => {
+    // The stdout/stderr decoders assume UTF-8, but the bundled-CPython
+    // mockymock CLI writes the Windows locale code page (cp1252) to a pipe
+    // unless UTF-8 mode is forced -- non-ASCII diagram labels arrived as
+    // U+FFFD without these variables.
+    const result = await runCommand(process.execPath, [
+      '-e',
+      "process.stdout.write(`${process.env.PYTHONUTF8},${process.env.PYTHONIOENCODING},${process.env.PATH ? 'has-path' : 'no-path'}`);",
+    ]);
+    assert.strictEqual(result.stdout, '1,utf-8,has-path');
+  });
+
   it('resolves with a non-zero code and an explanatory stderr when the command cannot be spawned', async () => {
     // On Windows (shell:true) this surfaces as cmd.exe's "not recognized" with a
     // shell-dependent exit code; elsewhere (shell:false) spawn's 'error' event fires and

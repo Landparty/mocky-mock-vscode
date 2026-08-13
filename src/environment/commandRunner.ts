@@ -81,7 +81,20 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
       // signal fires — this is how a Test Explorer "cancel" actually stops
       // an in-flight mockymock/docker process instead of merely being
       // noted between files.
-      child = spawn(spawnCommand, spawnArgs, { shell: useShell, signal });
+      //
+      // PYTHONUTF8/PYTHONIOENCODING: both decoders below assume UTF-8, but
+      // the mockymock CLI is a bundled CPython, and CPython writing to a
+      // pipe on Windows defaults to the locale code page (cp1252) — every
+      // non-ASCII character it printed reached us as U+FFFD (e.g. the
+      // program-flow terminal label "GOBACK · 118" rendering as
+      // "GOBACK � 118"). Forcing Python's UTF-8 mode on the child makes
+      // its stdout match what we decode; non-Python children (docker, uv)
+      // ignore both variables.
+      child = spawn(spawnCommand, spawnArgs, {
+        shell: useShell,
+        signal,
+        env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+      });
     } catch (err) {
       resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
       return;
