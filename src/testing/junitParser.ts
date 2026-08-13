@@ -33,9 +33,25 @@ function extractMessages(node: unknown): string[] {
   });
 }
 
-export function parseJUnitXml(xml: string): JUnitTestSuite {
-  const doc = parser.parse(xml);
-  const suiteNode = doc.testsuite ?? {};
+// Returns null (letting the caller fall back to the process-output message)
+// instead of throwing or fabricating an empty suite:
+//  - malformed XML (a truncated report from a killed container) used to
+//    throw out of the caller and error the whole file with a raw parser
+//    message;
+//  - a document with no <testsuite> at all used to yield an EMPTY suite,
+//    which mapResults then reported as every case "did not run — an earlier
+//    case crashed" -- a confident, wrong diagnosis.
+// A <testsuites> wrapper root (the more common JUnit shape) is unwrapped to
+// its first <testsuite> -- mockymock runs exactly one suite per invocation.
+export function parseJUnitXml(xml: string): JUnitTestSuite | null {
+  let doc: any;
+  try {
+    doc = parser.parse(xml);
+  } catch {
+    return null;
+  }
+  const suiteNode = doc.testsuite ?? asArray(doc.testsuites?.testsuite)[0];
+  if (suiteNode === undefined) return null;
   const rawCases = asArray(suiteNode.testcase);
 
   const cases: JUnitTestCase[] = rawCases.map((tc: any) => {

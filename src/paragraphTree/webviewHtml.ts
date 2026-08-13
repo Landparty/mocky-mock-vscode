@@ -2,13 +2,14 @@
 // `vscode` import -- the caller (paragraphTreeViewProvider.ts) resolves
 // webview.cspSource / webview.asWebviewUri(...) and passes the results in
 // as plain strings, so this stays mocha-testable.
+import { randomBytes } from 'crypto';
+
 export function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let text = '';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
+  // crypto.randomBytes, not Math.random(): a CSP nonce's whole job is to be
+  // unguessable, and V8's Math.random() state is recoverable from observed
+  // outputs. Same implementation as programFlow/webviewHtml.ts (16 bytes =>
+  // 32 hex chars).
+  return randomBytes(16).toString('hex');
 }
 
 export interface WebviewHtmlOptions {

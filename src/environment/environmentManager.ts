@@ -21,6 +21,8 @@ export interface ReadyResult {
 export class EnvironmentManager {
   private statusBarItem: vscode.StatusBarItem;
   private readonly context: vscode.ExtensionContext;
+  // In-flight ensureReady(), shared by concurrent callers -- see ensureReady().
+  private ensureReadyInFlight: Promise<ReadyResult> | undefined;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
@@ -93,7 +95,23 @@ export class EnvironmentManager {
     }
   }
 
+  // Concurrent callers share one probe: every parallel runOneFile worker
+  // awaits ensureReady() before its CLI invocation, and without this guard a
+  // cold-Docker run with maxParallelRuns > 1 launched Docker Desktop N times
+  // and ran N independent 90-second `docker info` polling loops, each with
+  // its own stacked progress notification. Only the in-flight promise is
+  // shared -- a later call after settle re-probes from scratch, so this is
+  // deduplication, not caching.
   async ensureReady(): Promise<ReadyResult> {
+    if (!this.ensureReadyInFlight) {
+      this.ensureReadyInFlight = this.doEnsureReady().finally(() => {
+        this.ensureReadyInFlight = undefined;
+      });
+    }
+    return this.ensureReadyInFlight;
+  }
+
+  private async doEnsureReady(): Promise<ReadyResult> {
     this.statusBarItem.show();
     const executablePath = resolveExecutablePath(
       vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),

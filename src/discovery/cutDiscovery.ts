@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as path from 'path';
 
 export interface CutCase {
@@ -154,8 +155,26 @@ export function cutSuitesFromCollectJson(text: string): CutSuite[] | null {
   return [{ name: suiteObj.name, line: Math.max(0, suiteObj.line - 1), cases }];
 }
 
-export function resolveCblPath(cutFilePath: string): string {
+// The three extensions package.json registers for the `cobol` language --
+// keep in sync with viewRefreshPolicy.ts's isCobolPath. Probed in this
+// order; .cbl stays the default when none exists (error messages then name
+// the conventional pairing).
+const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol'];
+
+// Resolves a .cut file's paired COBOL source. Previously hardwired to
+// `<stem>.cbl`, which silently broke every feature (lint, runs, export,
+// continuous mode) for a project using .cob/.cobol -- extensions the rest
+// of the extension explicitly supports. `exists` is injectable so the pure
+// mapping stays unit-testable without a real filesystem.
+export function resolveCblPath(
+  cutFilePath: string,
+  exists: (p: string) => boolean = fs.existsSync
+): string {
   const parsed = path.parse(cutFilePath);
+  for (const ext of COBOL_SOURCE_EXTENSIONS) {
+    const candidate = path.join(parsed.dir, `${parsed.name}${ext}`);
+    if (exists(candidate)) return candidate;
+  }
   return path.join(parsed.dir, `${parsed.name}.cbl`);
 }
 

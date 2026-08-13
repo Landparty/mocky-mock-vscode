@@ -49,4 +49,21 @@ describe('fetchBundle', () => {
         'mockymock', 'P.cbl', { scenarios: 'happy', copybookPaths: [] }),
       /bundle_version 2 is not supported/);
   });
+  it('fails closed on a v1 document missing the arrays buildViewModel iterates', async () => {
+    // Right version, wrong shape: without the check this surfaced later as a
+    // raw "bundle.scenarios is not iterable" TypeError in the tree's error node.
+    const noScenarios = JSON.stringify({ bundle_version: 1, program_name: 'X', seed: 1, unresolved: [] });
+    await assert.rejects(
+      fetchBundle(runnerReturning({ code: 0, stdout: noScenarios, stderr: '' }),
+        'mockymock', 'P.cbl', { scenarios: 'happy', copybookPaths: [] }),
+      /missing scenarios\/fixtures\/unresolved/);
+    const badFixtures = JSON.stringify({
+      bundle_version: 1, program_name: 'X', seed: 1,
+      scenarios: [{ name: 's', intent: 'x', entry: null }], unresolved: [],
+    });
+    await assert.rejects(
+      fetchBundle(runnerReturning({ code: 0, stdout: badFixtures, stderr: '' }),
+        'mockymock', 'P.cbl', { scenarios: 'happy', copybookPaths: [] }),
+      /missing scenarios\/fixtures\/unresolved/);
+  });
 });

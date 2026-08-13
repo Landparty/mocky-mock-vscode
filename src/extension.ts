@@ -426,8 +426,14 @@ function activateProgramFlowView(context: vscode.ExtensionContext): void {
   let refreshTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleRefresh(): void {
     if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+    refreshTimer = setTimeout(async () => {
       if (!provider.visible) return;
+      // Same isCutWorkspace gate as the Boundaries and Paragraph Tree views
+      // (see the comment above isCutWorkspace): without it, opening any
+      // unrelated COBOL file in a non-mockymock workspace would spawn an
+      // `analyze --help` probe plus two `analyze program-flow` runs.
+      if (!(await isCutWorkspace())) return;
+      if (!provider.visible) return; // re-check: the workspace scan above can outlive the view being visible
       const activeCblPath = resolveActiveCblPath();
       const newEditorIsCobol = activeCblPath !== undefined;
       if (newEditorIsCobol) {

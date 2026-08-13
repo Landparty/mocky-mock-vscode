@@ -54,6 +54,21 @@ describe('resolveCblPath', () => {
     const expected = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cbl');
     assert.strictEqual(resolveCblPath(cutPath), expected);
   });
+
+  it('resolves a sibling .cob or .cobol when that is what exists on disk', () => {
+    const cutPath = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cut');
+    const cob = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cob');
+    const cobol = path.join('/repo', 'examples', 'invupdt', 'INVUPDT.cobol');
+    assert.strictEqual(resolveCblPath(cutPath, (p) => p === cob), cob);
+    assert.strictEqual(resolveCblPath(cutPath, (p) => p === cobol), cobol);
+  });
+
+  it('prefers .cbl when more than one candidate exists, and defaults to .cbl when none does', () => {
+    const cutPath = path.join('/repo', 'PROG.cut');
+    const cbl = path.join('/repo', 'PROG.cbl');
+    assert.strictEqual(resolveCblPath(cutPath, () => true), cbl);
+    assert.strictEqual(resolveCblPath(cutPath, () => false), cbl);
+  });
 });
 
 describe('resolveCutPath', () => {

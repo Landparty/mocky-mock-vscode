@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath, supportsExportCommand } from '../environment/checks';
+import { supportsExportCommand } from '../environment/checks';
+import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
+import { isCobolPath } from '../boundaries/viewRefreshPolicy';
 import { runExport } from './exportRunner';
 
 function defaultOutputPath(cblPath: string): string {
@@ -28,7 +30,10 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
       if (activePath?.endsWith('.cut')) {
         cutPath = activePath;
         cblPath = resolveCblPath(activePath);
-      } else if (activePath?.endsWith('.cbl')) {
+      } else if (activePath && isCobolPath(activePath)) {
+        // isCobolPath, not endsWith('.cbl'): .cob/.cobol are registered for
+        // the cobol language in package.json and accepted by analyzeCobol --
+        // rejecting them here was an inconsistency, not a policy.
         cblPath = activePath;
         cutPath = resolveCutPath(activePath);
         // A successful export opens PROG.mainframe.cbl as the new active
@@ -53,9 +58,7 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
         return;
       }
 
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
-      const config = vscode.workspace.getConfiguration('mockymock', editor!.document.uri);
-      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
+      const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor!.document.uri);
 
       const supportsExport = await supportsExportCommand(runCommand, executablePath);
       if (!supportsExport) {
@@ -66,10 +69,29 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
         return;
       }
 
-      const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
-        workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
-      );
       const outputPath = defaultOutputPath(cblPath);
+
+      // Same overwrite discipline as the Boundaries view's "Generate .cut"
+      // handler (extension.ts's runGenerateCutCommand): never silently
+      // destroy an existing output file. Modal, so Escape / Cancel means no
+      // export at all.
+      let outputExists = true;
+      try {
+        await fs.access(outputPath);
+      } catch {
+        outputExists = false;
+      }
+      if (outputExists) {
+        const overwriteChoice = 'Overwrite';
+        const choice = await vscode.window.showWarningMessage(
+          `mockymock: "${path.basename(outputPath)}" already exists.`,
+          { modal: true },
+          overwriteChoice
+        );
+        if (choice !== overwriteChoice) {
+          return;
+        }
+      }
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Exporting mainframe-ready COBOL...' },

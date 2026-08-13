@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { runCommand } from '../environment/commandRunner';
-import { describeRefreshError, resolveExecutablePath, supportsAnalyzeCommand } from '../environment/checks';
+import { describeRefreshError, supportsAnalyzeCommand } from '../environment/checks';
+import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { CobolAnalyzer, runAnalyze } from './analysisRunner';
 
 interface AnalyzerOption {
@@ -58,9 +58,7 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
         return;
       }
 
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor!.document.uri);
-      const config = vscode.workspace.getConfiguration('mockymock', editor!.document.uri);
-      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
+      const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor!.document.uri);
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
@@ -90,10 +88,6 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
       if (!picked) {
         return;
       }
-
-      const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
-        workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
-      );
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `Running ${picked.label} analysis...` },

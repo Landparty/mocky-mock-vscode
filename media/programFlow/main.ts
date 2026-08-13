@@ -164,7 +164,10 @@ async function renderDiagram(msg: { mermaidText: string; report: ProgramFlowRepo
 
   let svg: string;
   try {
-    ({ svg } = await mermaid.render('program-flow-svg', msg.mermaidText));
+    // Per-render unique id: the renderToken guard drops stale RESULTS, but
+    // two overlapping mermaid.render() calls against one fixed element id
+    // could still collide inside mermaid itself (rapid refresh clicks).
+    ({ svg } = await mermaid.render(`program-flow-svg-${token}`, msg.mermaidText));
   } catch (err) {
     if (token !== renderToken) return; // superseded by a newer render; discard silently
     renderError(`Mermaid could not render this diagram: ${err instanceof Error ? err.message : String(err)}`, false);

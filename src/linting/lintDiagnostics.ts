@@ -1,10 +1,9 @@
 // src/linting/lintDiagnostics.ts
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import * as path from 'path';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { runCommand } from '../environment/commandRunner';
-import { resolveExecutablePath } from '../environment/checks';
+import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { cutRelativeLine, parseLintOutput } from './lintOutput';
 
 // Runs `mockymock lint` (pure static analysis, zero Docker) on every open or
@@ -45,11 +44,7 @@ export function activateLintDiagnostics(context: vscode.ExtensionContext): void 
         return;
       }
 
-      const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-      const executablePath = resolveExecutablePath(config.get<string>('executablePath'), context.extensionPath);
-      const copybookPaths = (config.get<string[]>('copybookPaths') ?? []).map((p) =>
-        workspaceFolder && !path.isAbsolute(p) ? path.join(workspaceFolder.uri.fsPath, p) : p
-      );
+      const { executablePath, copybookPaths } = resolveInvocationConfig(context, document.uri);
       const args = ['lint', cblPath, '--cut', cutPath];
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
@@ -100,7 +95,19 @@ export function activateLintDiagnostics(context: vscode.ExtensionContext): void 
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
     vscode.workspace.onDidSaveTextDocument((document) => void lintDocument(document)),
-    vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri))
+    vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
+    // Re-evaluate every open .cut when the toggle flips: turning lintOnSave
+    // OFF used to leave existing squiggles in the Problems panel until each
+    // file was individually saved or closed (lintDocument's own disabled
+    // branch deletes them); turning it ON now lints without waiting for a
+    // save. Resource-scoped setting, so per-document re-evaluation (not a
+    // blanket collection.clear()) is the correct granularity.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!e.affectsConfiguration('mockymock.lintOnSave')) return;
+      for (const document of vscode.workspace.textDocuments) {
+        void lintDocument(document);
+      }
+    })
   );
   for (const document of vscode.workspace.textDocuments) {
     void lintDocument(document);
