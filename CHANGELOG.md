@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.5](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.4...v0.9.5) (2026-08-13)
+
+
+### Bug Fixes
+
+* correct stale VSCE_PAT wording in resolve job error messages ([dff17b3](https://github.com/Landparty/mocky-mock-vscode/commit/dff17b3e1ddfdbd26b99026c6ad7cb122993b6d1))
+* correct stale VSCE_PAT wording in resolve job error messages ([1a64a69](https://github.com/Landparty/mocky-mock-vscode/commit/1a64a6918e9f3f039a7212637b73fea826b55be6))
+
 ## [0.9.4](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.3...v0.9.4) (2026-08-13)
 
 
