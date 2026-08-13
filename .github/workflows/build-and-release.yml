@@ -43,7 +43,7 @@ jobs:
           # because those are incompatible token types.
           GH_TOKEN: ${{ secrets.GITHUB_READ_PAT }}
         run: |
-          [ -n "$GH_TOKEN" ] || { echo "::error::VSCE_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
+          [ -n "$GH_TOKEN" ] || { echo "::error::GITHUB_READ_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
           TAG="$(gh release view --repo Landparty/mocky-mock --json tagName -q .tagName)"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
             || { echo "::error::mocky-mock's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
@@ -60,7 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_READ_PAT }}
         run: |
-          [ -n "$GH_TOKEN" ] || { echo "::error::VSCE_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
+          [ -n "$GH_TOKEN" ] || { echo "::error::GITHUB_READ_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
           TAG="$(gh release view --repo Landparty/cobol-parser --json tagName -q .tagName)"
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
             || { echo "::error::cobol-parser's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
