@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.2](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.1...v0.9.2) (2026-08-13)
+
+
+### Bug Fixes
+
+* harden CLI invocation, parsers, and process-spawn discipline (audit findings) ([62c2e84](https://github.com/Landparty/mocky-mock-vscode/commit/62c2e846f08c579f8b10dd23420a2b674d6f788c))
+* harden CLI invocation, parsers, and process-spawn discipline (audit findings) ([44c9103](https://github.com/Landparty/mocky-mock-vscode/commit/44c9103e62bea79797b88ff81506c86c3bf03ea3))
+
 ## [0.9.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.0...v0.9.1) (2026-08-12)
 
 
