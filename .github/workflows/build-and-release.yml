@@ -37,10 +37,11 @@ jobs:
       - name: Resolve mocky-mock's latest release tag
         id: tag
         env:
-          # VSCE_PAT is an org-level GitHub PAT (not a Marketplace token,
-          # despite the name) with read access to both Landparty/mocky-mock
-          # and Landparty/cobol-parser -- reused below for the same reason.
-          GH_TOKEN: ${{ secrets.VSCE_PAT }}
+          # GITHUB_READ_PAT is an org-level GitHub PAT with read access to
+          # both Landparty/mocky-mock and Landparty/cobol-parser.  It is
+          # separate from VSCE_PAT (the VS Code Marketplace Azure DevOps PAT)
+          # because those are incompatible token types.
+          GH_TOKEN: ${{ secrets.GITHUB_READ_PAT }}
         run: |
           [ -n "$GH_TOKEN" ] || { echo "::error::VSCE_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
           TAG="$(gh release view --repo Landparty/mocky-mock --json tagName -q .tagName)"
@@ -57,7 +58,7 @@ jobs:
       - name: Resolve cobol-parser's latest release tag
         id: cobolparser_tag
         env:
-          GH_TOKEN: ${{ secrets.VSCE_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_READ_PAT }}
         run: |
           [ -n "$GH_TOKEN" ] || { echo "::error::VSCE_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
           TAG="$(gh release view --repo Landparty/cobol-parser --json tagName -q .tagName)"
@@ -90,12 +91,12 @@ jobs:
         with:
           repository: Landparty/mocky-mock
           ref: ${{ needs.resolve.outputs.mockymock_tag }}
-          token: ${{ secrets.VSCE_PAT }}
+          token: ${{ secrets.GITHUB_READ_PAT }}
           path: mockymock-src
 
       # cobolparser is a private repo; mockymock-src/pyproject.toml pins it
       # via git+https, which pip/git can only resolve here with a token that
-      # has read access (VSCE_PAT, the same org-level GitHub PAT used above
+      # has read access (GITHUB_READ_PAT, the org-level GitHub PAT used above
       # to check out mocky-mock). shell: bash is required on every OS --
       # run: steps default to pwsh on windows-latest, and pwsh parses
       # ${TOKEN} as an (unset) PowerShell variable rather than expanding the
@@ -103,10 +104,10 @@ jobs:
       - name: Configure git credentials for the private cobolparser dependency
         shell: bash
         run: |
-          [ -n "$TOKEN" ] || { echo "::error::VSCE_PAT is not set (needs an org-level secret with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
+          [ -n "$TOKEN" ] || { echo "::error::GITHUB_READ_PAT is not set (needs an org-level secret with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
           git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
         env:
-          TOKEN: ${{ secrets.VSCE_PAT }}
+          TOKEN: ${{ secrets.GITHUB_READ_PAT }}
 
       - uses: actions/setup-python@v5
         with:
