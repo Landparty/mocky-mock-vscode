@@ -27,6 +27,7 @@ import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
 import { ProgramFlowViewProvider } from './programFlow/programFlowViewProvider';
 import { activateOutlineProvider } from './outline/outlineProvider';
+import { activateFocusStatements } from './focusStatements/activateFocusStatements';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
@@ -490,6 +491,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateParagraphTreeView(context);
   activateOutlineProvider(context);
   activateProgramFlowView(context);
+  activateFocusStatements(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(
