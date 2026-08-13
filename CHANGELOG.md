@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.4](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.3...v0.9.4) (2026-08-13)
+
+
+### Bug Fixes
+
+* separate GITHUB_READ_PAT from VSCE_PAT in build-and-release workflow ([0c04221](https://github.com/Landparty/mocky-mock-vscode/commit/0c04221d7d7ef2a6e9783d15d1774bc853777caa))
+* use GITHUB_READ_PAT for cross-repo GitHub API access instead of VSCE_PAT ([3d57439](https://github.com/Landparty/mocky-mock-vscode/commit/3d57439e28bff1d97907a94ae250a00f037773f7))
+
 ## [0.9.3](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.2...v0.9.3) (2026-08-13)
 
 
