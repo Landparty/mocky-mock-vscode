@@ -9,6 +9,7 @@ import { MockymockDebugAdapterDescriptorFactory } from './debug/debugAdapterFact
 import { MockymockDebugConfigurationProvider } from './debug/debugConfigurationProvider';
 import { activateExportMainframeCommand } from './export/exportMainframe';
 import { activateAnalyzeCobolCommand } from './analysis/analyzeCobol';
+import { activateMoveMismatchDiagnostics } from './analysis/moveMismatchDiagnostics';
 import { activateGenerateDataCommand } from './generateData/generateData';
 import { runCommand } from './environment/commandRunner';
 import { healBundledBinaryOnDarwin } from './environment/macSelfHeal';
@@ -485,6 +486,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateLintDiagnostics(context);
   activateExportMainframeCommand(context);
   activateAnalyzeCobolCommand(context);
+  activateMoveMismatchDiagnostics(context);
   activateGenerateDataCommand(context);
   activateCobolViewVisibility(context);
   activateBoundariesView(context, environmentManager);

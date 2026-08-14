@@ -235,6 +235,12 @@
           "scope": "resource",
           "description": "Run 'mockymock lint' (static checks only, no Docker) on open/save of a .cut file and show the problems as diagnostics."
         },
+        "mockymock.moveCheckOnSave": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Run 'mockymock analyze move-type-check' (static checks only, no Docker) when a .cbl/.cob/.cobol file becomes the active editor or is saved, and show MOVE statement data-category mismatches as diagnostics."
+        },
         "mockymock.maxParallelRuns": {
           "type": "number",
           "default": 1,
