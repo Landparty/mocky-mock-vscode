@@ -121,6 +121,18 @@ export function activateMoveMismatchDiagnostics(context: vscode.ExtensionContext
     vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration('mockymock.moveCheckOnSave')) return;
+      // Resource-scoped setting: a document outside the active editor may
+      // have just been disabled (e.g. a per-folder override in a multi-root
+      // workspace) and would otherwise keep its stale squiggles until it's
+      // next focused/saved/closed. Clear those proactively without
+      // re-analyzing them -- only the active editor gets a fresh check.
+      for (const document of vscode.workspace.textDocuments) {
+        if (!COBOL_FILE_RE.test(document.uri.fsPath) || document.uri.scheme !== 'file') continue;
+        const config = vscode.workspace.getConfiguration('mockymock', document.uri);
+        if (!(config.get<boolean>('moveCheckOnSave') ?? true)) {
+          collection.delete(document.uri);
+        }
+      }
       const editor = vscode.window.activeTextEditor;
       if (editor) void checkDocument(editor.document);
     })
