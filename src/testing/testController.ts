@@ -1010,7 +1010,19 @@ export function activateTestController(
       try {
         for (const plan of planRuns(request)) {
           if (token.isCancellationRequested) break;
-          await runMutationFile(plan, run, token);
+          try {
+            await runMutationFile(plan, run, token);
+          } catch (err) {
+            // Never leave a "started" item without a terminal state: same
+            // guard as makeRunHandler's worker for "Run"/"Run with
+            // Coverage" -- if runMutationFile throws after run.started(),
+            // error the file out and move on to the next one instead of
+            // leaving a permanent spinner and abandoning the rest of the
+            // selection.
+            const message = err instanceof Error ? err.message : String(err);
+            run.appendOutput(toCrlf(`${message}\n`), undefined, plan.fileItem);
+            run.errored(plan.fileItem, new vscode.TestMessage(message));
+          }
         }
       } finally {
         run.end();
