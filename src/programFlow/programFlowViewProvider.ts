@@ -3,7 +3,8 @@ import { runCommand } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { describeRefreshError, supportsAnalyzeCommand } from '../environment/checks';
 import { RefreshGuard } from '../boundaries/refreshGuard';
-import { fetchProgramFlow, ProgramFlowFetchError } from '../paragraphTree/programFlowClient';
+import { ProgramFlowFetchError } from '../paragraphTree/programFlowClient';
+import { fetchProgramFlowShared } from '../paragraphTree/sharedProgramFlowFetch';
 import type { ProgramFlowReport } from '../paragraphTree/programFlowModel';
 import { fetchProgramFlowMermaid, ProgramFlowMermaidFetchError } from './programFlowMermaidClient';
 import { summarizeProgramFlow, ProgramFlowSummary } from './programFlowSummary';
@@ -166,7 +167,7 @@ export class ProgramFlowViewProvider implements vscode.WebviewViewProvider {
       }
 
       const [report, mermaidText] = await Promise.all([
-        fetchProgramFlow(runCommand, executablePath, cblPath),
+        fetchProgramFlowShared(runCommand, executablePath, cblPath),
         fetchProgramFlowMermaid(runCommand, executablePath, cblPath),
       ]);
       nextModel = { mermaidText, report };
