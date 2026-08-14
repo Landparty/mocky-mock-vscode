@@ -4,7 +4,8 @@ import { runCommand } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { describeRefreshError, supportsAnalyzeCommand } from '../environment/checks';
 import { RefreshGuard } from '../boundaries/refreshGuard';
-import { fetchProgramFlow, ProgramFlowFetchError } from './programFlowClient';
+import { ProgramFlowFetchError } from './programFlowClient';
+import { fetchProgramFlowShared } from './sharedProgramFlowFetch';
 import { buildParagraphTree, ParagraphTreeError, ParagraphTreeResult } from './programFlowModel';
 import { extractSourceSnippet } from './sourceAnnotations';
 import { buildWebviewHtml, getNonce } from './webviewHtml';
@@ -194,7 +195,7 @@ export class ParagraphTreeViewProvider implements vscode.WebviewViewProvider {
         );
       }
 
-      const report = await fetchProgramFlow(runCommand, executablePath, cblPath);
+      const report = await fetchProgramFlowShared(runCommand, executablePath, cblPath);
       const doc = await vscode.workspace.openTextDocument(cblPath);
       nextSourceLines = doc.getText().split(/\r?\n/);
       nextModel = buildParagraphTree(report, nextSourceLines);
