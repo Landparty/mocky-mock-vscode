@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.10.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.6...v0.10.0) (2026-08-13)
+
+
+### Features
+
+* add Focus on SQL/CICS/MQ/CALL Statements command ([4298598](https://github.com/Landparty/mocky-mock-vscode/commit/42985983d6295d9e5846a8dba71abab9230abc8d))
+
+
+### Bug Fixes
+
+* address Copilot review on focus-statements PR [#56](https://github.com/Landparty/mocky-mock-vscode/issues/56) ([ac40c64](https://github.com/Landparty/mocky-mock-vscode/commit/ac40c64eb01bc46b9a3195386f7415f3054879ca))
+
 ## [0.9.6](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.5...v0.9.6) (2026-08-13)
 
 
