@@ -36,6 +36,8 @@ it does and how to use it.
 - **Debug (Execution Trace)** — see the executed path and mocks that fired.
 - **Debug (Interactive)** — real breakpoints, stepping, and variable
   inspection on your original `.cbl`.
+- **Mutation Test** — surviving mutants painted as warnings on your
+  original `.cbl`, with a mutation score.
 - **Continuous run** — re-run a test automatically on file change.
 - **Cancellation** that actually kills the in-flight run.
 - **Live linting** on open/save, zero Docker needed.

@@ -501,6 +501,17 @@ export function activateTestController(
       );
     }
 
+    // Computed up front -- resolveCblPath is pure path math, no I/O that can
+    // fail -- so the previous run's survivor diagnostics can be cleared
+    // before any failure-exit branch below (ensureReady, cancellation,
+    // old-CLI) gets a chance to return early. Otherwise a re-run that never
+    // produces a new report (Docker down, CLI too old) leaves the PREVIOUS
+    // run's warnings stuck in the Problems panel, unvalidated by this run.
+    const cutPath = fileItem.uri!.fsPath;
+    const cblPath = resolveCblPath(cutPath);
+    const cblUri = vscode.Uri.file(cblPath);
+    mutationDiagnostics.delete(cblUri);
+
     const ready = await environmentManager.ensureReady();
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
@@ -512,8 +523,6 @@ export function activateTestController(
       return;
     }
 
-    const cutPath = fileItem.uri!.fsPath;
-    const cblPath = resolveCblPath(cutPath);
     const { executablePath, copybookPaths } = resolveInvocationConfig(context, fileItem.uri!);
 
     const supportsMutate = await supportsMutateCommand(runCommand, executablePath);
@@ -570,7 +579,6 @@ export function activateTestController(
       return;
     }
 
-    const cblUri = vscode.Uri.file(cblPath);
     const survivors = survivorsOf(report);
     mutationDiagnostics.set(cblUri, survivors.map(survivorDiagnostic));
 
@@ -586,6 +594,19 @@ export function activateTestController(
         return message;
       });
       run.failed(fileItem, messages);
+    } else if (report.generated === 0 || report.generated === report.stillborn) {
+      // Nothing scorable: either mockymock generated zero mutants, or every
+      // mutant it generated failed to compile (stillborn). score is null in
+      // both cases (see mockymock/mutation/report.py) and exitCode is
+      // typically 0 -- a plain run.passed(fileItem) here would be a green
+      // check for a run that verified nothing, contradicting the "no silent
+      // failures" promise in README.md. Mirrors the "not scored" framing
+      // used for the interactive-debug profile's terminal skipped state.
+      const message =
+        'mockymock mutate produced no scorable mutants for this file (nothing was generated, or every ' +
+        'mutant was stillborn) -- mutation coverage was not verified by this run.';
+      run.appendOutput(toCrlf(`${message}\n`), undefined, fileItem);
+      run.skipped(fileItem);
     } else if (result.exitCode !== 0) {
       // Exit 1 with a report but no survivors: refusal-style problems the
       // CLI printed to the streamed output (mutation itself never gates the
