@@ -21,7 +21,8 @@ describe('fetchProgramFlowShared', () => {
     // Let both callers reach the in-flight-map check before the run resolves.
     await Promise.resolve();
     await Promise.resolve();
-    resolveRun?.();
+    assert.ok(resolveRun, 'fakeRun was never invoked -- coalescing did not happen');
+    resolveRun();
 
     const [a, b] = await Promise.all([first, second]);
     assert.equal(invocations, 1);
