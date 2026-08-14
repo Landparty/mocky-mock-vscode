@@ -63,20 +63,26 @@ describe('parseMutationJson', () => {
     assert.strictEqual(report!.score, null);
   });
 
-  it('skips mutant entries with a missing line or unknown status', () => {
+  it('rejects the whole report when any mutant entry has a missing line', () => {
+    // A malformed row must not silently vanish: if it happened to be the
+    // one true survivor, dropping it alone would turn a real failure into
+    // an artificial pass.
     const report = parseMutationJson(
       JSON.stringify({
         mutants: [
-          { operator: 'rel-swap', status: 'survived' },
-          { line: 3, status: 'exploded' },
           { line: 7, operator: 'stmt-delete', description: 'delete MOVE statement', original: 'a', mutated: 'b', status: 'timeout' },
+          { operator: 'rel-swap', status: 'survived' },
         ],
       })
     );
-    assert.ok(report);
-    assert.strictEqual(report!.mutants.length, 1);
-    assert.strictEqual(report!.mutants[0].line, 7);
-    assert.strictEqual(report!.mutants[0].status, 'timeout');
+    assert.strictEqual(report, null);
+  });
+
+  it('rejects the whole report when any mutant entry has an unknown status', () => {
+    assert.strictEqual(
+      parseMutationJson(JSON.stringify({ mutants: [{ line: 3, status: 'exploded' }] })),
+      null
+    );
   });
 
   it('derives totals from the mutant list when the totals block is missing', () => {

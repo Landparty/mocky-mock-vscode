@@ -3,8 +3,12 @@
 // to_json_dict). `line` is 1-based in the ORIGINAL .cbl -- mutants are
 // generated from the pre-normalization source the user edits, so every line
 // here is directly addressable in the editor. Tolerant parsing mirrors
-// coverageReport.ts/traceReport.ts: a structurally alien document returns
-// null and the caller degrades, rather than throwing.
+// coverageReport.ts/traceReport.ts for the document's overall shape (a
+// structurally alien document returns null), but NOT per-mutant: every
+// mutant row can flip the pass/fail verdict, so a malformed row rejects the
+// whole report instead of being silently dropped -- otherwise a report that
+// truthfully has a survivor could parse into zero survivors and read as a
+// clean pass.
 
 export type MutantStatus = 'killed' | 'survived' | 'stillborn' | 'timeout';
 
@@ -55,10 +59,10 @@ export function parseMutationJson(text: string): MutationReport | null {
 
   const mutants: MutantEntry[] = [];
   for (const entry of root.mutants) {
-    if (typeof entry !== 'object' || entry === null) continue;
+    if (typeof entry !== 'object' || entry === null) return null;
     const item = entry as Record<string, unknown>;
-    if (typeof item.line !== 'number') continue;
-    if (typeof item.status !== 'string' || !STATUSES.has(item.status)) continue;
+    if (typeof item.line !== 'number') return null;
+    if (typeof item.status !== 'string' || !STATUSES.has(item.status)) return null;
     mutants.push({
       line: item.line,
       operator: asString(item.operator),

@@ -80,7 +80,16 @@ export function activateTestController(
   context.subscriptions.push(mutationDiagnostics);
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument((e) => {
-      if (mutationDiagnostics.has(e.document.uri)) mutationDiagnostics.delete(e.document.uri);
+      const uri = e.document.uri;
+      if (mutationDiagnostics.has(uri)) mutationDiagnostics.delete(uri);
+      // Diagnostics are keyed by the .cbl, but editing the paired .cut can
+      // change whether a mutant survives (a new EXPECT/VERIFY can kill it) --
+      // without this, a warning claiming "every test still passes" outlives
+      // the test edit that made it false.
+      if (uri.fsPath.endsWith('.cut')) {
+        const cblUri = vscode.Uri.file(resolveCblPath(uri.fsPath));
+        if (mutationDiagnostics.has(cblUri)) mutationDiagnostics.delete(cblUri);
+      }
     })
   );
 
@@ -501,16 +510,15 @@ export function activateTestController(
       );
     }
 
-    // Computed up front -- resolveCblPath is pure path math, no I/O that can
-    // fail -- so the previous run's survivor diagnostics can be cleared
-    // before any failure-exit branch below (ensureReady, cancellation,
-    // old-CLI) gets a chance to return early. Otherwise a re-run that never
-    // produces a new report (Docker down, CLI too old) leaves the PREVIOUS
-    // run's warnings stuck in the Problems panel, unvalidated by this run.
+    // cblPath/cblUri are computed here for reuse: runMutate needs cblPath
+    // below, and mutationDiagnostics.set needs cblUri once a report parses.
+    // Clearing this file's survivor diagnostics happens once, up front, in
+    // the profile handler that calls this function for every selected file
+    // BEFORE any of them starts running -- not here, one file at a time as
+    // the sequential loop reaches each one.
     const cutPath = fileItem.uri!.fsPath;
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
-    mutationDiagnostics.delete(cblUri);
 
     const ready = await environmentManager.ensureReady();
     if (!ready.ok) {
@@ -1029,7 +1037,19 @@ export function activateTestController(
     async (request, token) => {
       const run = controller.createTestRun(request);
       try {
-        for (const plan of planRuns(request)) {
+        const plans = planRuns(request);
+        // Clear every selected file's survivor diagnostics before ANY of
+        // them starts running -- not inside runMutationFile, which only
+        // reaches a given file once the loop below gets there. Without this,
+        // a multi-file selection leaves later files' stale warnings visible
+        // for as long as earlier files take to mutate (minutes), and
+        // permanently if the run is cancelled before reaching them, despite
+        // "starting a new mutation run clears them" being documented
+        // behavior.
+        for (const plan of plans) {
+          mutationDiagnostics.delete(vscode.Uri.file(resolveCblPath(plan.fileItem.uri!.fsPath)));
+        }
+        for (const plan of plans) {
           if (token.isCancellationRequested) break;
           try {
             await runMutationFile(plan, run, token);
