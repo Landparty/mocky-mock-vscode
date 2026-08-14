@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.11.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.10.0...v0.11.0) (2026-08-14)
+
+
+### Features
+
+* add mutate CLI arg builder and spawn wrapper ([2a488b5](https://github.com/Landparty/mocky-mock-vscode/commit/2a488b5441e39b6872a539f6f4506ef2c3313864))
+* add Mutation Test run profile with survivor diagnostics ([a0db926](https://github.com/Landparty/mocky-mock-vscode/commit/a0db9268c7713df8e3c04af0f8c9b0ded8f3b0cd))
+* add Mutation Test run profile with survivor diagnostics ([46367db](https://github.com/Landparty/mocky-mock-vscode/commit/46367db8542290ac3b0883b7c4d929fdfaea5285))
+* identify MOVE statement type mismatches as live diagnostics ([8f9c116](https://github.com/Landparty/mocky-mock-vscode/commit/8f9c1160f36e148230d39e987f4b5a6cde211a2c))
+* parse mockymock mutate --json-report output ([7ad10a3](https://github.com/Landparty/mocky-mock-vscode/commit/7ad10a35b98c2c7b7683c462a0c54c13ca289327))
+* probe CLI support for the mutate subcommand ([211ab76](https://github.com/Landparty/mocky-mock-vscode/commit/211ab7699b8d9dfa81212ae4e7f82352907ef1eb))
+
+
+### Bug Fixes
+
+* address Copilot review on move-mismatch PR [#59](https://github.com/Landparty/mocky-mock-vscode/issues/59) ([6dd003e](https://github.com/Landparty/mocky-mock-vscode/commit/6dd003e3796f30bf5efd07cf62b050cdf5f1a1da))
+* address mutation-testing review comments from Copilot ([32c7b78](https://github.com/Landparty/mocky-mock-vscode/commit/32c7b78f7c3e217b7ba6ddcf638041d5b7401c91))
+* close mutation-test false-green and stale-diagnostics gaps ([bd570d2](https://github.com/Landparty/mocky-mock-vscode/commit/bd570d21d111b87801d5e7cb2573788e03f80247))
+* guard against a stuck spinner if runMutationFile throws mid-run ([31d8ea3](https://github.com/Landparty/mocky-mock-vscode/commit/31d8ea3677751486e7eb67f0727a6fa3ac0c1422))
+
 ## [0.10.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.9.6...v0.10.0) (2026-08-13)
 
 
