@@ -208,28 +208,6 @@ Requires a `mockymock` CLI new enough to have the `fixtures` subcommand and
 `generate --with-data`; an older CLI shows the error node with the CLI's own
 "invalid choice: 'fixtures'" message rather than a blank view.
 
-## Mutation testing
-
-The **Mutation Test** run profile (Test Explorer → run-button dropdown) runs
-`mockymock mutate` for the selected `.cut` file: mockymock re-runs the whole
-suite against many single-line variants of your COBOL program (`IF X > 0`
-becomes `IF X >= 0`, a `MOVE` is deleted, a boundary literal shifts by one)
-and reports which variants your tests failed to notice.
-
-- Each **surviving mutant** — a deliberate bug every test still passes on —
-  is attached to the `.cut` file item as a diff and painted as a
-  `mockymock mutation` warning on the exact `.cbl` line (cleared when you
-  edit the file or start a new mutation run).
-- The **mutation score** (killed ÷ scored mutants) streams into Test Results
-  along with per-mutant progress; a hang counts as killed, a mutant that
-  fails to compile is excluded from the score.
-- Mutation always exercises the whole suite (the CLI has no per-case mode),
-  needs Docker like a normal run, and costs one compile+run per mutant —
-  expect minutes, not seconds, on a large program.
-
-Requires a mockymock CLI new enough to have the `mutate` subcommand; older
-CLIs get a clear upgrade message instead.
-
 ## Examples
 
 [`examples/`](examples/) has 13 worked COBOL programs, copied from
