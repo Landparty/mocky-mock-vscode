@@ -17,9 +17,11 @@ import { parseJsonReport, mapJsonReport } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
+import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
+import { runMutate } from './mutationRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { resolveExecutablePath, supportsTraceFlag, supportsDebugCommand } from '../environment/checks';
+import { resolveExecutablePath, supportsTraceFlag, supportsDebugCommand, supportsMutateCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
@@ -69,6 +71,31 @@ export function activateTestController(
   // served back from loadDetailedCoverage. WeakMap so a finished run's
   // coverage objects don't pin their details forever.
   const coverageDetails = new WeakMap<vscode.FileCoverage, vscode.StatementCoverage[]>();
+
+  // Surviving mutants from the most recent "Mutation Test" run, painted as
+  // warnings on the ORIGINAL .cbl. Any edit to a flagged file clears its
+  // entries wholesale: mutant line numbers are positions in the file as it
+  // was when the run started, and one keystroke can shift all of them.
+  const mutationDiagnostics = vscode.languages.createDiagnosticCollection('mockymock-mutation');
+  context.subscriptions.push(mutationDiagnostics);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      if (mutationDiagnostics.has(e.document.uri)) mutationDiagnostics.delete(e.document.uri);
+    })
+  );
+
+  function survivorDiagnostic(m: MutantEntry): vscode.Diagnostic {
+    // 1-based report line -> 0-based editor line, clamped like
+    // messagesForOutcome's location so a "line": 0 can't throw.
+    const line = Math.max(0, m.line - 1);
+    const diagnostic = new vscode.Diagnostic(
+      new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
+      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"`,
+      vscode.DiagnosticSeverity.Warning
+    );
+    diagnostic.source = 'mockymock mutation';
+    return diagnostic;
+  }
 
   function getTag(tag: string): vscode.TestTag {
     let existing = testTags.get(tag);
@@ -451,6 +478,121 @@ export function activateTestController(
         );
         run.addCoverage(fileCoverage);
       }
+    }
+  }
+
+  // "Mutation Test": run `mockymock mutate` for a .cut file -- every mutant
+  // is one full compile+run in the Docker sandbox, so this profile streams
+  // the CLI's per-mutant progress lines live and runs files SEQUENTIALLY
+  // (no maxParallelRuns pool: each mutant already serializes compiles inside
+  // the shared mockymock-cobc container, and a mutation pass is minutes, not
+  // seconds). The CLI has no --case flag -- the suite compiles as a single
+  // binary and every mutant faces all of it -- so any narrower selection
+  // collapses to the whole file, with a note in the output. Verdicts land on
+  // the FILE item only: mutation scores the suite, not individual cases.
+  async function runMutationFile(plan: FilePlan, run: vscode.TestRun, token: vscode.CancellationToken) {
+    const { fileItem } = plan;
+    run.started(fileItem);
+    if (plan.caseItems !== null) {
+      run.appendOutput(
+        toCrlf('mockymock: mutation testing always runs the whole .cut suite against each mutant -- case selection widened to the file\n'),
+        undefined,
+        fileItem
+      );
+    }
+
+    const ready = await environmentManager.ensureReady();
+    if (!ready.ok) {
+      run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
+      run.errored(fileItem, new vscode.TestMessage(ready.message));
+      return;
+    }
+    if (token.isCancellationRequested) {
+      run.skipped(fileItem);
+      return;
+    }
+
+    const cutPath = fileItem.uri!.fsPath;
+    const cblPath = resolveCblPath(cutPath);
+    const { executablePath, copybookPaths } = resolveInvocationConfig(context, fileItem.uri!);
+
+    const supportsMutate = await supportsMutateCommand(runCommand, executablePath);
+    if (!supportsMutate) {
+      const message =
+        `mockymock at "${executablePath}" is too old to support mutation testing ` +
+        '(needs the mutate subcommand). Upgrade mockymock and try again.';
+      run.appendOutput(toCrlf(`${message}\n`), undefined, fileItem);
+      run.errored(fileItem, new vscode.TestMessage(message));
+      return;
+    }
+
+    // Same per-run temp directory + finally cleanup as runOneFile.
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockymock-'));
+    const jsonReportPath = path.join(tmpDir, 'mutation.json');
+
+    const abort = new AbortController();
+    const cancelListener = token.onCancellationRequested(() => abort.abort());
+
+    run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, fileItem);
+    let result;
+    try {
+      result = await runMutate(
+        { executablePath, cblPath, cutPath, jsonReportPath, copybookPaths },
+        runCommand,
+        async (p) => {
+          try {
+            return await fs.readFile(p, 'utf8');
+          } catch {
+            return null;
+          }
+        },
+        createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem)),
+        abort.signal
+      );
+    } finally {
+      cancelListener.dispose();
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
+    }
+    run.appendOutput(formatRunTrailer(result.exitCode), undefined, fileItem);
+
+    if (token.isCancellationRequested) {
+      run.skipped(fileItem);
+      return;
+    }
+
+    // The streamed CLI output already carries the per-mutant progress lines,
+    // survivor diffs, and score -- the JSON report is only for the verdict,
+    // TestMessages, and diagnostics.
+    const report = result.jsonReport ? parseMutationJson(result.jsonReport) : null;
+    if (!report) {
+      const message = `mockymock mutate did not produce a report:\n${result.stderr || result.stdout}`;
+      run.errored(fileItem, new vscode.TestMessage(message));
+      return;
+    }
+
+    const cblUri = vscode.Uri.file(cblPath);
+    const survivors = survivorsOf(report);
+    mutationDiagnostics.set(cblUri, survivors.map(survivorDiagnostic));
+
+    if (survivors.length) {
+      const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
+      const messages = survivors.map((m) => {
+        const message = vscode.TestMessage.diff(
+          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})`,
+          m.original,
+          m.mutated
+        );
+        message.location = new vscode.Location(cblUri, new vscode.Position(Math.max(0, m.line - 1), 0));
+        return message;
+      });
+      run.failed(fileItem, messages);
+    } else if (result.exitCode !== 0) {
+      // Exit 1 with a report but no survivors: refusal-style problems the
+      // CLI printed to the streamed output (mutation itself never gates the
+      // exit code without --fail-under, which this profile does not pass).
+      run.errored(fileItem, new vscode.TestMessage(`mockymock mutate exited ${result.exitCode}:\n${result.stderr || result.stdout}`));
+    } else {
+      run.passed(fileItem);
     }
   }
 
@@ -855,6 +997,28 @@ export function activateTestController(
     true
   );
   context.subscriptions.push(interactiveDebugProfile);
+
+  // A second Run-kind profile: shows up in the Test Explorer's run-button
+  // dropdown next to "Run". Not the default, no continuous mode -- a
+  // mutation pass costs one compile+run per mutant and is minutes long, so
+  // it must only ever run when explicitly chosen.
+  const mutationProfile = controller.createRunProfile(
+    'Mutation Test',
+    vscode.TestRunProfileKind.Run,
+    async (request, token) => {
+      const run = controller.createTestRun(request);
+      try {
+        for (const plan of planRuns(request)) {
+          if (token.isCancellationRequested) break;
+          await runMutationFile(plan, run, token);
+        }
+      } finally {
+        run.end();
+      }
+    },
+    false
+  );
+  context.subscriptions.push(mutationProfile);
 
   return controller;
 }
