@@ -16,6 +16,7 @@ import {
   supportsExportCommand,
   supportsAnalyzeCommand,
   supportsGenerateDataCommand,
+  supportsMutateCommand,
   describeRefreshError,
   CLI_NOT_FOUND_MESSAGE,
   CLI_PERMISSION_DENIED_MESSAGE,
@@ -196,6 +197,32 @@ describe('supportsGenerateDataCommand', () => {
 
   it('returns false when the command cannot be run at all', async () => {
     const ok = await supportsGenerateDataCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
+    assert.strictEqual(ok, false);
+  });
+});
+
+describe('supportsMutateCommand', () => {
+  it('returns true when mutate --help lists --json-report', async () => {
+    const ok = await supportsMutateCommand(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock mutate ...\n  --json-report PATH  ...\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the subcommand (argparse invalid choice, exit 2)', async () => {
+    const ok = await supportsMutateCommand(
+      fakeRunner({ code: 2, stdout: '', stderr: "invalid choice: 'mutate'" }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsMutateCommand(
+      fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }),
+      'mockymock'
+    );
     assert.strictEqual(ok, false);
   });
 });

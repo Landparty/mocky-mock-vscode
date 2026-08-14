@@ -119,6 +119,20 @@ export async function supportsGenerateDataCommand(run: CommandRunner, executable
   });
 }
 
+// Same "check first, degrade gracefully" pattern as supportsDebugCommand/
+// supportsExportCommand, but for the `mutate` subcommand: an installed CLI
+// that predates `mockymock mutate` exits 2 (argparse's "invalid choice" for
+// an unknown subcommand) on `mutate --help`. Checking for `--json-report`
+// specifically -- the flag buildMutateArgs actually passes -- also catches
+// the unlikely case of a `mutate` subcommand existing without the exact
+// flag this extension needs.
+export async function supportsMutateCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'mutate', async () => {
+    const result = await run(executablePath, ['mutate', '--help']);
+    return result.code === 0 && result.stdout.includes('--json-report');
+  });
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" executable
