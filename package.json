@@ -40,6 +40,52 @@
         "category": "mockymock"
       },
       {
+        "command": "mockymock.analyzeCobol.deadCode",
+        "title": "Analyze: Dead Code",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.programFlow",
+        "title": "Analyze: Program Flow",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.ioSequence",
+        "title": "Analyze: I/O Sequence",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.moveTypeCheck",
+        "title": "Analyze: MOVE Type Check",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.linkageCheck",
+        "title": "Analyze: Linkage Check",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.languageEnv",
+        "title": "Analyze: Language Environment",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.imsDli",
+        "title": "Analyze: IMS DLI",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.analyzeCobol.dynamicCall",
+        "title": "Analyze: Dynamic Call Analysis",
+        "category": "mockymock"
+      },
+      {
+        "command": "mockymock.programFlow.show",
+        "title": "Show Program Flow",
+        "category": "mockymock",
+        "icon": "$(type-hierarchy-sub)"
+      },
+      {
         "command": "mockymock.generateData",
         "title": "Generate Data from Copybook",
         "category": "mockymock",
@@ -112,6 +158,12 @@
         "contents": "Open a .cbl file to list its boundaries."
       }
     ],
+    "submenus": [
+      {
+        "id": "mockymock.analyzeCobol.submenu",
+        "label": "mockymock: Analyze COBOL"
+      }
+    ],
     "menus": {
       "editor/title": [
         {
@@ -123,6 +175,52 @@
           "command": "mockymock.focusStatements.toggle",
           "when": "resourceLangId == cobol",
           "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "mockymock.analyzeCobol.submenu",
+          "when": "resourceLangId == cobol",
+          "group": "mockymock@1"
+        },
+        {
+          "command": "mockymock.programFlow.show",
+          "when": "resourceLangId == cobol",
+          "group": "mockymock@2"
+        }
+      ],
+      "mockymock.analyzeCobol.submenu": [
+        {
+          "command": "mockymock.analyzeCobol.deadCode",
+          "group": "1_analyzers@1"
+        },
+        {
+          "command": "mockymock.analyzeCobol.programFlow",
+          "group": "1_analyzers@2"
+        },
+        {
+          "command": "mockymock.analyzeCobol.ioSequence",
+          "group": "1_analyzers@3"
+        },
+        {
+          "command": "mockymock.analyzeCobol.moveTypeCheck",
+          "group": "1_analyzers@4"
+        },
+        {
+          "command": "mockymock.analyzeCobol.linkageCheck",
+          "group": "1_analyzers@5"
+        },
+        {
+          "command": "mockymock.analyzeCobol.languageEnv",
+          "group": "1_analyzers@6"
+        },
+        {
+          "command": "mockymock.analyzeCobol.imsDli",
+          "group": "1_analyzers@7"
+        },
+        {
+          "command": "mockymock.analyzeCobol.dynamicCall",
+          "group": "1_analyzers@8"
         }
       ],
       "view/title": [
@@ -252,7 +350,9 @@
     "test:unit": "mocha",
     "test:integration": "node scripts/run-integration-tests.js",
     "vscode:prepublish": "npm run check-types && node esbuild.js --production",
-    "package": "vsce package"
+    "package": "vsce package",
+    "install-local": "node scripts/install-local.js",
+    "install-local:local-deps": "node scripts/install-local.js --local-deps"
   },
   "devDependencies": {
     "@types/jsdom": "^30.0.0",
