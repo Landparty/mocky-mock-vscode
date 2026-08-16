@@ -211,7 +211,6 @@
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "test:unit": "mocha",
-    "test:integration": "node scripts/run-integration-tests.js",
     "vscode:prepublish": "npm run check-types && node esbuild.js --production",
     "package": "vsce package"
   },

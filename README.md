@@ -122,6 +122,8 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
   all, you'll get a prompt linking to the Docker Desktop download page.
 - VS Code ≥ 1.88.
 
+## Generating tests
+
 Seeded test-data generation (what the removed "COBOL Boundaries" view used
 to do) now lives in the `mockymock` Claude Code skill instead of a sidebar
 UI — install it with `mockymock skills install` and ask your assistant to

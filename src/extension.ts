@@ -1,7 +1,5 @@
 // src/extension.ts
 import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs/promises';
 import { EnvironmentManager } from './environment/environmentManager';
 import { activateTestController } from './testing/testController';
 import { activateLintDiagnostics } from './linting/lintDiagnostics';
@@ -11,9 +9,7 @@ import { activateExportMainframeCommand } from './export/exportMainframe';
 import { activateAnalyzeCobolCommand } from './analysis/analyzeCobol';
 import { activateMoveMismatchDiagnostics } from './analysis/moveMismatchDiagnostics';
 import { activateGenerateDataCommand } from './generateData/generateData';
-import { runCommand } from './environment/commandRunner';
 import { healBundledBinaryOnDarwin } from './environment/macSelfHeal';
-import { resolveInvocationConfig } from './environment/invocationConfig';
 import {
   COBOL_VIEWS_CONTEXT_KEY,
   hasCobolTabOpen,
@@ -29,9 +25,9 @@ import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
 
-// Active editor -> the .cbl path the Boundaries and Paragraph Tree views
-// should show, or undefined (welcome/empty state) for anything else -- a
-// non-file editor, a non-COBOL file, or no editor at all.
+// Active editor -> the .cbl path the Paragraph Tree view should show, or
+// undefined (welcome/empty state) for anything else -- a non-file editor, a
+// non-COBOL file, or no editor at all.
 function resolveActiveCblPath(): string | undefined {
   const editor = vscode.window.activeTextEditor;
   const fsPath = editor && editor.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
@@ -39,13 +35,13 @@ function resolveActiveCblPath(): string | undefined {
 }
 
 // onLanguage:cobol (added alongside the Outline provider) now activates the
-// extension, and therefore makes the Boundaries view reachable via
-// mockymock.cobolOpen, in a workspace with no mockymock .cut tests at all.
-// Without this check, the debounced auto-refresh below would spawn
-// `mockymock fixtures` for someone who just opened an unrelated COBOL file.
-// Explicit user actions (the Refresh command, Generate .cut) are
-// unaffected -- they call provider.refresh() directly, bypassing this
-// gate entirely (see the comment above scheduleRefresh).
+// extension, and therefore makes the Paragraph Tree and Program Flow views
+// reachable via mockymock.cobolOpen, in a workspace with no mockymock .cut
+// tests at all. Without this check, the debounced auto-refresh below would
+// spawn a `mockymock analyze` CLI probe for someone who just opened an
+// unrelated COBOL file. The explicit Refresh command is unaffected -- it
+// calls provider.refresh() directly, bypassing this gate entirely (see the
+// comment above scheduleRefresh).
 async function isCutWorkspace(): Promise<boolean> {
   const [cutFile] = await vscode.workspace.findFiles('**/*.cut', CUT_DISCOVERY_EXCLUDE_GLOB, 1);
   return cutFile !== undefined;
@@ -121,11 +117,11 @@ function activateParagraphTreeView(context: vscode.ExtensionContext): void {
   // The webview only exists once VS Code first renders it -- see
   // ParagraphTreeViewProvider.onVisible's doc comment. Wire it before
   // registerWebviewViewProvider (below), which is the call that can
-  // trigger resolveWebviewView -- this view has no unconditional
-  // scheduleRefresh() backstop the way activateBoundariesView does, so
-  // onVisible is the ONLY path to a first render; assigning it after
-  // registration would leave the view stuck on the empty state until the
-  // user manually switches editors or hits refresh.
+  // trigger resolveWebviewView -- this view has no unconditional refresh
+  // that runs regardless of visibility, so onVisible is the ONLY path to a
+  // first render; assigning it after registration would leave the view
+  // stuck on the empty state until the user manually switches editors or
+  // hits refresh.
   provider.onVisible = scheduleRefresh;
 
   context.subscriptions.push(
@@ -151,8 +147,8 @@ function activateProgramFlowView(context: vscode.ExtensionContext): void {
     if (refreshTimer) clearTimeout(refreshTimer);
     refreshTimer = setTimeout(async () => {
       if (!provider.visible) return;
-      // Same isCutWorkspace gate as the Boundaries and Paragraph Tree views
-      // (see the comment above isCutWorkspace): without it, opening any
+      // Same isCutWorkspace gate as the Paragraph Tree view (see the
+      // comment above isCutWorkspace): without it, opening any
       // unrelated COBOL file in a non-mockymock workspace would spawn an
       // `analyze --help` probe plus two `analyze program-flow` runs.
       if (!(await isCutWorkspace())) return;
