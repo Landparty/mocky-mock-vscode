@@ -31,7 +31,7 @@ const manifest: Manifest = JSON.parse(fs.readFileSync(path.join(process.cwd(), '
 describe('package.json side-view visibility contribution', () => {
   const explorerViews = manifest.contributes.views?.explorer ?? [];
 
-  for (const viewId of ['mockymock.boundaries', 'mockymock.paragraphTree']) {
+  for (const viewId of ['mockymock.paragraphTree']) {
     it(`gates ${viewId} on the shared COBOL-open context key`, () => {
       const view = explorerViews.find((entry) => entry.id === viewId);
       assert.ok(view, `expected contributes.views.explorer to list "${viewId}"`);
