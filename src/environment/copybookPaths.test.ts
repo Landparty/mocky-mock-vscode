@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as path from 'path';
 import { mergeCopybookPaths, resolveAgainstWorkspaceRoot } from './copybookPaths';
 
 describe('mergeCopybookPaths', () => {
@@ -27,11 +28,11 @@ describe('mergeCopybookPaths', () => {
 
 describe('resolveAgainstWorkspaceRoot', () => {
   it('joins a relative path against the root', () => {
-    assert.strictEqual(resolveAgainstWorkspaceRoot('COPYBOOK', '/ws'), require('path').join('/ws', 'COPYBOOK'));
+    assert.strictEqual(resolveAgainstWorkspaceRoot('COPYBOOK', '/ws'), path.join('/ws', 'COPYBOOK'));
   });
 
   it('passes an absolute path through unchanged', () => {
-    const absolute = require('path').resolve('/somewhere/COPYBOOK');
+    const absolute = path.resolve('/somewhere/COPYBOOK');
     assert.strictEqual(resolveAgainstWorkspaceRoot(absolute, '/ws'), absolute);
   });
 });

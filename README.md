@@ -181,6 +181,29 @@ flag too; see that example's own README.)
 - [`nist-cobol85`](examples/nist-cobol85) — unmodified programs from the public-domain NIST COBOL-85 validation suite.
 - [`real-world`](examples/real-world) — four production-shaped programs: an IMS DL/I batch purge, an IMS MPP deposit transaction (also the coverage-reporting worked example), and an MQ producer/consumer pair with two-phase DB2 commit.
 
+## Known Issues
+
+Caveats that are real and current today, gathered here instead of scattered
+across the sections above:
+
+- **GnuCOBOL, not an IBM mainframe compiler.** mockymock compiles and runs
+  your COBOL with GnuCOBOL — see [Compiler](#compiler) above. Green tests
+  here are strong local signal, not a guarantee the same source compiles
+  and behaves identically on z/OS.
+- **Older `mockymock` CLI versions degrade, not fail.** Single-test runs,
+  tags, lint, JSON reports, and coverage mapping all need a CLI new enough
+  to support them (see [Requirements](#requirements)). Against an older
+  CLI, each affected feature falls back to a coarser behavior or a clear
+  upgrade message instead of breaking the rest of the extension.
+- **A narrow Windows path-quoting gap.** On Windows, a path containing a
+  spelled-out environment variable name between two `%` signs (e.g. a
+  folder literally named `%USERNAME%`) can be expanded by `cmd.exe` before
+  mockymock, Docker, or `uv` ever see it, even though the extension quotes
+  every other shell metacharacter. There's no complete fix for this short
+  of not using a shell at all, which would break `uv`'s Windows `.cmd`
+  shims — in practice this only bites a path that happens to contain
+  another environment variable's exact name.
+
 ## License
 
 [GPL-3.0](LICENSE). This covers this extension repo (the `.cut` language

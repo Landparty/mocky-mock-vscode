@@ -1,6 +1,12 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { parseCutFile, resolveCblPath, resolveCutPath, isExcludedCutPath } from './cutDiscovery';
+import {
+  parseCutFile,
+  resolveCblPath,
+  resolveCutPath,
+  isExcludedCutPath,
+  cutSuitesFromCollectJson,
+} from './cutDiscovery';
 
 describe('parseCutFile', () => {
   it('parses a single suite with multiple cases', () => {
@@ -276,7 +282,6 @@ describe('parseCutFile USING PROVIDER', () => {
 
 describe('cutSuitesFromCollectJson', () => {
   it('converts collect output to CutSuite[] with 0-based lines', () => {
-    const { cutSuitesFromCollectJson } = require('./cutDiscovery');
     const json = JSON.stringify({
       version: 1,
       cutFile: '/p/PROG.cut',
@@ -296,7 +301,6 @@ describe('cutSuitesFromCollectJson', () => {
   });
 
   it('returns null for the collect error document and for junk', () => {
-    const { cutSuitesFromCollectJson } = require('./cutDiscovery');
     assert.strictEqual(cutSuitesFromCollectJson(JSON.stringify({ version: 1, error: 'boom' })), null);
     assert.strictEqual(cutSuitesFromCollectJson('junk'), null);
   });

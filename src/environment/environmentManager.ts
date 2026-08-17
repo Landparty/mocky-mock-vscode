@@ -1,6 +1,5 @@
 // src/environment/environmentManager.ts
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { runCommand } from './commandRunner';
 import {
   checkCommandAvailable,
