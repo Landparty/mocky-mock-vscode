@@ -229,9 +229,9 @@ export function activateTestController(
   // items were captured before a watcher-triggered discoverAndBuild replaced
   // the tree's TestItems, so classifying (or marking) those stale objects by
   // identity silently plans the wrong run. Re-resolve each item to its live
-  // counterpart by id -- and for a case item whose id changed only because
-  // an edit moved its line (the id embeds `::<line>`), by its suite+case
-  // prefix at whatever line it now sits on.
+  // counterpart by id -- and, when an edit changed the id itself (a case's
+  // id embeds `::<line>`; a suite's id embeds its name), by whichever part
+  // of the id/position still identifies the same node.
   function resolveToLiveItem(item: vscode.TestItem): vscode.TestItem | undefined {
     if (!item.uri) return undefined;
     const fileItem = fileItems.get(item.uri.toString());
@@ -249,6 +249,8 @@ export function activateTestController(
       });
     });
     if (found) return found;
+    // A case whose line moved (an edit above it) keeps its suite+case
+    // prefix -- match on that at whatever line it now sits on.
     const caseKey = /^(.+::.+)::\d+$/.exec(item.id);
     if (caseKey) {
       const prefix = `${caseKey[1]}::`;
@@ -256,6 +258,17 @@ export function activateTestController(
         suiteItem.children.forEach((caseItem) => {
           if (!found && caseItem.id.startsWith(prefix)) found = caseItem;
         });
+      });
+      return found;
+    }
+    // Otherwise this looks like a suite item (no `::<line>` suffix). A
+    // TESTSUITE rename changes the id outright (it embeds the name, with no
+    // stable prefix to match on), so fall back to position: the renamed
+    // suite is still the one starting at the same source line.
+    if (item.range) {
+      const line = item.range.start.line;
+      fileItem.children.forEach((suiteItem) => {
+        if (!found && suiteItem.range && suiteItem.range.start.line === line) found = suiteItem;
       });
     }
     return found;
@@ -872,7 +885,12 @@ export function activateTestController(
       return;
     }
 
-    const sessionName = `mockymock: ${caseItem.label}`;
+    // Includes cutPath, not just the case label: two different .cut files can
+    // have a same-labeled TESTCASE, and onDidStartDebugSession/
+    // onDidTerminateDebugSession below match purely by session.name -- a
+    // label-only name risks one concurrent "Debug (Interactive)" run
+    // capturing or prematurely finishing the other's session.
+    const sessionName = `mockymock: ${cutPath} :: ${caseItem.label}`;
     const debugConfig: MockymockDebugConfiguration & vscode.DebugConfiguration = {
       type: 'mockymock-cobol',
       request: 'launch',

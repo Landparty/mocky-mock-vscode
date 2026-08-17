@@ -105,11 +105,20 @@ export function anchorViolationLine(
 ): number {
   const clamp = (line: number) => Math.min(Math.max(line, 1), Math.max(sourceLines.length, 1));
   if (!sourceOperand) return clamp(reportedLine);
-  const movePattern = /\bMOVE\b/i;
   const operand = operandPattern(sourceOperand);
+  // Checking "MOVE...operand...TO" anywhere on the line (rather than just
+  // "does the line contain both MOVE and the operand") matters because a
+  // line mentioning the same operand as its MOVE *target* -- or an
+  // unrelated MOVE that merely shares the name -- would otherwise satisfy a
+  // bare co-occurrence check and get picked over the real violation.
   const matches = (index: number) => {
     const text = sourceLines[index] ?? '';
-    return movePattern.test(text) && operand.test(text);
+    const moveMatch = /\bMOVE\b/i.exec(text);
+    if (!moveMatch) return false;
+    const afterMove = text.slice(moveMatch.index + moveMatch[0].length);
+    const toMatch = /\bTO\b/i.exec(afterMove);
+    const sourceSegment = toMatch ? afterMove.slice(0, toMatch.index) : afterMove;
+    return operand.test(sourceSegment);
   };
   if (reportedLine >= 1 && reportedLine <= sourceLines.length && matches(reportedLine - 1)) {
     return reportedLine;

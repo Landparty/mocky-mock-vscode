@@ -150,4 +150,13 @@ describe('anchorViolationLine', () => {
     assert.strictEqual(anchorViolationLine(lines, 55, 'NO-SUCH-ITEM'), 8);
     assert.strictEqual(anchorViolationLine(lines, 0, undefined), 1);
   });
+
+  it('does not anchor on a line where the operand is only the MOVE TARGET, not the source', () => {
+    // Regression test: a bare "line contains MOVE and the operand name"
+    // check would treat the reported line as a direct hit here (CUST-NAME
+    // is present, but only as the TARGET), anchoring the diagnostic on the
+    // wrong MOVE instead of falling through to the real source use above it.
+    const src = ['           MOVE CUST-NAME TO CUST-BALANCE', '           MOVE SPACES TO CUST-NAME'];
+    assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 1);
+  });
 });
