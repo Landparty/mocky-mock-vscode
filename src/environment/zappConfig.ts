@@ -89,7 +89,14 @@ function resolveLocation(location: string, workspaceRoot: string): string[] {
   // like "copybooks/{dev,prod}" takes the literal-path branch and resolves
   // to a nonexistent directory instead of globbing.
   if (!hasMagic(normalized, { magicalBraces: true })) {
-    return [resolveAgainstWorkspaceRoot(location, workspaceRoot)];
+    // `normalized`, not the original `location`: a literal (non-glob)
+    // Windows-authored path like "libraries\cobol\SOMEDIR" needs the same
+    // backslash-to-slash normalizing as the glob branch below, or
+    // path.join() on a POSIX dev machine treats the un-normalized backslashes
+    // as literal filename characters instead of separators -- joining into
+    // one bogus segment ("libraries\cobol\SOMEDIR") instead of three nested
+    // directories, silently resolving to a nonexistent path.
+    return [resolveAgainstWorkspaceRoot(normalized, workspaceRoot)];
   }
   return globSync(normalized, { cwd: workspaceRoot, absolute: true }).filter((match) => {
     try {

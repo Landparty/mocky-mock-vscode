@@ -28,6 +28,7 @@ jobs:
           node-version: "22"
       - run: npm ci
       - run: npm run check-types
+      - run: npm run lint
       - run: npm run test:unit
       - name: Build the production bundle
         run: node esbuild.js --production

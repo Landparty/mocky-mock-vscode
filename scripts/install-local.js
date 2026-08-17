@@ -25,11 +25,35 @@ const pkg = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'ut
 const withLocalDeps = process.argv.includes('--local-deps');
 
 // npm/npx/uv ship as .cmd shims on Windows; spawning those requires shell:
-// true since Node's CVE-2024-27980 fix (see run-integration-tests.js for
-// the same note re: spawning .cmd directly).
+// true since Node's CVE-2024-27980 fix. shell:true only on win32 -- on POSIX
+// these are real executables and spawn() can invoke them directly, args array
+// intact, with no shell re-parsing (and therefore no quoting needed).
+const useShell = process.platform === 'win32';
+
+// Mirrors src/environment/commandRunner.ts's quoteArgForWindowsShell: with
+// shell:true, Node hands args to cmd.exe by joining them into one string
+// with NO quoting of its own, so a path/arg containing a space, a double
+// quote, or a cmd.exe metacharacter (`& | ^ < > ( )`) gets split or
+// reinterpreted before the target command ever sees it. Only apply this
+// when shell is actually true -- with shell:false the args array reaches
+// the OS unmodified, and quoting there would corrupt it instead of
+// protecting it.
+const CMD_NEEDS_QUOTING = /[\s"&|<>^()]/;
+function quoteArgForWindowsShell(arg) {
+  if (arg.length === 0) {
+    return '""';
+  }
+  if (CMD_NEEDS_QUOTING.test(arg)) {
+    return `"${arg.replace(/"/g, '""')}"`;
+  }
+  return arg;
+}
+
 function run(command, args) {
   console.log(`> ${command} ${args.join(' ')}`);
-  const result = spawnSync(command, args, { stdio: 'inherit', cwd: REPO_ROOT, shell: true });
+  const spawnCommand = useShell ? quoteArgForWindowsShell(command) : command;
+  const spawnArgs = useShell ? args.map(quoteArgForWindowsShell) : args;
+  const result = spawnSync(spawnCommand, spawnArgs, { stdio: 'inherit', cwd: REPO_ROOT, shell: useShell });
   if (result.error) {
     console.error(result.error);
     process.exit(1);
@@ -40,7 +64,9 @@ function run(command, args) {
 }
 
 function runCapture(command, args) {
-  const result = spawnSync(command, args, { cwd: REPO_ROOT, shell: true, encoding: 'utf8' });
+  const spawnCommand = useShell ? quoteArgForWindowsShell(command) : command;
+  const spawnArgs = useShell ? args.map(quoteArgForWindowsShell) : args;
+  const result = spawnSync(spawnCommand, spawnArgs, { cwd: REPO_ROOT, shell: useShell, encoding: 'utf8' });
   if (result.error || result.status !== 0) {
     console.error(`Failed to run: ${command} ${args.join(' ')}`);
     if (result.stderr) console.error(result.stderr);
@@ -86,7 +112,7 @@ function installLocalDeps() {
     }
   }
 
-  const uvCheck = spawnSync('uv', ['--version'], { shell: true });
+  const uvCheck = spawnSync(useShell ? quoteArgForWindowsShell('uv') : 'uv', ['--version'], { shell: useShell });
   if (uvCheck.error || uvCheck.status !== 0) {
     console.error('uv not found on PATH. Install it: https://docs.astral.sh/uv/getting-started/installation/');
     process.exit(1);

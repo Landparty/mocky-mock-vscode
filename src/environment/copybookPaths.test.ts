@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import * as path from 'path';
 import { mergeCopybookPaths, resolveAgainstWorkspaceRoot } from './copybookPaths';
 
 describe('mergeCopybookPaths', () => {
@@ -23,15 +24,34 @@ describe('mergeCopybookPaths', () => {
       Object.defineProperty(process, 'platform', originalPlatform!);
     }
   });
+
+  it('dedupes the same win32 absolute path in native-backslash and normalized-forward-slash form', () => {
+    // Regression test: the mockymock.copybookPaths setting carries native
+    // (backslash) separators on Windows, but a zapp.yml-derived absolute
+    // path arrives forward-slash-normalized (zappConfig.ts's resolveLocation
+    // normalizes for glob compatibility even on the literal-path branch).
+    // The same directory declared through both sources used to produce two
+    // different dedup keys and ship as a duplicate --copybook-path.
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      assert.deepStrictEqual(
+        mergeCopybookPaths(['C:\\mainframe\\syslib'], ['C:/mainframe/syslib']),
+        ['C:\\mainframe\\syslib']
+      );
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform!);
+    }
+  });
 });
 
 describe('resolveAgainstWorkspaceRoot', () => {
   it('joins a relative path against the root', () => {
-    assert.strictEqual(resolveAgainstWorkspaceRoot('COPYBOOK', '/ws'), require('path').join('/ws', 'COPYBOOK'));
+    assert.strictEqual(resolveAgainstWorkspaceRoot('COPYBOOK', '/ws'), path.join('/ws', 'COPYBOOK'));
   });
 
   it('passes an absolute path through unchanged', () => {
-    const absolute = require('path').resolve('/somewhere/COPYBOOK');
+    const absolute = path.resolve('/somewhere/COPYBOOK');
     assert.strictEqual(resolveAgainstWorkspaceRoot(absolute, '/ws'), absolute);
   });
 });

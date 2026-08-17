@@ -154,6 +154,34 @@ describe('resolveZappCopybookPaths', () => {
     assert.deepStrictEqual(resolveZappCopybookPaths(tempDir), [path.join(tempDir, 'libraries', 'cobol', 'SOMEDIR')]);
   });
 
+  it('normalizes a backslash-separated LITERAL (non-glob) location before resolving it', () => {
+    // Regression test: the literal-path branch used to resolve against the
+    // ORIGINAL location (backslashes intact), not the normalized one. On a
+    // POSIX dev machine, path.join() treats an un-normalized backslash as a
+    // literal filename character rather than a separator, so a
+    // Windows-authored zapp.yml with no glob wildcards resolved to one bogus
+    // segment ("libraries\cobol\SOMEDIR") instead of three nested
+    // directories.
+    fs.mkdirSync(path.join(tempDir, 'libraries', 'cobol', 'SOMEDIR'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'zapp.yml'),
+      [
+        'propertyGroups:',
+        '  - name: cobol-copybooks',
+        '    language: cobol',
+        '    libraries:',
+        '      - name: syslib',
+        '        type: local',
+        '        locations:',
+        '          - "libraries\\\\cobol\\\\SOMEDIR"',
+      ].join('\n')
+    );
+
+    assert.deepStrictEqual(resolveZappCopybookPaths(tempDir), [
+      path.join(tempDir, 'libraries', 'cobol', 'SOMEDIR'),
+    ]);
+  });
+
   it('expands a braces-only pattern instead of resolving it as a literal path', () => {
     // Regression test: glob v13's hasMagic() only counts {a,b} as magic with
     // magicalBraces set, so "copybooks/{dev,prod}" used to take the

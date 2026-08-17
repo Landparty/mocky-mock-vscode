@@ -159,4 +159,46 @@ describe('anchorViolationLine', () => {
     const src = ['           MOVE CUST-NAME TO CUST-BALANCE', '           MOVE SPACES TO CUST-NAME'];
     assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 1);
   });
+
+  it('finds a source operand in the second of two MOVE statements on the same physical line', () => {
+    // Regression test: matches() used to test only the FIRST "MOVE ... TO"
+    // span on a line. A decoy MOVE elsewhere that genuinely uses CUST-NAME
+    // as its source would otherwise outrank the real (but unseen) second
+    // MOVE on line 2, anchoring the diagnostic on the wrong line.
+    const src = [
+      "           MOVE CUST-NAME TO OTHER-A.",
+      "           MOVE ZERO TO A  MOVE CUST-NAME TO B.",
+    ];
+    assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 2);
+  });
+
+  it('matches an operand whose own name contains a hyphenated "TO" segment', () => {
+    // Regression test: the TO-detection used a plain /\bTO\b/, which also
+    // matches the "TO" embedded in a hyphenated operand like AMOUNT-TO-PAY
+    // (a hyphen isn't a word character, so \b sees a boundary on both
+    // sides of it). That truncated the source segment before the real
+    // operand text, so a genuine match silently failed and the search fell
+    // through to an unrelated line.
+    const src = ['PROCEDURE DIVISION.', 'MAIN-PARA.', 'MOVE AMOUNT-TO-PAY TO WS-TOTAL', 'STOP RUN.'];
+    assert.strictEqual(anchorViolationLine(src, 55, 'AMOUNT-TO-PAY'), 3);
+  });
+
+  it('finds a MOVE clause whose TO clause wraps onto the next physical line', () => {
+    // Regression test: matches() only ever inspected a single physical
+    // line, so a MOVE statement split across two lines (fixed-format COBOL
+    // wraps rather than truncates a long statement) was invisible to the
+    // scan entirely -- neither the MOVE-only line nor the operand-only line
+    // satisfied the same-line check, and the search fell through to an
+    // unrelated line.
+    const src = ['PROCEDURE DIVISION.', 'MAIN-PARA.', 'MOVE', '    CUST-NAME TO CUST-BALANCE', 'STOP RUN.'];
+    assert.strictEqual(anchorViolationLine(src, 55, 'CUST-NAME'), 3);
+  });
+
+  it('does not absorb an unrelated later MOVE into an unterminated clause\'s continuation window', () => {
+    // A MOVE with no TO anywhere nearby (e.g. malformed/truncated source)
+    // must not walk past a subsequent, unrelated MOVE statement while
+    // looking for a TO to close its own clause.
+    const src = ['MOVE', 'DISPLAY "no to here"', 'MOVE CUST-NAME TO X'];
+    assert.strictEqual(anchorViolationLine(src, 55, 'CUST-NAME'), 3);
+  });
 });

@@ -287,6 +287,21 @@ describe('describeRefreshError', () => {
   it('maps commandRunner\'s EACCES sentinel to the permission-denied message, not the not-found one', () => {
     assert.strictEqual(describeRefreshError('permission denied', 'permission denied'), CLI_PERMISSION_DENIED_MESSAGE);
   });
+
+  it('does not mistake a real CLI refusal about a missing copybook for "CLI not found"', () => {
+    // Regression test: callers like paragraphTreeViewProvider.ts/
+    // programFlowViewProvider.ts feed this function the REAL stderr of a
+    // failed `mockymock analyze ...` invocation (not just a spawn-failure
+    // sentinel) -- see ProgramFlowFetchError in programFlowClient.ts. A
+    // Python FileNotFoundError for an unresolved copybook stringifies with
+    // the exact errno text "No such file or directory", which used to
+    // satisfy COMMAND_NOT_FOUND_PATTERN and replace this specific, actionable
+    // refusal with a generic (and wrong) "CLI not found" message.
+    const message = 'refused (unresolved-copybook): COPY ORDER.cpy not found';
+    const stderr =
+      "refused (unresolved-copybook): [Errno 2] No such file or directory: '/workspace/copybooks/ORDER.cpy'";
+    assert.strictEqual(describeRefreshError(message, stderr), message);
+  });
 });
 
 describe('permissionDeniedMessageForPath', () => {

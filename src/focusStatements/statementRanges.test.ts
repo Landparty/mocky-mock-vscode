@@ -118,6 +118,30 @@ describe('findFocusRanges', () => {
     assert.deepEqual(findFocusRanges(lines), []);
   });
 
+  it('does not mistake CALL inside a quoted string literal for a real CALL statement', () => {
+    // Regression test: CALL_START_RE isn't anchored to the start of the
+    // line, so a message literal containing the bare word "CALL" (preceded/
+    // followed by non-identifier characters, unlike RECALL-FLAG above) used
+    // to satisfy the lookaround check and get treated as a real CALL
+    // statement start, with the literal's own closing "'." satisfying the
+    // same-line sentence-period check too.
+    const lines = [
+      `${AREA_A}MAIN-PARA.`, // 1
+      `${AREA_B}DISPLAY 'PLEASE CALL SUPPORT FOR HELP'.`, // 2
+    ];
+
+    assert.deepEqual(findFocusRanges(lines), []);
+  });
+
+  it('does not mistake EXEC SQL inside a quoted string literal for a real EXEC SQL block', () => {
+    const lines = [
+      `${AREA_A}MAIN-PARA.`, // 1
+      `${AREA_B}DISPLAY 'NOW RUNNING EXEC SQL FOR REAL'.`, // 2
+    ];
+
+    assert.deepEqual(findFocusRanges(lines), []);
+  });
+
   it('treats a whole-line floating *> comment as blank, not statement code', () => {
     const lines = [
       `${AREA_A}MAIN-PARA.`, // 1

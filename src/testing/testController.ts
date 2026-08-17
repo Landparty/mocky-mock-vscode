@@ -259,6 +259,32 @@ export function activateTestController(
           if (!found && caseItem.id.startsWith(prefix)) found = caseItem;
         });
       });
+      if (found) return found;
+      // A renamed case (not just moved) breaks the suite+case prefix too --
+      // same gap the suite fallback below closes for a renamed TESTSUITE.
+      // Fall back to position: the renamed case is still the one starting
+      // at the same source line. Prefer a match still inside the case's
+      // OLD suite (derived from its id, same way `prefix` was above) before
+      // widening to every suite in the file -- an edit that renames one
+      // case while *also* moving an unrelated case onto its old line is
+      // the coincidence this guards against; scoping to the original
+      // suite first means only a same-suite coincidence can misfire, not
+      // any case in the whole file.
+      if (item.range) {
+        const line = item.range.start.line;
+        const oldSuiteKey = /^(.+)::[^:]+$/.exec(caseKey[1]);
+        const oldSuiteId = oldSuiteKey ? oldSuiteKey[1] : undefined;
+        const matchAtLine = (suiteItem: vscode.TestItem) => {
+          suiteItem.children.forEach((caseItem) => {
+            if (!found && caseItem.range && caseItem.range.start.line === line) found = caseItem;
+          });
+        };
+        if (oldSuiteId) {
+          const oldSuite = fileItem.children.get(oldSuiteId);
+          if (oldSuite) matchAtLine(oldSuite);
+        }
+        if (!found) fileItem.children.forEach(matchAtLine);
+      }
       return found;
     }
     // Otherwise this looks like a suite item (no `::<line>` suffix). A

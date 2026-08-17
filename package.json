@@ -128,12 +128,6 @@
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "mockymock.boundaries",
-        "contents": "Open a .cbl file to list its boundaries."
-      }
-    ],
     "submenus": [
       {
         "id": "mockymock.analyzeCobol.submenu",
@@ -314,6 +308,7 @@
     "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree && tsc --noEmit -p ./media/programFlow",
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
+    "lint": "eslint .",
     "test:unit": "mocha",
     "vscode:prepublish": "npm run check-types && node esbuild.js --production",
     "package": "vsce package",
@@ -321,22 +316,29 @@
     "install-local:local-deps": "node scripts/install-local.js --local-deps"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/jsdom": "^30.0.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.88.0",
-    "@vscode/vsce": "^2.24.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.1",
+    "eslint": "^10.8.1",
+    "globals": "^17.11.0",
     "jsdom": "^29.1.1",
     "mocha": "^10.3.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "typescript-eslint": "^8.67.0"
   },
   "dependencies": {
     "dompurify": "^3.3.3",
-    "fast-xml-parser": "^4.3.4",
+    "fast-xml-parser": "^5.11.0",
     "glob": "^13.0.6",
     "mermaid": "^11.16.1",
     "yaml": "^2.9.0"
+  },
+  "overrides": {
+    "serialize-javascript": "^7.1.0"
   }
 }

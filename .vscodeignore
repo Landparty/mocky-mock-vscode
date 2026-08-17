@@ -4,6 +4,8 @@ media/**
 .vscode/**
 .mocharc.json
 tsconfig.json
+tsconfig.eslint.json
+eslint.config.mjs
 docs/**
 **/*.map
 .gitignore
