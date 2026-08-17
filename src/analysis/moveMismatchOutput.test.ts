@@ -159,4 +159,16 @@ describe('anchorViolationLine', () => {
     const src = ['           MOVE CUST-NAME TO CUST-BALANCE', '           MOVE SPACES TO CUST-NAME'];
     assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 1);
   });
+
+  it('finds a source operand in the second of two MOVE statements on the same physical line', () => {
+    // Regression test: matches() used to test only the FIRST "MOVE ... TO"
+    // span on a line. A decoy MOVE elsewhere that genuinely uses CUST-NAME
+    // as its source would otherwise outrank the real (but unseen) second
+    // MOVE on line 2, anchoring the diagnostic on the wrong line.
+    const src = [
+      "           MOVE CUST-NAME TO OTHER-A.",
+      "           MOVE ZERO TO A  MOVE CUST-NAME TO B.",
+    ];
+    assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 2);
+  });
 });

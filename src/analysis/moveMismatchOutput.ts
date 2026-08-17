@@ -111,14 +111,24 @@ export function anchorViolationLine(
   // line mentioning the same operand as its MOVE *target* -- or an
   // unrelated MOVE that merely shares the name -- would otherwise satisfy a
   // bare co-occurrence check and get picked over the real violation.
+  //
+  // Scans EVERY "MOVE ... TO" span on the line, not just the first: COBOL
+  // allows multiple statements per physical line (e.g.
+  // "MOVE ZERO TO A  MOVE CUST-NAME TO B"), and testing only the first
+  // MOVE's source segment would miss the operand's real use in a later
+  // MOVE on the same line, falling through to search other lines and
+  // anchoring on the wrong one.
   const matches = (index: number) => {
     const text = sourceLines[index] ?? '';
-    const moveMatch = /\bMOVE\b/i.exec(text);
-    if (!moveMatch) return false;
-    const afterMove = text.slice(moveMatch.index + moveMatch[0].length);
-    const toMatch = /\bTO\b/i.exec(afterMove);
-    const sourceSegment = toMatch ? afterMove.slice(0, toMatch.index) : afterMove;
-    return operand.test(sourceSegment);
+    const moveRe = /\bMOVE\b/gi;
+    let moveMatch: RegExpExecArray | null;
+    while ((moveMatch = moveRe.exec(text))) {
+      const afterMove = text.slice(moveMatch.index + moveMatch[0].length);
+      const toMatch = /\bTO\b/i.exec(afterMove);
+      const sourceSegment = toMatch ? afterMove.slice(0, toMatch.index) : afterMove;
+      if (operand.test(sourceSegment)) return true;
+    }
+    return false;
   };
   if (reportedLine >= 1 && reportedLine <= sourceLines.length && matches(reportedLine - 1)) {
     return reportedLine;

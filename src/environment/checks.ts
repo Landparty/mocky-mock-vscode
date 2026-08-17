@@ -135,18 +135,34 @@ export async function supportsMutateCommand(run: CommandRunner, executablePath: 
 
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
-// Matches stderr produced when the shell itself couldn't find the "docker" executable
-// (as opposed to docker being found but failing to reach its daemon). This is what a
-// missing binary looks like under `shell: true` on Windows (cmd.exe) and on POSIX shells.
-const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not found|no such file or directory/i;
+// Matches stderr produced when the shell itself couldn't find the "docker" (or
+// mockymock) executable (as opposed to the binary being found but failing for
+// some other reason). This is what a missing binary looks like under
+// `shell: true` on Windows (cmd.exe) -- "is not recognized..." -- or
+// commandRunner's own ENOENT sentinel on POSIX (shell:false there; see
+// describeSpawnError) -- the literal string "command not found".
+//
+// Deliberately does NOT include a bare "no such file or directory": that
+// generic errno text is NOT how this codebase's own spawn failures present
+// (POSIX never runs through a shell here, so ENOENT is caught synchronously
+// as the sentinel above, never as real shell text) -- but it IS a completely
+// ordinary substring of a real mockymock CLI refusal, e.g. a Python
+// FileNotFoundError for an unresolved copybook: "refused: COPY ORDER.cpy:
+// [Errno 2] No such file or directory: '...'". describeRefreshError below is
+// fed exactly that kind of real CLI stderr (not just a spawn-failure
+// sentinel) by callers like paragraphTreeViewProvider.ts's catch block, so
+// including this phrase used to relabel an ordinary "copybook not found"
+// refusal as "mockymock CLI not found", masking the real error entirely.
+const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not found/i;
 
 // A found-and-running docker CLI that can't reach its daemon prints a
-// connect error that can ALSO contain "no such file or directory" (Linux
-// with the daemon stopped: "error during connect: ... dial unix
-// /var/run/docker.sock: connect: no such file or directory"), which would
-// otherwise satisfy COMMAND_NOT_FOUND_PATTERN and misreport an installed
-// Docker as not-installed. Checked first, so a daemon-connect failure is
-// always classified daemon-down regardless of its errno text.
+// connect error (Linux with the daemon stopped: "error during connect: ...
+// dial unix /var/run/docker.sock: connect: no such file or directory";
+// Windows: "error during connect: open //./pipe/docker_engine: ..."), which
+// is unambiguous evidence Docker itself was found and ran. Checked first, so
+// a daemon-connect failure is always classified daemon-down regardless of
+// its errno text -- specifically before COMMAND_NOT_FOUND_PATTERN, since
+// that errno text alone is otherwise ambiguous with a missing binary.
 const DOCKER_DAEMON_CONNECT_PATTERN =
   /error during connect|cannot connect to the docker daemon|docker daemon is not running|dial unix|docker_engine/i;
 

@@ -10,12 +10,12 @@
 // Statement boundaries are detected heuristically, not via a full COBOL
 // parse: a CALL statement ends at the first "sentence period" (a `.`
 // followed by whitespace or end of line) or an explicit END-CALL, whichever
-// comes first; an EXEC SQL/EXEC CICS block ends at its END-EXEC. A period
-// inside a string literal (e.g. `MOVE "Done." TO WS-MSG` nested inside a
-// CALL's ON EXCEPTION arm) could in principle be misread as the statement
-// end -- accepted as a rare edge case, same "graceful degrade, never throw"
-// philosophy as outlineModel.ts. An unterminated block runs to end of file
-// rather than being dropped.
+// comes first; an EXEC SQL/EXEC CICS block ends at its END-EXEC. Quoted
+// string literal content is blanked out (see stripStringLiterals) before any
+// of that keyword/period detection runs, so a message literal like
+// `DISPLAY 'PLEASE CALL SUPPORT'.` or `MOVE "Done." TO WS-MSG` can't be
+// misread as a real CALL statement start or a sentence-ending period. An
+// unterminated block runs to end of file rather than being dropped.
 
 export interface LineRange {
   startLine: number; // 1-indexed, inclusive
@@ -49,8 +49,49 @@ function codeOf(line: string): string {
   return code;
 }
 
+// Blanks out quoted literal content (keeping length/columns intact) so a
+// message literal containing the bare word "CALL" (e.g. `DISPLAY 'PLEASE
+// CALL SUPPORT'.`) isn't mistaken for a real CALL statement -- CALL_START_RE
+// and EXEC_START_RE have no way to tell a keyword from a literal's contents
+// otherwise, since neither is anchored to the start of the line. Same
+// technique as navigation/definitionModel.ts's stripStringLiterals;
+// duplicated rather than imported to keep this module's only dependency the
+// outline column model, per the module header. Handles COBOL's doubled-quote
+// escape (`""` inside a `"`-delimited literal is one literal quote
+// character). An unterminated literal blanks to end of line, a safe
+// fallback for malformed/continued source this scan doesn't model.
+function stripStringLiterals(code: string): string {
+  const out = code.split('');
+  let i = 0;
+  while (i < code.length) {
+    const ch = code[i];
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      out[i] = ' ';
+      i++;
+      while (i < code.length) {
+        if (code[i] === quote) {
+          out[i] = ' ';
+          i++;
+          if (code[i] === quote) {
+            out[i] = ' ';
+            i++;
+            continue;
+          }
+          break;
+        }
+        out[i] = ' ';
+        i++;
+      }
+      continue;
+    }
+    i++;
+  }
+  return out.join('');
+}
+
 export function findFocusRanges(sourceLines: string[]): LineRange[] {
-  const code = sourceLines.map(codeOf);
+  const code = sourceLines.map((line) => stripStringLiterals(codeOf(line)));
   const lastLine = sourceLines.length;
   const ranges: LineRange[] = [];
 

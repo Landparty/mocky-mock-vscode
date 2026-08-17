@@ -259,6 +259,20 @@ export function activateTestController(
           if (!found && caseItem.id.startsWith(prefix)) found = caseItem;
         });
       });
+      if (found) return found;
+      // A renamed case (not just moved) breaks the suite+case prefix too --
+      // same gap the suite fallback below closes for a renamed TESTSUITE.
+      // Fall back to position: the renamed case is still the one starting
+      // at the same source line, searched across every suite in the file
+      // (a rename can land in a moved suite too).
+      if (item.range) {
+        const line = item.range.start.line;
+        fileItem.children.forEach((suiteItem) => {
+          suiteItem.children.forEach((caseItem) => {
+            if (!found && caseItem.range && caseItem.range.start.line === line) found = caseItem;
+          });
+        });
+      }
       return found;
     }
     // Otherwise this looks like a suite item (no `::<line>` suffix). A
