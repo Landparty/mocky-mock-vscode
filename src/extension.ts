@@ -27,6 +27,7 @@ import type { ScenarioMode } from './boundaries/bundleTypes';
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
 import { ProgramFlowViewProvider } from './programFlow/programFlowViewProvider';
 import { activateOutlineProvider } from './outline/outlineProvider';
+import { activateDefinitionProviders } from './navigation/definitionProvider';
 import { activateFocusStatements } from './focusStatements/activateFocusStatements';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 
@@ -511,6 +512,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateBoundariesView(context, environmentManager);
   activateParagraphTreeView(context);
   activateOutlineProvider(context);
+  activateDefinitionProviders(context);
   activateProgramFlowView(context);
   activateFocusStatements(context);
 
