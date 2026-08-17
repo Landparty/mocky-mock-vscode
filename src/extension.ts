@@ -19,6 +19,7 @@ import {
 import { ParagraphTreeViewProvider } from './paragraphTree/paragraphTreeViewProvider';
 import { ProgramFlowViewProvider } from './programFlow/programFlowViewProvider';
 import { activateOutlineProvider } from './outline/outlineProvider';
+import { activateDefinitionProviders } from './navigation/definitionProvider';
 import { activateFocusStatements } from './focusStatements/activateFocusStatements';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 
@@ -183,6 +184,27 @@ function activateProgramFlowView(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.programFlow.refresh', () => {
       void provider.refresh(resolveActiveCblPath());
+    }),
+    // Editor right-click entry point: reveal the Program Flow view for the
+    // clicked file. `mockymock.programFlow.focus` is VS Code's
+    // auto-generated command for revealing a contributed view (same family
+    // as the Command Palette's "View: Focus on ... View" entries) -- no
+    // explicit registration needed for it, but the ID isn't verifiable
+    // outside a running extension host. refresh() is started FIRST and not
+    // awaited before the focus call: it commits into the provider's
+    // RefreshGuard and posts to the webview once resolved, independent of
+    // whether the view is visible yet, so the model lands even if the focus
+    // command below turns out wrong (rejects) or the webview resolves later.
+    vscode.commands.registerCommand('mockymock.programFlow.show', async () => {
+      const activeCblPath = resolveActiveCblPath();
+      if (!activeCblPath) {
+        vscode.window.showErrorMessage(
+          'mockymock: open a .cbl, .cob, or .cobol file first, then run "Show Program Flow".'
+        );
+        return;
+      }
+      void provider.refresh(activeCblPath);
+      await vscode.commands.executeCommand('mockymock.programFlow.focus');
     })
   );
 }
@@ -208,6 +230,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCobolViewVisibility(context);
   activateParagraphTreeView(context);
   activateOutlineProvider(context);
+  activateDefinitionProviders(context);
   activateProgramFlowView(context);
   activateFocusStatements(context);
 

@@ -49,15 +49,15 @@ export interface OutlineNode {
 
 // Columns 8-11 (1-indexed) = Area A, i.e. the first 4 characters of the
 // column-7-stripped code content produced by scanLine.
-const AREA_A_WIDTH = 4;
+export const AREA_A_WIDTH = 4;
 
-const DIVISION_RE = /^(IDENTIFICATION|ID|ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION\b/i;
+export const DIVISION_RE = /^(IDENTIFICATION|ID|ENVIRONMENT|DATA|PROCEDURE)\s+DIVISION\b/i;
 const BUILTIN_SECTION_RE = /^(CONFIGURATION|INPUT-OUTPUT|FILE|WORKING-STORAGE|LOCAL-STORAGE|LINKAGE)\s+SECTION\b/i;
-const NAMED_SECTION_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\s+SECTION\b/i;
+export const NAMED_SECTION_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\s+SECTION\b/i;
 const PROGRAM_ID_RE = /^PROGRAM-ID\s*\.\s*(.*)$/i;
 const PROGRAM_NAME_TOKEN_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)/;
 const LEVEL_ITEM_RE = /^(0?1|77)\s+([A-Za-z0-9][A-Za-z0-9-]*)/;
-const PARAGRAPH_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\.(?=\s|$)/;
+export const PARAGRAPH_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\.(?=\s|$)/;
 
 // Reserved words that share the paragraph-label shape ("word.") -- ported
 // verbatim from syntaxes/cobol.tmLanguage.json's paragraph-label pattern's
@@ -65,8 +65,10 @@ const PARAGRAPH_RE = /^([A-Za-z0-9][A-Za-z0-9-]*)\.(?=\s|$)/;
 // what counts as a real paragraph name. Area A anchoring already rules
 // out most of these (they're normally indented as part of a statement),
 // but a minimally-formatted program could place one at the Area A
-// margin.
-const PARAGRAPH_EXCLUSIONS = new Set([
+// margin. Exported for reuse by navigation/definitionModel.ts, which needs
+// the same exclusion list to agree with the Outline panel on what counts as
+// a real paragraph/section name.
+export const PARAGRAPH_EXCLUSIONS = new Set([
   'PROGRAM-ID', 'AUTHOR', 'INSTALLATION', 'DATE-WRITTEN', 'DATE-COMPILED', 'SECURITY', 'REMARKS',
   'FILE-CONTROL', 'I-O-CONTROL', 'CONTINUE', 'EXIT', 'GOBACK',
   'END-ADD', 'END-CALL', 'END-COMPUTE', 'END-DELETE', 'END-DIVIDE', 'END-EVALUATE', 'END-IF',
