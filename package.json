@@ -286,7 +286,7 @@
           },
           "default": [],
           "scope": "resource",
-          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json. If a zapp.yml or zapp.yaml exists at the workspace root (the same file IBM Z Open Editor's DBB tooling uses), its cobol-language local library locations are also merged in automatically."
+          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json. If a zapp.yml or zapp.yaml exists at the workspace root (the same file IBM Z Open Editor's DBB tooling uses), its cobol-language local library locations are also merged in automatically, after this setting's own entries (this setting wins on a duplicate path)."
         },
         "mockymock.lintOnSave": {
           "type": "boolean",

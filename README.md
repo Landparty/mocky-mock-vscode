@@ -98,7 +98,7 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 | Setting | Default | Purpose |
 |---|---|---|
 | `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
-| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in automatically |
+| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in after this setting's own entries, which win on a duplicate path |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |
 

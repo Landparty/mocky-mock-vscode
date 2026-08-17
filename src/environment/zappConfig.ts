@@ -2,9 +2,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parse as parseYaml } from 'yaml';
-import { globSync } from 'glob';
-
-const GLOB_METACHARACTERS = /[*?[\]{}]/;
+import { globSync, hasMagic } from 'glob';
+import { resolveAgainstWorkspaceRoot } from './copybookPaths';
 
 interface ZappLibrary {
   type?: string;
@@ -32,6 +31,16 @@ function findZappFile(workspaceRoot: string): string | undefined {
   return undefined;
 }
 
+interface ZappCacheEntry {
+  mtimeMs: number;
+  result: string[];
+}
+
+// Keyed on workspace root, invalidated by the zapp file's mtime -- avoids
+// re-reading/re-parsing/re-globbing on every resolveInvocationConfig() call,
+// which happens on every lint-on-save, move-check, and test-run invocation.
+const zappCache = new Map<string, ZappCacheEntry>();
+
 // Reads a zapp.yml/zapp.yaml at the workspace root (the same file/schema IBM
 // Z Open Editor's DBB tooling uses) and returns the local cobol copybook
 // library locations it declares, resolved to absolute paths. mvs-type
@@ -40,28 +49,52 @@ function findZappFile(workspaceRoot: string): string | undefined {
 export function resolveZappCopybookPaths(workspaceRoot: string): string[] {
   const zappFile = findZappFile(workspaceRoot);
   if (!zappFile) {
+    zappCache.delete(workspaceRoot);
     return [];
+  }
+
+  const mtimeMs = fs.statSync(zappFile).mtimeMs;
+  const cached = zappCache.get(workspaceRoot);
+  if (cached && cached.mtimeMs === mtimeMs) {
+    return cached.result;
   }
 
   try {
     const config: ZappConfig = parseYaml(fs.readFileSync(zappFile, 'utf8')) ?? {};
     const propertyGroups = Array.isArray(config.propertyGroups) ? config.propertyGroups : [];
     const locations = propertyGroups
-      .filter((group) => group.language === 'cobol')
+      .filter((group) => group.language?.toLowerCase() === 'cobol')
       .flatMap((group) => (Array.isArray(group.libraries) ? group.libraries : []))
-      .filter((library) => library.type === 'local')
+      .filter((library) => library.type?.toLowerCase() === 'local')
       .flatMap((library) => (Array.isArray(library.locations) ? library.locations : []));
 
-    return locations.flatMap((location) => resolveLocation(location, workspaceRoot));
+    const result = locations.flatMap((location) => resolveLocation(location, workspaceRoot));
+    zappCache.set(workspaceRoot, { mtimeMs, result });
+    return result;
   } catch (err) {
     console.warn(`mockymock: failed to parse ${zappFile}: ${err instanceof Error ? err.message : String(err)}`);
+    zappCache.delete(workspaceRoot);
     return [];
   }
 }
 
 function resolveLocation(location: string, workspaceRoot: string): string[] {
-  if (!GLOB_METACHARACTERS.test(location)) {
-    return [path.isAbsolute(location) ? location : path.join(workspaceRoot, location)];
+  // glob patterns use `/` as the separator and `\` as an escape character,
+  // so a Windows-authored, backslash-separated pattern (e.g.
+  // "libraries\cobol\*") needs normalizing before it reaches glob, or it
+  // silently matches nothing.
+  const normalized = location.replace(/\\/g, '/');
+  if (!hasMagic(normalized)) {
+    return [resolveAgainstWorkspaceRoot(location, workspaceRoot)];
   }
-  return globSync(location, { cwd: workspaceRoot, absolute: true }).filter((match) => fs.statSync(match).isDirectory());
+  return globSync(normalized, { cwd: workspaceRoot, absolute: true }).filter((match) => {
+    try {
+      return fs.statSync(match).isDirectory();
+    } catch {
+      // A glob match that vanished (TOCTOU race) or is inaccessible
+      // (permission-denied) shouldn't take every other resolved location
+      // down with it -- just exclude this one match.
+      return false;
+    }
+  });
 }
