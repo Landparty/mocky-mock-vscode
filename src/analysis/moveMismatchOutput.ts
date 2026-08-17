@@ -118,14 +118,50 @@ export function anchorViolationLine(
   // MOVE's source segment would miss the operand's real use in a later
   // MOVE on the same line, falling through to search other lines and
   // anchoring on the wrong one.
+  //
+  // MOVE_RE/TO_RE use the same lookaround idiom as operandPattern above,
+  // not \b -- a plain \bTO\b matches the "TO" embedded in a hyphenated
+  // operand like AMOUNT-TO-PAY (hyphen isn't a word character, so \b sees
+  // a boundary on both sides of it), truncating afterMove's source segment
+  // before the real operand and turning a genuine match into a false
+  // negative. Same risk applies to MOVE against a name like
+  // RECORD-MOVE-COUNT.
+  // Non-global companions of the two /g regexes below: a shared `g`-flagged
+  // RegExp carries its lastIndex between calls, so testing one with .test()
+  // while the other is mid-iteration over a DIFFERENT string would corrupt
+  // the iterating one's position. Keeping a stateless copy for those
+  // one-shot checks avoids that entirely, rather than relying on callers to
+  // reset lastIndex correctly.
+  const MOVE_HAS_MATCH = /(?<![A-Za-z0-9-])MOVE(?![A-Za-z0-9-])/i;
+  const TO_RE = /(?<![A-Za-z0-9-])TO(?![A-Za-z0-9-])/i;
+  // A MOVE clause can wrap onto the following physical line before its TO
+  // (fixed-format COBOL wraps a long statement rather than truncating it),
+  // so when a line's own remainder after MOVE has no TO yet, extend the
+  // search into the next couple of lines -- capped, and stopping at the
+  // next MOVE, so an unrelated later statement can't be absorbed into this
+  // clause's span.
+  const MAX_CONTINUATION_LINES = 3;
   const matches = (index: number) => {
     const text = sourceLines[index] ?? '';
-    const moveRe = /\bMOVE\b/gi;
+    // MOVE_RE/TO_RE use the same lookaround idiom as operandPattern above,
+    // not \b -- a plain \bTO\b matches the "TO" embedded in a hyphenated
+    // operand like AMOUNT-TO-PAY (hyphen isn't a word character, so \b sees
+    // a boundary on both sides of it), truncating afterMove's source
+    // segment before the real operand and turning a genuine match into a
+    // false negative. Same risk applies to MOVE against a name like
+    // RECORD-MOVE-COUNT. Scoped to this call (not shared across matches()
+    // invocations for different lines) so its /g lastIndex can't leak.
+    const moveRe = /(?<![A-Za-z0-9-])MOVE(?![A-Za-z0-9-])/gi;
     let moveMatch: RegExpExecArray | null;
     while ((moveMatch = moveRe.exec(text))) {
-      const afterMove = text.slice(moveMatch.index + moveMatch[0].length);
-      const toMatch = /\bTO\b/i.exec(afterMove);
-      const sourceSegment = toMatch ? afterMove.slice(0, toMatch.index) : afterMove;
+      let clause = text.slice(moveMatch.index + moveMatch[0].length);
+      for (let extra = 1; extra < MAX_CONTINUATION_LINES && !TO_RE.test(clause); extra++) {
+        const nextLine = sourceLines[index + extra];
+        if (nextLine === undefined || MOVE_HAS_MATCH.test(nextLine)) break;
+        clause += ' ' + nextLine;
+      }
+      const toMatch = TO_RE.exec(clause);
+      const sourceSegment = toMatch ? clause.slice(0, toMatch.index) : clause;
       if (operand.test(sourceSegment)) return true;
     }
     return false;

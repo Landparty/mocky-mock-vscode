@@ -24,6 +24,25 @@ describe('mergeCopybookPaths', () => {
       Object.defineProperty(process, 'platform', originalPlatform!);
     }
   });
+
+  it('dedupes the same win32 absolute path in native-backslash and normalized-forward-slash form', () => {
+    // Regression test: the mockymock.copybookPaths setting carries native
+    // (backslash) separators on Windows, but a zapp.yml-derived absolute
+    // path arrives forward-slash-normalized (zappConfig.ts's resolveLocation
+    // normalizes for glob compatibility even on the literal-path branch).
+    // The same directory declared through both sources used to produce two
+    // different dedup keys and ship as a duplicate --copybook-path.
+    const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+    try {
+      assert.deepStrictEqual(
+        mergeCopybookPaths(['C:\\mainframe\\syslib'], ['C:/mainframe/syslib']),
+        ['C:\\mainframe\\syslib']
+      );
+    } finally {
+      Object.defineProperty(process, 'platform', originalPlatform!);
+    }
+  });
 });
 
 describe('resolveAgainstWorkspaceRoot', () => {
