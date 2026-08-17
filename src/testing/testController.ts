@@ -225,12 +225,63 @@ export function activateTestController(
     return cases;
   }
 
+  // A continuous-mode rerun replays a TestRunRequest whose include/exclude
+  // items were captured before a watcher-triggered discoverAndBuild replaced
+  // the tree's TestItems, so classifying (or marking) those stale objects by
+  // identity silently plans the wrong run. Re-resolve each item to its live
+  // counterpart by id -- and, when an edit changed the id itself (a case's
+  // id embeds `::<line>`; a suite's id embeds its name), by whichever part
+  // of the id/position still identifies the same node.
+  function resolveToLiveItem(item: vscode.TestItem): vscode.TestItem | undefined {
+    if (!item.uri) return undefined;
+    const fileItem = fileItems.get(item.uri.toString());
+    if (!fileItem) return undefined;
+    if (item.id === fileItem.id) return fileItem;
+    let found: vscode.TestItem | undefined;
+    fileItem.children.forEach((suiteItem) => {
+      if (found) return;
+      if (suiteItem.id === item.id) {
+        found = suiteItem;
+        return;
+      }
+      suiteItem.children.forEach((caseItem) => {
+        if (!found && caseItem.id === item.id) found = caseItem;
+      });
+    });
+    if (found) return found;
+    // A case whose line moved (an edit above it) keeps its suite+case
+    // prefix -- match on that at whatever line it now sits on.
+    const caseKey = /^(.+::.+)::\d+$/.exec(item.id);
+    if (caseKey) {
+      const prefix = `${caseKey[1]}::`;
+      fileItem.children.forEach((suiteItem) => {
+        suiteItem.children.forEach((caseItem) => {
+          if (!found && caseItem.id.startsWith(prefix)) found = caseItem;
+        });
+      });
+      return found;
+    }
+    // Otherwise this looks like a suite item (no `::<line>` suffix). A
+    // TESTSUITE rename changes the id outright (it embeds the name, with no
+    // stable prefix to match on), so fall back to position: the renamed
+    // suite is still the one starting at the same source line.
+    if (item.range) {
+      const line = item.range.start.line;
+      fileItem.children.forEach((suiteItem) => {
+        if (!found && suiteItem.range && suiteItem.range.start.line === line) found = suiteItem;
+      });
+    }
+    return found;
+  }
+
   // Translate a TestRunRequest's include/exclude sets into one plan per .cut
   // file. Selecting the file (or every one of its cases) runs the whole file
   // with no --case flags — byte-identical CLI invocation to the pre-selection
   // behavior; any narrower selection becomes explicit --case flags.
   function planRuns(request: vscode.TestRunRequest): FilePlan[] {
-    const excludedIds = new Set((request.exclude ?? []).map((item) => item.id));
+    const excludedIds = new Set(
+      (request.exclude ?? []).map((item) => (resolveToLiveItem(item) ?? item).id)
+    );
     const wholeFiles = new Set<string>();
     const partial = new Map<string, Set<vscode.TestItem>>();
 
@@ -253,8 +304,12 @@ export function activateTestController(
     if (!request.include) {
       for (const uriString of fileItems.keys()) wholeFiles.add(uriString);
     } else {
-      for (const item of request.include) {
-        if (excludedIds.has(item.id) || !item.uri) continue;
+      for (const staleOrLive of request.include) {
+        const item = resolveToLiveItem(staleOrLive);
+        // An include item with no live counterpart (its file was deleted or
+        // no longer discovers) has nothing to run -- dropping it beats
+        // misclassifying a stale file item as a --case name.
+        if (!item || excludedIds.has(item.id) || !item.uri) continue;
         const uriString = item.uri.toString();
         if (fileItems.get(uriString) === item) {
           wholeFiles.add(uriString);
@@ -363,6 +418,7 @@ export function activateTestController(
     const cancelListener = token.onCancellationRequested(() => abort.abort());
 
     run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, fileItem);
+    const streamer = createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem));
     let result;
     try {
       result = await runSuite(
@@ -386,10 +442,11 @@ export function activateTestController(
             return null;
           }
         },
-        createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem)),
+        streamer,
         abort.signal
       );
     } finally {
+      streamer.flush();
       cancelListener.dispose();
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -551,6 +608,7 @@ export function activateTestController(
     const cancelListener = token.onCancellationRequested(() => abort.abort());
 
     run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, fileItem);
+    const streamer = createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem));
     let result;
     try {
       result = await runMutate(
@@ -563,10 +621,11 @@ export function activateTestController(
             return null;
           }
         },
-        createOutputStreamer((text) => run.appendOutput(text, undefined, fileItem)),
+        streamer,
         abort.signal
       );
     } finally {
+      streamer.flush();
       cancelListener.dispose();
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -690,6 +749,7 @@ export function activateTestController(
     const cancelListener = token.onCancellationRequested(() => abort.abort());
 
     run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, caseItem);
+    const streamer = createOutputStreamer((text) => run.appendOutput(text, undefined, caseItem));
     let result;
     try {
       result = await runSuite(
@@ -711,10 +771,11 @@ export function activateTestController(
             return null;
           }
         },
-        createOutputStreamer((text) => run.appendOutput(text, undefined, caseItem)),
+        streamer,
         abort.signal
       );
     } finally {
+      streamer.flush();
       cancelListener.dispose();
       await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
     }
@@ -727,13 +788,14 @@ export function activateTestController(
 
     const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
+    // Keyed on the PARSED suite (like runOneFile), not the raw junitXml
+    // string: a truncated/malformed report parses to null, and that case
+    // must fall back to the process's real stderr rather than the generic
+    // "did not produce results" message.
+    const junitSuite = jsonReport ? null : result.junitXml ? parseJUnitXml(result.junitXml) : null;
     const outcomes = jsonReport
       ? mapJsonReport([caseItem.label], jsonReport, processFailureMessage)
-      : mapResults(
-          [caseItem.label],
-          result.junitXml ? parseJUnitXml(result.junitXml) : null,
-          result.junitXml ? undefined : processFailureMessage
-        );
+      : mapResults([caseItem.label], junitSuite, junitSuite ? undefined : processFailureMessage);
     const outcome = outcomes.get(caseItem.label);
     if (!outcome || outcome.kind === 'passed') {
       run.passed(caseItem);
@@ -823,7 +885,12 @@ export function activateTestController(
       return;
     }
 
-    const sessionName = `mockymock: ${caseItem.label}`;
+    // Includes cutPath, not just the case label: two different .cut files can
+    // have a same-labeled TESTCASE, and onDidStartDebugSession/
+    // onDidTerminateDebugSession below match purely by session.name -- a
+    // label-only name risks one concurrent "Debug (Interactive)" run
+    // capturing or prematurely finishing the other's session.
+    const sessionName = `mockymock: ${cutPath} :: ${caseItem.label}`;
     const debugConfig: MockymockDebugConfiguration & vscode.DebugConfiguration = {
       type: 'mockymock-cobol',
       request: 'launch',
@@ -835,8 +902,17 @@ export function activateTestController(
       copybookPaths,
     };
 
+    // Captured so a Test Results panel cancel can actually stop the session
+    // (and its Docker-backed debug process) -- registered BEFORE
+    // startDebugging so the session can't slip past the listener.
+    let debugSession: vscode.DebugSession | undefined;
+    const startListener = vscode.debug.onDidStartDebugSession((session) => {
+      if (session.name === sessionName) debugSession = session;
+    });
+
     const started = await vscode.debug.startDebugging(workspaceFolder, debugConfig);
     if (!started) {
+      startListener.dispose();
       const message = 'mockymock: failed to start the interactive debug session (see the Debug Console for details)';
       run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
       run.errored(caseItem, new vscode.TestMessage(message));
@@ -853,11 +929,21 @@ export function activateTestController(
     // the user cancels from the Test Results panel) -- the caller's finally
     // block ends it once this returns.
     await new Promise<void>((resolve) => {
-      const cancelListener = token.onCancellationRequested(() => finish());
+      const cancelListener = token.onCancellationRequested(() => {
+        // Cancelling from the Test Results panel must take the underlying
+        // DAP session (and its debug process) down with it, not just close
+        // the TestRun and leave the session running in the Debug toolbar.
+        // Guarded: stopDebugging(undefined) would stop EVERY active session.
+        if (debugSession) {
+          void vscode.debug.stopDebugging(debugSession).then(undefined, () => undefined);
+        }
+        finish();
+      });
       const terminateListener = vscode.debug.onDidTerminateDebugSession((session) => {
         if (session.name === sessionName) finish();
       });
       function finish() {
+        startListener.dispose();
         cancelListener.dispose();
         terminateListener.dispose();
         resolve();

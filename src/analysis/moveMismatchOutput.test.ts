@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseMoveMismatchOutput } from './moveMismatchOutput';
+import { anchorViolationLine, parseMoveMismatchOutput } from './moveMismatchOutput';
 
 describe('parseMoveMismatchOutput', () => {
   it('returns nothing for a clean run', () => {
@@ -35,6 +35,8 @@ describe('parseMoveMismatchOutput', () => {
           line: 42,
           severity: 'ERROR',
           message: "Illegal MOVE: cannot move ALPHABETIC item 'CUST-NAME' to NUMERIC item 'CUST-BALANCE'",
+          source: 'CUST-NAME',
+          target: 'CUST-BALANCE',
         },
       ],
       unresolvedCount: 0,
@@ -108,5 +110,53 @@ describe('parseMoveMismatchOutput', () => {
   it('treats a non-numeric unresolved_count as 0', () => {
     const stdout = JSON.stringify({ unresolved_count: 'oops', violations: [] });
     assert.deepStrictEqual(parseMoveMismatchOutput(stdout), { problems: [], unresolvedCount: 0 });
+  });
+});
+
+// cobolparser locations are relative to the copybook-EXPANDED text; these
+// tests pin the content-based re-anchoring back onto the on-disk source.
+describe('anchorViolationLine', () => {
+  const lines = [
+    /* 1 */ '       IDENTIFICATION DIVISION.',
+    /* 2 */ '       DATA DIVISION.',
+    /* 3 */ '       COPY CUSTREC.',
+    /* 4 */ '       PROCEDURE DIVISION.',
+    /* 5 */ '       MAIN-PARA.',
+    /* 6 */ '           MOVE CUST-NAME TO CUST-BALANCE',
+    /* 7 */ '           MOVE ZERO TO WS-TOTAL',
+    /* 8 */ '           STOP RUN.',
+  ];
+
+  it('keeps the reported line when it already reads as the right MOVE (no expansion)', () => {
+    assert.strictEqual(anchorViolationLine(lines, 6, 'CUST-NAME'), 6);
+  });
+
+  it('re-anchors a line pushed down by copybook expansion onto the nearest matching MOVE above', () => {
+    // A 49-line CUSTREC copybook shifts the reported line from 6 to 55.
+    assert.strictEqual(anchorViolationLine(lines, 55, 'CUST-NAME'), 6);
+  });
+
+  it('does not match the source operand inside a longer hyphenated name', () => {
+    const src = ['           MOVE PREFIX-CUST-NAME TO A', '           MOVE CUST-NAME TO B'];
+    assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 2);
+  });
+
+  it('falls back to the nearest matching MOVE below when nothing matches above', () => {
+    assert.strictEqual(anchorViolationLine(lines, 2, 'CUST-NAME'), 6);
+  });
+
+  it('clamps into the document when the operand is unknown or never found', () => {
+    assert.strictEqual(anchorViolationLine(lines, 55, undefined), 8);
+    assert.strictEqual(anchorViolationLine(lines, 55, 'NO-SUCH-ITEM'), 8);
+    assert.strictEqual(anchorViolationLine(lines, 0, undefined), 1);
+  });
+
+  it('does not anchor on a line where the operand is only the MOVE TARGET, not the source', () => {
+    // Regression test: a bare "line contains MOVE and the operand name"
+    // check would treat the reported line as a direct hit here (CUST-NAME
+    // is present, but only as the TARGET), anchoring the diagnostic on the
+    // wrong MOVE instead of falling through to the real source use above it.
+    const src = ['           MOVE CUST-NAME TO CUST-BALANCE', '           MOVE SPACES TO CUST-NAME'];
+    assert.strictEqual(anchorViolationLine(src, 2, 'CUST-NAME'), 1);
   });
 });

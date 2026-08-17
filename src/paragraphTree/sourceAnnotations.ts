@@ -60,7 +60,11 @@ export function extractSourceSnippet(
   maxLines: number
 ): SourceSnippetLine[] {
   const result: SourceSnippetLine[] = [];
-  for (let i = startLine - 1; i < sourceLines.length && result.length < maxLines; i++) {
+  // Clamped low as well as high: startLine comes over the webview message
+  // channel un-revalidated (same channel revealLine clamps in
+  // paragraphTreeViewProvider.ts), and a 0 would otherwise start at index
+  // -1 and emit a bogus {line: 0, text: undefined} row.
+  for (let i = Math.max(startLine, 1) - 1; i < sourceLines.length && result.length < maxLines; i++) {
     result.push({ line: i + 1, text: sourceLines[i] });
   }
   return result;

@@ -66,6 +66,35 @@ describe('checkDocker', () => {
     const status = await checkDocker(fakeRunner({ code: 1, stdout: '', stderr: 'Cannot connect to the Docker daemon' }));
     assert.strictEqual(status, 'daemon-down');
   });
+
+  it('returns daemon-down for a Linux stopped-daemon connect error whose errno text contains "no such file or directory"', async () => {
+    // Regression test: this stderr also matches COMMAND_NOT_FOUND_PATTERN's
+    // "no such file or directory", which used to misclassify an installed
+    // Docker with a stopped daemon as not-installed and prompt the user to
+    // install Docker Desktop instead of starting the daemon.
+    const status = await checkDocker(
+      fakeRunner({
+        code: 1,
+        stdout: '',
+        stderr:
+          'error during connect: Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/info": ' +
+          'dial unix /var/run/docker.sock: connect: no such file or directory',
+      })
+    );
+    assert.strictEqual(status, 'daemon-down');
+  });
+
+  it('returns daemon-down for the Windows named-pipe connect error', async () => {
+    const status = await checkDocker(
+      fakeRunner({
+        code: 1,
+        stdout: '',
+        stderr:
+          'error during connect: open //./pipe/docker_engine: The system cannot find the file specified.',
+      })
+    );
+    assert.strictEqual(status, 'daemon-down');
+  });
 });
 
 describe('supportsTraceFlag', () => {

@@ -84,7 +84,11 @@ function resolveLocation(location: string, workspaceRoot: string): string[] {
   // "libraries\cobol\*") needs normalizing before it reaches glob, or it
   // silently matches nothing.
   const normalized = location.replace(/\\/g, '/');
-  if (!hasMagic(normalized)) {
+  // magicalBraces: globSync expands {a,b} by default, but hasMagic() only
+  // counts braces as magic when told to -- without it a braces-only pattern
+  // like "copybooks/{dev,prod}" takes the literal-path branch and resolves
+  // to a nonexistent directory instead of globbing.
+  if (!hasMagic(normalized, { magicalBraces: true })) {
     return [resolveAgainstWorkspaceRoot(location, workspaceRoot)];
   }
   return globSync(normalized, { cwd: workspaceRoot, absolute: true }).filter((match) => {

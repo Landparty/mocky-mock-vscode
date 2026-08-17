@@ -91,4 +91,14 @@ describe('extractSourceSnippet', () => {
     const sourceLines = ['A'];
     assert.deepEqual(extractSourceSnippet(sourceLines, 5, 3), []);
   });
+
+  it('clamps a startLine below 1 to the first line instead of emitting a bogus line-0 row', () => {
+    // startLine arrives over the webview message channel un-revalidated; a 0
+    // used to start the loop at index -1 and emit {line: 0, text: undefined}.
+    const sourceLines = ['A', 'B'];
+    assert.deepEqual(extractSourceSnippet(sourceLines, 0, 2), [
+      { line: 1, text: 'A' },
+      { line: 2, text: 'B' },
+    ]);
+  });
 });
