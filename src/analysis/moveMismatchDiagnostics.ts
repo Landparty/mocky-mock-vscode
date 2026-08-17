@@ -4,7 +4,7 @@ import { runCommand } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { supportsAnalyzeCommand } from '../environment/checks';
 import { buildAnalyzeArgs } from './analysisRunner';
-import { parseMoveMismatchOutput } from './moveMismatchOutput';
+import { anchorViolationLine, parseMoveMismatchOutput } from './moveMismatchOutput';
 
 const COBOL_FILE_RE = /\.(cbl|cob|cobol)$/i;
 
@@ -71,8 +71,14 @@ export function activateMoveMismatchDiagnostics(context: vscode.ExtensionContext
         return;
       }
 
+      // Analyzer lines are relative to the copybook-expanded text (the
+      // --copybook-path trade-off documented on anchorViolationLine), so
+      // each one is re-anchored onto the on-disk document before placing
+      // the squiggle.
+      const sourceLines = document.getText().split(/\r?\n/);
       const diagnostics = problems.map((problem) => {
-        const zeroBased = Math.max(0, problem.line - 1);
+        const anchoredLine = anchorViolationLine(sourceLines, problem.line, problem.source);
+        const zeroBased = Math.max(0, anchoredLine - 1);
         const lineLength = zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
         const diagnostic = new vscode.Diagnostic(
           new vscode.Range(zeroBased, 0, zeroBased, Math.max(lineLength, 1)),

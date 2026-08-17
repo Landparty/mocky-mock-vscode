@@ -154,6 +154,32 @@ describe('resolveZappCopybookPaths', () => {
     assert.deepStrictEqual(resolveZappCopybookPaths(tempDir), [path.join(tempDir, 'libraries', 'cobol', 'SOMEDIR')]);
   });
 
+  it('expands a braces-only pattern instead of resolving it as a literal path', () => {
+    // Regression test: glob v13's hasMagic() only counts {a,b} as magic with
+    // magicalBraces set, so "copybooks/{dev,prod}" used to take the
+    // literal-path branch and contribute one nonexistent directory.
+    fs.mkdirSync(path.join(tempDir, 'copybooks', 'dev'), { recursive: true });
+    fs.mkdirSync(path.join(tempDir, 'copybooks', 'prod'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'zapp.yml'),
+      [
+        'propertyGroups:',
+        '  - name: cobol-copybooks',
+        '    language: cobol',
+        '    libraries:',
+        '      - name: syslib',
+        '        type: local',
+        '        locations:',
+        '          - "copybooks/{dev,prod}"',
+      ].join('\n')
+    );
+
+    assert.deepStrictEqual(
+      resolveZappCopybookPaths(tempDir).sort(),
+      [path.join(tempDir, 'copybooks', 'dev'), path.join(tempDir, 'copybooks', 'prod')].sort()
+    );
+  });
+
   it('caches the result for an unchanged zapp.yml instead of re-globbing on every call', () => {
     fs.mkdirSync(path.join(tempDir, 'COPYBOOK'));
     fs.writeFileSync(

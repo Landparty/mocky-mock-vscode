@@ -140,10 +140,21 @@ export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 // missing binary looks like under `shell: true` on Windows (cmd.exe) and on POSIX shells.
 const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not found|no such file or directory/i;
 
+// A found-and-running docker CLI that can't reach its daemon prints a
+// connect error that can ALSO contain "no such file or directory" (Linux
+// with the daemon stopped: "error during connect: ... dial unix
+// /var/run/docker.sock: connect: no such file or directory"), which would
+// otherwise satisfy COMMAND_NOT_FOUND_PATTERN and misreport an installed
+// Docker as not-installed. Checked first, so a daemon-connect failure is
+// always classified daemon-down regardless of its errno text.
+const DOCKER_DAEMON_CONNECT_PATTERN =
+  /error during connect|cannot connect to the docker daemon|docker daemon is not running|dial unix|docker_engine/i;
+
 export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
   const result = await run('docker', ['info']);
   if (result.code === 0) return 'available';
   if (result.code === -1) return 'not-installed';
+  if (DOCKER_DAEMON_CONNECT_PATTERN.test(result.stderr)) return 'daemon-down';
   if (COMMAND_NOT_FOUND_PATTERN.test(result.stderr)) return 'not-installed';
   return 'daemon-down';
 }

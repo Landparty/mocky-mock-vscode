@@ -56,10 +56,21 @@ describe('createOutputStreamer', () => {
     assert.ok(!/\r\r/.test(out.join('')), 'must not contain a doubled \\r');
   });
 
-  it('carries a trailing bare \\r through unchanged when no chunk follows', () => {
+  it('holds back a trailing bare \\r until flush() emits it after process exit', () => {
     const out: string[] = [];
     const streamer = createOutputStreamer((text) => out.push(text));
     streamer('done\r', 'stdout');
     assert.strictEqual(out.join(''), 'done');
+    streamer.flush();
+    assert.strictEqual(out.join(''), 'done\r');
+  });
+
+  it('flush() is a no-op when nothing is held back, and after it already ran', () => {
+    const out: string[] = [];
+    const streamer = createOutputStreamer((text) => out.push(text));
+    streamer('done\n', 'stdout');
+    streamer.flush();
+    streamer.flush();
+    assert.strictEqual(out.join(''), toCrlf('done\n'));
   });
 });
