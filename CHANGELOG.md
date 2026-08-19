@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.12.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.11.0...v0.12.0) (2026-08-19)
+
+
+### Features
+
+* add editor right-click menu for cobol-parser analyzers and Program Flow ([9a96080](https://github.com/Landparty/mocky-mock-vscode/commit/9a96080c027e8fc5ce69cc65656f4c63a4690ae2))
+* implement COBOL definition and reference providers for improved navigation ([fd2917a](https://github.com/Landparty/mocky-mock-vscode/commit/fd2917a065091b0c43a2a83455eecf8ab1f520e4))
+* resolve copybook paths from a zapp.yml at the workspace root ([4705e58](https://github.com/Landparty/mocky-mock-vscode/commit/4705e584fd7b839bb84ac193d56a2b526bed1388))
+* resolve copybook paths from a zapp.yml at the workspace root ([3769bdf](https://github.com/Landparty/mocky-mock-vscode/commit/3769bdfc7ef2a1b55e44ac35feddcf8921da6a1e))
+
+
+### Bug Fixes
+
+* address code-review findings on the earlier bug-fix commit ([77a1be8](https://github.com/Landparty/mocky-mock-vscode/commit/77a1be8b59638c287b295039837d362f48904388))
+* address code-review findings on zapp.yml copybook resolution ([fb983a8](https://github.com/Landparty/mocky-mock-vscode/commit/fb983a8ebedc0f714b0aec761032e8f98353513d))
+* address eight bugs found in a full-extension code review ([92a6581](https://github.com/Landparty/mocky-mock-vscode/commit/92a65819c73974c3c3972608e7b4e5571b32f5c8))
+* address final whole-branch review findings for boundaries removal ([274a786](https://github.com/Landparty/mocky-mock-vscode/commit/274a78655bebad345b2228a63bdf109081bc3140))
+* address repo-audit findings (hygiene, lint, deps, docs) ([e602523](https://github.com/Landparty/mocky-mock-vscode/commit/e6025231985086b80eb63ad807bf39701bbc1602))
+* close four more boundary/reconciliation bugs of the same class ([da8ab0a](https://github.com/Landparty/mocky-mock-vscode/commit/da8ab0a3878b1f77ac832469b1553aabc93a81f0))
+* three bugs surfaced by adversarial re-review of the last commit ([1cebb36](https://github.com/Landparty/mocky-mock-vscode/commit/1cebb36c8a0b9f36713f58237402334fce6c9307))
+* update references to cobol-parser in workflow and documentation ([7d4f24c](https://github.com/Landparty/mocky-mock-vscode/commit/7d4f24c0d6b473fecab5a72143aae60bc3d45536))
+
 ## [0.11.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.10.0...v0.11.0) (2026-08-14)
 
 
