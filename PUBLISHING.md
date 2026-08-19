@@ -59,7 +59,7 @@ uv tool install git+https://github.com/Landparty/mocky-mock.git
 ```
 
 This needs Python, `uv`, and git credentials for both `mocky-mock` and its
-`cobolparser` dependency — the same repo-read access anyone building from
+`cobol-parser` dependency — the same repo-read access anyone building from
 source needs. There used to be a `gh release download` step tried first
 (fetching a prebuilt binary from mocky-mock's own private Releases); it
 was removed because the bundled-binary case above now covers everything

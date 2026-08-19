@@ -52,7 +52,7 @@ jobs:
       # mockymock-src/pyproject.toml pins cobolparser to a specific tested
       # commit, not to its latest release -- deliberately, per that file's
       # own comments (bumped only after confirming compatibility). We
-      # override that pin below with cobolparser's latest release tag so
+      # override that pin below with cobol-parser's latest release tag so
       # every vsix ships the newest parser fixes; this is an untested
       # pairing mocky-mock's own suite never ran against, chosen anyway.
       - name: Resolve cobol-parser's latest release tag
@@ -94,14 +94,14 @@ jobs:
           token: ${{ secrets.ORG_PAT }}
           path: mockymock-src
 
-      # cobolparser is a private repo; mockymock-src/pyproject.toml pins it
+      # cobol-parser is a private repo; mockymock-src/pyproject.toml pins it
       # via git+https, which pip/git can only resolve here with a token that
       # has read access (ORG_PAT, the org-level GitHub PAT used above
       # to check out mocky-mock). shell: bash is required on every OS --
       # run: steps default to pwsh on windows-latest, and pwsh parses
       # ${TOKEN} as an (unset) PowerShell variable rather than expanding the
       # env var, silently embedding an empty token in the rewritten URL.
-      - name: Configure git credentials for the private cobolparser dependency
+      - name: Configure git credentials for the private cobol-parser dependency
         shell: bash
         run: |
           [ -n "$TOKEN" ] || { echo "::error::ORG_PAT is not set (needs an org-level secret with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
@@ -119,18 +119,24 @@ jobs:
         run: pip install ./mockymock-src
       # See the "Resolve cobol-parser's latest release tag" step in the
       # resolve job: deliberately overrides the pin above with cobol-parser's
-      # newest release. --no-deps because cobolparser declares no runtime
+      # newest release. --no-deps because cobol-parser declares no runtime
       # dependencies of its own (a resolve here could only ever remove or
       # duplicate what mockymock-src's install already resolved). The
       # version print afterward is the only signal that the override
       # actually took effect -- if a future pinned commit and the latest
       # tag ever report the same pyproject.toml version, --force-reinstall
       # succeeding is not proof the code changed, only this printed line is.
+      #
+      # The requirement name here MUST match cobol-parser's own declared
+      # distribution name ("cobol-parser" as of pyproject.toml's rename from
+      # "cobolparser", commit 0ba507c) -- `pip install "name @ url"` validates
+      # the requested name against the built package's own metadata name and
+      # fails on a mismatch.
       - name: Force-install cobol-parser's latest release, overriding mocky-mock's pin
         shell: bash
         run: |
-          pip install --no-deps --force-reinstall "cobolparser @ git+https://github.com/Landparty/cobol-parser.git@${{ needs.resolve.outputs.cobolparser_tag }}"
-          python -c "import importlib.metadata as m; print('Installed cobolparser version:', m.version('cobolparser'))"
+          pip install --no-deps --force-reinstall "cobol-parser @ git+https://github.com/Landparty/cobol-parser.git@${{ needs.resolve.outputs.cobolparser_tag }}"
+          python -c "import importlib.metadata as m; print('Installed cobol-parser version:', m.version('cobol-parser'))"
       - name: Install Nuitka
         run: pip install nuitka
       - name: Build onefile executable
@@ -159,7 +165,7 @@ jobs:
           BIN="build/${{ matrix.artifact }}"
           chmod +x "$BIN" || true
           "$BIN" --help
-      - name: Analyze subcommand bundles cobolparser's CLI
+      - name: Analyze subcommand bundles cobol-parser's CLI
         shell: bash
         working-directory: mockymock-src
         run: |

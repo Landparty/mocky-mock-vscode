@@ -13,7 +13,10 @@
 // shell out to at your local ../mocky-mock and ../cobol-parser checkouts
 // instead of whatever's pinned in mocky-mock's pyproject.toml (a specific
 // git commit -- see that file's dependency comment). See the wrapper-script
-// section below for why this needs more than a plain editable install.
+// section below for why this needs more than a plain editable install. It
+// also rebuilds cobol-parser's Cython-accelerated hot-path modules in place,
+// so edits to any .pyx file are picked up too -- see
+// rebuildCobolParserExtensions below for why that can't be skipped.
 'use strict';
 
 const { spawnSync } = require('child_process');
@@ -49,11 +52,11 @@ function quoteArgForWindowsShell(arg) {
   return arg;
 }
 
-function run(command, args) {
+function run(command, args, cwd = REPO_ROOT) {
   console.log(`> ${command} ${args.join(' ')}`);
   const spawnCommand = useShell ? quoteArgForWindowsShell(command) : command;
   const spawnArgs = useShell ? args.map(quoteArgForWindowsShell) : args;
-  const result = spawnSync(spawnCommand, spawnArgs, { stdio: 'inherit', cwd: REPO_ROOT, shell: useShell });
+  const result = spawnSync(spawnCommand, spawnArgs, { stdio: 'inherit', cwd, shell: useShell });
   if (result.error) {
     console.error(result.error);
     process.exit(1);
@@ -73,6 +76,76 @@ function runCapture(command, args) {
     process.exit(1);
   }
   return result.stdout.trim();
+}
+
+// cobol-parser's lexer/preprocessor/data-item hot paths have an optional
+// Cython-compiled twin (_lexer_fast/_preprocess_fast/_data_fast) that, once
+// built, takes priority over the pure-Python implementation at import time.
+// The PYTHONPATH wrapper set up below shadows cobolparser with this local
+// checkout, but that only shadows the .py source -- if a .pyd from an
+// earlier build (or none at all) is sitting in cobolParserDir, edits to the
+// corresponding .pyx file silently have no effect until it's rebuilt. So
+// this rebuilds it in place on every --local-deps run rather than assuming
+// it's current.
+//
+// toolPythonPath MUST be the exact interpreter the mockymock tool venv runs
+// on (resolved by the caller from that venv, after it exists), not whatever
+// interpreter `uv run` would pick on its own: a compiled extension only
+// loads under the same (major, minor, platform) ABI it was built for --
+// Python silently no-ops a mismatched .pyd (find_spec returns None, no
+// error), so cobolparser would fall back to pure Python with the script
+// still reporting success. `uv run --python <path>` pins the build to that
+// exact interpreter so the resulting ABI tag always matches.
+//
+// Uses `uv run` (already a hard requirement below) rather than a bare
+// `python`: setup.py's build needs setuptools/wheel/cython, which aren't
+// installed by default and shouldn't be assumed present globally.
+// `--extra fast --with setuptools --with wheel` provisions an ephemeral venv
+// with exactly those and nothing more, scoped to this one command -- it
+// does not touch cobol-parser's own dev environment.
+function rebuildCobolParserExtensions(cobolParserDir, toolPythonPath) {
+  console.log(
+    `\nRebuilding cobol-parser Cython extensions in ${cobolParserDir} ` +
+      `(pinned to ${toolPythonPath}, the interpreter mockymock actually runs on)...`
+  );
+  run(
+    'uv',
+    [
+      'run',
+      '--python',
+      toolPythonPath,
+      '--extra',
+      'fast',
+      '--with',
+      'setuptools',
+      '--with',
+      'wheel',
+      '--',
+      'python',
+      'setup.py',
+      'build_ext',
+      '--inplace',
+    ],
+    cobolParserDir
+  );
+}
+
+// Reads [project].name out of a pyproject.toml -- used to find the venv uv
+// created for a `uv tool install`, since uv names that venv directory after
+// the installed project's distribution name (e.g. "mocky-mock"), not the
+// console-script/executable name it exposes (e.g. "mockymock"). Confirmed
+// empirically: `uv tool dir` on this machine also has a stale "mockymock"
+// venv (an old, non-editable install from before this repo's rename) sitting
+// alongside the current "mocky-mock" one -- using the executable name here
+// would resolve to the wrong, stale interpreter.
+function readProjectName(pyprojectDir) {
+  const text = fs.readFileSync(path.join(pyprojectDir, 'pyproject.toml'), 'utf8');
+  const match = text.match(/^name\s*=\s*"([^"]+)"/m);
+  if (!match) {
+    console.error(`Could not read [project].name from ${path.join(pyprojectDir, 'pyproject.toml')}`);
+    process.exit(1);
+  }
+  return match[1];
 }
 
 // Points the extension's mockymock CLI at local sibling checkouts for
@@ -126,6 +199,21 @@ function installLocalDeps() {
     console.error(`Expected uv to install a mockymock shim at ${shimPath}, but it's not there.`);
     process.exit(1);
   }
+
+  const toolsRootDir = runCapture('uv', ['tool', 'dir']);
+  const mockyMockProjectName = readProjectName(mockyMockDir);
+  const toolPythonPath = path.join(
+    toolsRootDir,
+    mockyMockProjectName,
+    process.platform === 'win32' ? 'Scripts' : 'bin',
+    process.platform === 'win32' ? 'python.exe' : 'python'
+  );
+  if (!fs.existsSync(toolPythonPath)) {
+    console.error(`Expected the mocky-mock tool venv's Python at ${toolPythonPath}, but it's not there.`);
+    process.exit(1);
+  }
+
+  rebuildCobolParserExtensions(cobolParserDir, toolPythonPath);
 
   const wrapperDir = path.join(REPO_ROOT, 'scripts', '.local');
   fs.mkdirSync(wrapperDir, { recursive: true });
