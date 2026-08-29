@@ -213,6 +213,67 @@
         "languages": [
           "cut",
           "cobol"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program",
+              "cut",
+              "case"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the COBOL program under test (.cbl/.cob/.cobol).",
+                "default": "${workspaceFolder}/PROGRAM.cbl"
+              },
+              "cut": {
+                "type": "string",
+                "description": "Absolute path to the .cut test suite containing the TESTCASE to debug.",
+                "default": "${workspaceFolder}/PROGRAM.cut"
+              },
+              "case": {
+                "type": "string",
+                "description": "Name of the single TESTCASE to debug, exactly as written in the .cut file. mockymock debug runs exactly one case per session."
+              },
+              "executablePath": {
+                "type": "string",
+                "description": "Override the mockymock executable for this session only. Defaults to the mockymock.executablePath setting, then the bundled CLI, then 'mockymock' on PATH."
+              },
+              "copybookPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Folders passed as --copybook-path for resolving COPY / EXEC SQL INCLUDE members. Defaults to the mockymock.copybookPaths setting when omitted.",
+                "default": []
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "mockymock-cobol",
+            "request": "launch",
+            "name": "mockymock: debug a TESTCASE",
+            "program": "${workspaceFolder}/PROGRAM.cbl",
+            "cut": "${workspaceFolder}/PROGRAM.cut",
+            "case": "the testcase name"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "mockymock: debug a TESTCASE",
+            "description": "Debug one TESTCASE from a .cut suite with mockymock.",
+            "body": {
+              "type": "mockymock-cobol",
+              "request": "launch",
+              "name": "mockymock: ${1:testcase name}",
+              "program": "^\"\\${workspaceFolder}/${2:PROGRAM.cbl}\"",
+              "cut": "^\"\\${workspaceFolder}/${3:PROGRAM.cut}\"",
+              "case": "${1:testcase name}"
+            }
+          }
         ]
       }
     ],

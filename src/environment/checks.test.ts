@@ -355,15 +355,33 @@ describe('resolveExecutablePath', () => {
     assert.strictEqual(resolveExecutablePath(undefined, tempDir), path.join(binDir, bundledName));
   });
 
+  // darwinPathFallbackCandidates probes two ABSOLUTE host paths
+  // (/opt/homebrew/bin/mockymock, /usr/local/bin/mockymock) that no
+  // scratch-directory argument can redirect. A contributor's Mac -- or any
+  // CI image that installs the real CLI to run integration checks -- has a
+  // genuine binary at one of them, which used to make the "nothing is
+  // installed" assertions below fail against the host's own filesystem
+  // rather than against anything this suite set up. Confining the probe to
+  // paths under tempDir keeps these cases hermetic while leaving the real
+  // fs semantics intact for the fixtures each test actually creates.
+  const sandboxedExists = (candidate: string): boolean =>
+    candidate.startsWith(tempDir) && fs.existsSync(candidate);
+
   it('falls back to "mockymock" when the extension has no bin directory at all', () => {
-    assert.strictEqual(resolveExecutablePath(undefined, path.join(tempDir, 'does-not-exist')), 'mockymock');
+    assert.strictEqual(
+      resolveExecutablePath(undefined, path.join(tempDir, 'does-not-exist'), process.platform, os.homedir(), sandboxedExists),
+      'mockymock'
+    );
   });
 
   it('on darwin, falls back to "mockymock" (not a fake path) when no candidate exists either', () => {
     const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
     const emptyHomeDir = path.join(tempDir, 'empty-home');
     fs.mkdirSync(emptyHomeDir);
-    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'darwin', emptyHomeDir), 'mockymock');
+    assert.strictEqual(
+      resolveExecutablePath(undefined, noBinExtensionPath, 'darwin', emptyHomeDir, sandboxedExists),
+      'mockymock'
+    );
   });
 
   it('on darwin, finds a uv-installed CLI under ~/.local/bin when no bundled binary exists', () => {

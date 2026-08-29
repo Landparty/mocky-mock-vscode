@@ -13,7 +13,7 @@ import {
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReport } from './jsonReport';
+import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
@@ -534,12 +534,36 @@ export function activateTestController(
         run.passed(suiteItem);
       }
     });
+    // Non-gating by mockymock's own classification (orphan END / RECORD
+    // markers carry no pass/fail evidence): report them in the run output,
+    // but never let them redden an otherwise-passing run.
+    const advisory = jsonReport ? formatAdvisorySignals(jsonReport) : undefined;
+    if (advisory) {
+      run.appendOutput(toCrlf(`\n${advisory}\n`), undefined, fileItem);
+    }
+
+    // Everything that must not be masked by an otherwise-green run. Orphan
+    // failures and duplicate CASE START ids are the same class of anomaly:
+    // both belong to no TestItem, and mockymock gates its own exit code on
+    // both, so a run showing all-green while either is present would
+    // contradict the CLI the user just ran.
+    const gatingProblems: string[] = [];
     if (orphans.length) {
       const detail = orphans.map((o) => `case ${o.caseId}: ${o.message}`).join('\n');
-      const summary = `mockymock reported ${orphans.length} failure(s) not attributed to a known test case:\n${detail}`;
+      gatingProblems.push(
+        `mockymock reported ${orphans.length} failure(s) not attributed to a known test case:\n${detail}`
+      );
+    }
+    const duplicates = jsonReport ? formatDuplicateCaseStarts(jsonReport) : undefined;
+    if (duplicates) {
+      gatingProblems.push(duplicates);
+    }
+
+    if (gatingProblems.length) {
+      const summary = gatingProblems.join('\n\n');
       run.appendOutput(toCrlf(`\n${summary}\n`), undefined, fileItem);
       // Not part of the wholeFile/case-item rollup above (there is no
-      // TestItem an orphan belongs to) — always flag it on the file itself,
+      // TestItem these belong to) — always flag on the file itself,
       // started or not, so it can never be masked by an otherwise-green run.
       if (!wholeFile) run.started(fileItem);
       run.errored(fileItem, new vscode.TestMessage(summary));
