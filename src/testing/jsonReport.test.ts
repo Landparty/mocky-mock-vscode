@@ -1,5 +1,10 @@
 import * as assert from 'assert';
-import { parseJsonReport, mapJsonReport } from './jsonReport';
+import {
+  parseJsonReport,
+  mapJsonReport,
+  formatAdvisorySignals,
+  formatDuplicateCaseStarts,
+} from './jsonReport';
 
 const SAMPLE_REPORT = JSON.stringify({
   version: 1,
@@ -122,5 +127,86 @@ describe('mapJsonReport', () => {
     const outcomes = mapJsonReport(['a', 'b'], null, 'refused: PARSE_WARNING');
     assert.deepStrictEqual(outcomes.get('a'), { kind: 'errored', message: 'refused: PARSE_WARNING' });
     assert.deepStrictEqual(outcomes.get('b'), { kind: 'errored', message: 'refused: PARSE_WARNING' });
+  });
+});
+
+// These three keys are emitted by mockymock's JSON report but had no reader
+// here, so preferring the JSON report over the JUnit fallback used to LOSE
+// the duplicate-CASE-START warning the fallback surfaced as a synthetic
+// "duplicate-<id>" testcase. See jsonReport.ts's JsonRunReport comments.
+describe('run-report integrity signals', () => {
+  const REPORT_WITH_SIGNALS = JSON.stringify({
+    version: 1,
+    suite: { name: 's', line: 1 },
+    cases: [{ name: 'a', line: 3, tags: [], status: 'passed', failures: [] }],
+    orphanFailures: [],
+    duplicateCaseStarts: [
+      { caseId: '2', previousCaseName: 'first', duplicateCaseName: 'second' },
+    ],
+    orphanEnds: ['7'],
+    orphanRecords: [{ caseId: '9', dataName: 'WS-TOTAL', value: '42' }],
+  });
+
+  it('parses duplicateCaseStarts, orphanEnds and orphanRecords', () => {
+    const report = parseJsonReport(REPORT_WITH_SIGNALS);
+    assert.ok(report);
+    assert.deepStrictEqual(report.duplicateCaseStarts, [
+      { caseId: '2', previousCaseName: 'first', duplicateCaseName: 'second' },
+    ]);
+    assert.deepStrictEqual(report.orphanEnds, ['7']);
+    assert.deepStrictEqual(report.orphanRecords, [
+      { caseId: '9', dataName: 'WS-TOTAL', value: '42' },
+    ]);
+  });
+
+  it('defaults all three to empty for a report that omits them', () => {
+    const report = parseJsonReport(SAMPLE_REPORT);
+    assert.ok(report);
+    assert.deepStrictEqual(report.duplicateCaseStarts, []);
+    assert.deepStrictEqual(report.orphanEnds, []);
+    assert.deepStrictEqual(report.orphanRecords, []);
+  });
+
+  it('formats duplicate CASE START ids as a gating problem', () => {
+    const report = parseJsonReport(REPORT_WITH_SIGNALS);
+    const summary = formatDuplicateCaseStarts(report!);
+    assert.ok(summary);
+    assert.match(summary, /duplicate CASE START id/);
+    assert.match(summary, /first/);
+    assert.match(summary, /second/);
+  });
+
+  it('returns undefined for a report with no duplicate starts', () => {
+    assert.strictEqual(formatDuplicateCaseStarts(parseJsonReport(SAMPLE_REPORT)!), undefined);
+  });
+
+  it('formats orphan END/RECORD markers as advisory text', () => {
+    const advisory = formatAdvisorySignals(parseJsonReport(REPORT_WITH_SIGNALS)!);
+    assert.ok(advisory);
+    assert.match(advisory, /CASE END marker/);
+    assert.match(advisory, /WS-TOTAL = 42/);
+  });
+
+  it('returns undefined advisory text when there is nothing to report', () => {
+    assert.strictEqual(formatAdvisorySignals(parseJsonReport(SAMPLE_REPORT)!), undefined);
+  });
+
+  it('tolerates malformed entries inside the signal arrays', () => {
+    const report = parseJsonReport(
+      JSON.stringify({
+        version: 1,
+        suite: { name: 's', line: 1 },
+        cases: [],
+        duplicateCaseStarts: [null, 'nope', {}],
+        orphanEnds: ['ok', 5],
+        orphanRecords: ['nope', {}],
+      })
+    );
+    assert.ok(report);
+    assert.deepStrictEqual(report.duplicateCaseStarts, [
+      { caseId: '?', previousCaseName: '?', duplicateCaseName: '?' },
+    ]);
+    assert.deepStrictEqual(report.orphanEnds, ['ok']);
+    assert.deepStrictEqual(report.orphanRecords, [{ caseId: '?', dataName: '?', value: '' }]);
   });
 });
