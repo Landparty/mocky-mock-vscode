@@ -10,6 +10,88 @@ permissions:
   contents: read
 
 jobs:
+  # src/integration/cliContract.test.ts runs this extension's own argument
+  # builders and output parsers against the REAL mockymock CLI. It skips
+  # itself when the CLI isn't installed -- which is every run of the `test`
+  # job below, since that job installs only Node. Without this job the
+  # cross-repo contract is never actually exercised anywhere in CI, and a
+  # renamed flag or reshaped JSON key in mocky-mock would land here as a
+  # green build and a broken extension.
+  #
+  # Needs ORG_PAT (the same org-level PAT build-and-release.yml uses) to
+  # clone the private mocky-mock repo. Forks and Dependabot PRs don't get
+  # secrets, so this degrades to an explicit notice rather than a failure --
+  # the contract still gets checked on every push/PR from the org itself.
+  cli-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Check whether the mocky-mock checkout token is available
+        id: token
+        env:
+          ORG_PAT: ${{ secrets.ORG_PAT }}
+        run: |
+          if [ -n "$ORG_PAT" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ORG_PAT is not available (fork or Dependabot PR); the live mockymock CLI contract test will be skipped."
+          fi
+
+      # cobol-parser resolves from PyPI as an ordinary pinned dependency
+      # (see mocky-mock's .okf/integration.md), so installing mocky-mock
+      # itself is enough to get the whole CLI surface this test exercises.
+      - name: Install the mockymock CLI from source
+        if: steps.token.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.ORG_PAT }}
+        run: |
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/Landparty/mocky-mock.git" /tmp/mocky-mock
+          python -m pip install --upgrade pip
+          python -m pip install /tmp/mocky-mock
+          mockymock --version
+
+      - run: npm ci
+
+      # --grep (not a file argument): .mocharc.json's `spec` already globs
+      # every *.test.ts, and a positional file is ADDED to that glob rather
+      # than replacing it -- so a file argument would run the whole suite
+      # and make the pending count below meaningless.
+      #
+      # The contract block skips itself when the CLI is missing, which would
+      # turn a broken install into a green build. Running it under the JSON
+      # reporter lets the next step prove it actually executed.
+      - name: Run the live CLI contract test
+        if: steps.token.outputs.available == 'true'
+        run: |
+          set -o pipefail
+          npx mocha --grep "mockymock CLI contract" --reporter json > /tmp/contract.json || {
+            node -e "for (const f of require('/tmp/contract.json').failures) console.error(f.fullTitle + '\n  ' + f.err.message)"
+            exit 1
+          }
+
+      - name: Assert the contract test did not silently skip
+        if: steps.token.outputs.available == 'true'
+        run: |
+          PENDING=$(node -p "require('/tmp/contract.json').stats.pending")
+          PASSES=$(node -p "require('/tmp/contract.json').stats.passes")
+          echo "passes=$PASSES pending=$PENDING"
+          if [ "$PENDING" != "0" ]; then
+            echo "ERROR: $PENDING contract test(s) skipped -- the mockymock CLI was not usable."
+            exit 1
+          fi
+          if [ "$PASSES" = "0" ]; then
+            echo "ERROR: no contract tests ran at all."
+            exit 1
+          fi
+
   test:
     # windows-latest alongside ubuntu: the extension's primary dev platform
     # is Windows and commandRunner's shell:true branch (cmd.exe quoting,
