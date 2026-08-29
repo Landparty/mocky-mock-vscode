@@ -237,17 +237,28 @@ export function darwinPathFallbackCandidates(homeDir: string): string[] {
   ];
 }
 
+// Injectable purely so the darwin fallback above can be tested hermetically.
+// Two of its three candidates are ABSOLUTE host paths (/opt/homebrew/bin,
+// /usr/local/bin), which a test cannot neutralize by passing a scratch
+// homeDir: on any machine that genuinely has mockymock installed there --
+// a real contributor's Mac, and any CI image that pip/brew-installs the CLI
+// to run integration checks -- the "no candidate exists" case became
+// untestable and its assertion failed against the host's own filesystem.
+// Production callers keep the fs.existsSync default; only tests pass a fake.
+export type FileExistsProbe = (candidatePath: string) => boolean;
+
 export function resolveExecutablePath(
   configuredPath: string | undefined,
   extensionPath: string,
   platform: NodeJS.Platform = process.platform,
-  homeDir: string = os.homedir()
+  homeDir: string = os.homedir(),
+  fileExists: FileExistsProbe = fs.existsSync
 ): string {
   if (configuredPath && configuredPath.trim().length > 0) {
     return configuredPath.trim();
   }
   const bundledPath = path.join(extensionPath, 'bin', bundledBinaryName(platform));
-  if (fs.existsSync(bundledPath)) {
+  if (fileExists(bundledPath)) {
     return bundledPath;
   }
   // A GUI-launched VS Code on macOS doesn't source ~/.zshrc / ~/.zprofile,
@@ -259,7 +270,7 @@ export function resolveExecutablePath(
   // system-wide, or sourced by the display manager), so this only runs on
   // darwin -- no behavior change for other platforms.
   if (platform === 'darwin') {
-    const fallback = darwinPathFallbackCandidates(homeDir).find((candidate) => fs.existsSync(candidate));
+    const fallback = darwinPathFallbackCandidates(homeDir).find((candidate) => fileExists(candidate));
     if (fallback) {
       return fallback;
     }
