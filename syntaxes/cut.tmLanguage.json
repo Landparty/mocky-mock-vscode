@@ -33,7 +33,7 @@
           }
         },
         {
-          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|ACCEPT|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
+          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
           "captures": {
             "1": { "name": "keyword.control.mock.cut" },
             "2": { "name": "storage.type.category.cut" },
@@ -69,17 +69,23 @@
         {
           "match": "^\\s*(ROW)\\b",
           "name": "keyword.control.provider.cut"
+        },
+        {
+          "match": "^\\s*(TERMINAL)\\s*(?=\\()",
+          "name": "keyword.other.rows.cut"
         }
       ]
     },
     "directives": {
       "patterns": [
         {
-          "match": "^\\s*(EXPECT)\\s+(\\S+)\\s+(TO\\s+BE)\\b",
+          "match": "^\\s*(EXPECT)\\s+(\\S+)\\s+(?:(NOT)\\s+)?(TO\\s+BE)\\b(?:\\s+(GREATER\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?|LESS\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?))?",
           "captures": {
             "1": { "name": "keyword.control.assertion.cut" },
             "2": { "name": "variable.other.cobol.cut" },
-            "3": { "name": "keyword.operator.words.cut" }
+            "3": { "name": "keyword.operator.negation.cut" },
+            "4": { "name": "keyword.operator.words.cut" },
+            "5": { "name": "keyword.operator.comparison.cut" }
           }
         },
         {

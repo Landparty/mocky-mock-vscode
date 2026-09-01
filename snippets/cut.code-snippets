@@ -21,13 +21,18 @@
   },
   "Mock a file operation": {
     "prefix": "mock-file",
-    "body": ["MOCK ${1|OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK|} ${2:FILE-NAME}", "    ${3:*> mock body}", "END-MOCK"],
+    "body": ["MOCK ${1|OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN|} ${2:FILE-NAME}", "    ${3:*> mock body}", "END-MOCK"],
     "description": "MOCK <file-op> block"
   },
   "Mock SQL with rows": {
     "prefix": "mock-sql-rows",
     "body": ["MOCK SQL \"${1:SELECT}\" ROWS", "    ( ${2:FIELD} = ${3:value} )", "END-MOCK"],
     "description": "MOCK SQL ... ROWS cursor block"
+  },
+  "Mock a file read with rows and terminal": {
+    "prefix": "mock-read-rows",
+    "body": ["MOCK READ ${1:FILE-NAME} ROWS", "    ( ${2:FIELD} = ${3:value} )", "    TERMINAL ( ${4:FIELD} = ${5:value} )", "END-MOCK"],
+    "description": "MOCK READ ... ROWS cursor block with a TERMINAL group for the rows-exhausted (AT END) branch"
   },
   "Verify call count": {
     "prefix": "verify",
@@ -39,14 +44,19 @@
     "body": ["EXPECT ${1:WS-FIELD} TO BE ${2:VALUE}"],
     "description": "EXPECT assertion"
   },
+  "Expect comparison": {
+    "prefix": "expect-compare",
+    "body": ["EXPECT ${1:WS-FIELD} TO BE ${2|GREATER THAN,GREATER THAN OR EQUAL TO,LESS THAN,LESS THAN OR EQUAL TO|} ${3:VALUE}"],
+    "description": "EXPECT assertion with a relational comparison (GREATER THAN / LESS THAN, optionally OR EQUAL TO); prefix with NOT before TO BE to negate"
+  },
   "Before each test case": {
     "prefix": "before-each",
-    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
     "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
   },
   "Before all test cases": {
     "prefix": "before-all",
-    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
     "description": "BEFORE-ALL block of shared mocks (BEFORE-EACH and TESTCASE mocks override these)"
   },
   "Mock a paragraph or section": {
