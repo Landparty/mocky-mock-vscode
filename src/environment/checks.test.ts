@@ -17,6 +17,10 @@ import {
   supportsAnalyzeCommand,
   supportsGenerateDataCommand,
   supportsMutateCommand,
+  supportsGenerateCommand,
+  describeTooOldCli,
+  describeUnsupportedFeature,
+  isBundledExecutable,
   describeRefreshError,
   CLI_NOT_FOUND_MESSAGE,
   CLI_PERMISSION_DENIED_MESSAGE,
@@ -506,5 +510,99 @@ describe('getDockerDesktopLaunchCommand', () => {
 
   it('returns null for an unsupported platform', () => {
     assert.strictEqual(getDockerDesktopLaunchCommand('aix' as NodeJS.Platform), null);
+  });
+});
+
+describe('supportsGenerateCommand', () => {
+  it('returns true when generate --help lists --output', async () => {
+    const ok = await supportsGenerateCommand(
+      fakeRunner({ code: 0, stdout: 'usage: mockymock generate ...\n  -o OUTPUT, --output OUTPUT\n', stderr: '' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, true);
+  });
+
+  it('returns false for a CLI predating the subcommand (argparse invalid choice, exit 2)', async () => {
+    const ok = await supportsGenerateCommand(
+      fakeRunner({ code: 2, stdout: '', stderr: "invalid choice: 'generate'" }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+
+  it('returns false when the command cannot be run at all', async () => {
+    const ok = await supportsGenerateCommand(
+      fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }),
+      'mockymock'
+    );
+    assert.strictEqual(ok, false);
+  });
+});
+
+describe('isBundledExecutable', () => {
+  const extensionPath = path.join('/ext', 'mockymock');
+
+  it('recognizes the binary shipped inside the extension, on both platforms', () => {
+    assert.strictEqual(isBundledExecutable(path.join(extensionPath, 'bin', 'mockymock'), extensionPath), true);
+    assert.strictEqual(isBundledExecutable(path.join(extensionPath, 'bin', 'mockymock.exe'), extensionPath), true);
+  });
+
+  it('rejects a PATH lookup, a uv shim, and a user-configured path', () => {
+    assert.strictEqual(isBundledExecutable('mockymock', extensionPath), false);
+    assert.strictEqual(isBundledExecutable('/home/me/.local/bin/mockymock', extensionPath), false);
+    assert.strictEqual(isBundledExecutable(path.join(extensionPath, 'mockymock'), extensionPath), false);
+  });
+});
+
+describe('describeTooOldCli', () => {
+  const extensionPath = path.join('/ext', 'mockymock');
+
+  it('tells bundled-CLI users to update the extension, not "upgrade mockymock"', () => {
+    const message = describeTooOldCli(path.join(extensionPath, 'bin', 'mockymock'), extensionPath, 'mutation testing');
+    assert.ok(message.includes('bundled with this extension'), message);
+    assert.ok(message.includes('mutation testing'), message);
+    assert.ok(message.includes('Update the mockymock extension'), message);
+    assert.ok(!message.includes('Upgrade mockymock'), message);
+  });
+
+  it('names the path and the setting for a non-bundled CLI', () => {
+    const message = describeTooOldCli('/opt/homebrew/bin/mockymock', extensionPath, 'creating a test suite');
+    assert.ok(message.includes('"/opt/homebrew/bin/mockymock"'), message);
+    assert.ok(message.includes('creating a test suite'), message);
+    assert.ok(message.includes('mockymock.executablePath'), message);
+  });
+});
+
+describe('describeUnsupportedFeature', () => {
+  const extensionPath = path.join('/ext', 'mockymock');
+
+  it('reports "too old" when the CLI runs but lacks the feature', async () => {
+    const message = await describeUnsupportedFeature(
+      fakeRunner({ code: 0, stdout: 'mockymock 0.1.0', stderr: '' }),
+      '/usr/local/bin/mockymock',
+      extensionPath,
+      'interactive debugging'
+    );
+    assert.ok(message.includes('too old to support interactive debugging'), message);
+  });
+
+  it('reports "not found" instead of "too old" when the CLI is missing entirely', async () => {
+    const message = await describeUnsupportedFeature(
+      fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }),
+      'mockymock',
+      extensionPath,
+      'interactive debugging'
+    );
+    assert.strictEqual(message, CLI_NOT_FOUND_MESSAGE);
+  });
+
+  it('reports "permission denied" for a binary the OS refused to run', async () => {
+    const message = await describeUnsupportedFeature(
+      fakeRunner({ code: -1, stdout: '', stderr: 'permission denied' }),
+      '/ext/bin/mockymock',
+      extensionPath,
+      'interactive debugging'
+    );
+    assert.strictEqual(message, CLI_PERMISSION_DENIED_MESSAGE);
   });
 });

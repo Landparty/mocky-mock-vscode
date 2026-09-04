@@ -1,7 +1,7 @@
 {
   "name": "mockymock-vscode",
   "displayName": "mockymock",
-  "description": "Run mockymock .cut COBOL test suites directly from VS Code.",
+  "description": "Write, run, debug and cover COBOL unit tests from VS Code -- no mainframe needed.",
   "version": "0.11.0",
   "publisher": "lanparty",
   "private": true,
@@ -14,7 +14,10 @@
     "vscode": "^1.88.0"
   },
   "categories": [
-    "Testing"
+    "Testing",
+    "Debuggers",
+    "Programming Languages",
+    "Linters"
   ],
   "activationEvents": [
     "workspaceContains:**/*.cut",
@@ -26,7 +29,19 @@
     "commands": [
       {
         "command": "mockymock.checkEnvironment",
-        "title": "Check Environment Status",
+        "title": "Check Setup (CLI and Docker)",
+        "category": "mockymock",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "mockymock.newTestSuite",
+        "title": "New Test Suite for This Program",
+        "category": "mockymock",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "mockymock.openWalkthrough",
+        "title": "Open Getting Started Guide",
         "category": "mockymock"
       },
       {
@@ -137,6 +152,11 @@
     "menus": {
       "editor/title": [
         {
+          "command": "mockymock.newTestSuite",
+          "when": "resourceLangId == cobol",
+          "group": "navigation@1"
+        },
+        {
           "command": "mockymock.generateData",
           "when": "mockymock.activeEditorIsCopybook",
           "group": "navigation"
@@ -148,6 +168,11 @@
         }
       ],
       "editor/context": [
+        {
+          "command": "mockymock.newTestSuite",
+          "when": "resourceLangId == cobol",
+          "group": "mockymock@0"
+        },
         {
           "submenu": "mockymock.analyzeCobol.submenu",
           "when": "resourceLangId == cobol",
@@ -203,6 +228,72 @@
           "command": "mockymock.programFlow.refresh",
           "when": "view == mockymock.programFlow",
           "group": "navigation@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "mockymock.analyzeCobol.deadCode",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.programFlow",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.ioSequence",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.moveTypeCheck",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.linkageCheck",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.languageEnv",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.imsDli",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.analyzeCobol.dynamicCall",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.paragraphTree.refresh",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.programFlow.refresh",
+          "when": "false"
+        },
+        {
+          "command": "mockymock.newTestSuite",
+          "when": "resourceLangId == cobol || resourceLangId == cut"
+        },
+        {
+          "command": "mockymock.analyzeCobol",
+          "when": "resourceLangId == cobol"
+        },
+        {
+          "command": "mockymock.programFlow.show",
+          "when": "resourceLangId == cobol"
+        },
+        {
+          "command": "mockymock.focusStatements.toggle",
+          "when": "resourceLangId == cobol"
+        },
+        {
+          "command": "mockymock.generateData",
+          "when": "mockymock.activeEditorIsCopybook"
+        },
+        {
+          "command": "mockymock.exportMainframe",
+          "when": "resourceLangId == cobol || resourceLangId == cut"
         }
       ]
     },
@@ -363,7 +454,78 @@
           "description": "How many .cut files may run concurrently in one test run. Each run compiles and executes inside the shared mockymock-cobc container; raise this only if your setup tolerates concurrent compiles."
         }
       }
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "testing",
+        "contents": "No mockymock test suites yet. A test suite is a .cut file that sits next to your COBOL program.\n[Create a Test Suite](command:mockymock.newTestSuite)\nNew to mockymock? The [Getting Started guide](command:mockymock.openWalkthrough) walks you through setup, your first suite, and debugging."
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "gettingStarted",
+        "title": "Get started with mockymock",
+        "description": "Write, run and debug COBOL unit tests on your own machine -- no mainframe needed.",
+        "steps": [
+          {
+            "id": "checkSetup",
+            "title": "Check your setup",
+            "description": "mockymock needs two things: its CLI (already bundled with this extension) and Docker Desktop, which runs the COBOL compiler in a container. One click checks both and fixes what it can.\n[Check Setup](command:mockymock.checkEnvironment)",
+            "media": {
+              "markdown": "walkthroughs/check-setup.md"
+            },
+            "completionEvents": [
+              "onCommand:mockymock.checkEnvironment"
+            ]
+          },
+          {
+            "id": "createSuite",
+            "title": "Create your first test suite",
+            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite next to it. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
+            "media": {
+              "markdown": "walkthroughs/create-suite.md"
+            },
+            "completionEvents": [
+              "onCommand:mockymock.newTestSuite"
+            ]
+          },
+          {
+            "id": "runTests",
+            "title": "Run your tests",
+            "description": "Every .cut file shows up in the Test Explorer, and every TESTCASE gets a play button in the editor gutter. Failures land on the failing line with an expected/actual diff.\n[Open Test Explorer](command:workbench.view.testing.focus)",
+            "media": {
+              "markdown": "walkthroughs/run-tests.md"
+            },
+            "completionEvents": [
+              "onCommand:workbench.view.testing.focus",
+              "onView:workbench.view.testing"
+            ]
+          },
+          {
+            "id": "debugTests",
+            "title": "Debug a test case",
+            "description": "Set a breakpoint in your .cbl, then right-click a test case and pick **Debug (Interactive)** to step through your original COBOL with live variables. Prefer a read-only view? **Debug (Execution Trace)** prints the executed path and every mock that fired.",
+            "media": {
+              "markdown": "walkthroughs/debug-tests.md"
+            },
+            "completionEvents": [
+              "stepSelected"
+            ]
+          },
+          {
+            "id": "goFurther",
+            "title": "Coverage, mutation testing and more",
+            "description": "**Run with Coverage** paints executed lines on your .cbl. **Mutation Test** tells you which bugs your tests would miss. Right-click any COBOL file for static analyzers, a Program Flow diagram, and a mainframe-ready export.\n[Browse the examples](https://github.com/Landparty/mocky-mock-vscode/tree/main/examples)",
+            "media": {
+              "markdown": "walkthroughs/go-further.md"
+            },
+            "completionEvents": [
+              "stepSelected"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree && tsc --noEmit -p ./media/programFlow",
@@ -401,5 +563,14 @@
   },
   "overrides": {
     "serialize-javascript": "^7.1.0"
-  }
+  },
+  "keywords": [
+    "cobol",
+    "unit test",
+    "mock",
+    "mainframe",
+    "gnucobol",
+    "coverage",
+    "debugger"
+  ]
 }

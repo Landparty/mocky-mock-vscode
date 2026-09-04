@@ -133,6 +133,19 @@ export async function supportsMutateCommand(run: CommandRunner, executablePath: 
   });
 }
 
+// Same "check first, degrade gracefully" pattern as supportsExportCommand,
+// but for the `generate` subcommand (the Docker-free .cut scaffolder behind
+// "New Test Suite"): an installed CLI that predates `mockymock generate`
+// exits 2 on `generate --help`. Checking for `--output` specifically -- the
+// flag buildGenerateArgs actually passes -- also catches a `generate`
+// subcommand that exists without it.
+export async function supportsGenerateCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'generate', async () => {
+    const result = await run(executablePath, ['generate', '--help']);
+    return result.code === 0 && result.stdout.includes('--output');
+  });
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" (or
@@ -176,7 +189,7 @@ export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
 }
 
 export const CLI_NOT_FOUND_MESSAGE =
-  "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Environment Status'.";
+  "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Setup'.";
 
 // The message for commandRunner's EACCES sentinel (see describeSpawnError in
 // commandRunner.ts): the binary exists but the OS refused to execute it.
@@ -185,7 +198,7 @@ export const CLI_NOT_FOUND_MESSAGE =
 // tells users to reinstall something that's already there) to need its own
 // message and its own fix.
 export const CLI_PERMISSION_DENIED_MESSAGE =
-  "mockymock CLI found but couldn't be run (permission denied). On macOS this is usually Gatekeeper blocking an unsigned binary — run 'mockymock: Check Environment Status' to see the exact path and fix command.";
+  "mockymock CLI found but couldn't be run (permission denied). On macOS this is usually Gatekeeper blocking an unsigned binary — run 'mockymock: Check Setup' to see the exact path and fix command.";
 
 // Same underlying problem as CLI_PERMISSION_DENIED_MESSAGE, but for the one
 // caller (environmentManager.ts) that actually has the resolved
@@ -214,6 +227,44 @@ export function describeRefreshError(message: string, stderr: string | undefined
     return CLI_NOT_FOUND_MESSAGE;
   }
   return message;
+}
+
+// True when `executablePath` is the CLI binary shipped inside this
+// extension's own .vsix (see resolveExecutablePath's bundled branch) -- as
+// opposed to a user-configured path or a PATH/uv install. The distinction
+// matters for what to tell the user when that CLI is too old for a feature:
+// a bundled CLI is only ever upgraded by updating the extension itself.
+export function isBundledExecutable(executablePath: string, extensionPath: string): boolean {
+  const bundledDir = path.join(extensionPath, 'bin');
+  return executablePath === path.join(bundledDir, 'mockymock') || executablePath === path.join(bundledDir, 'mockymock.exe');
+}
+
+// One consistent "your mockymock CLI can't do X" message for every feature
+// gated on a supports*() probe above, worded by where that CLI came from:
+// the bundled binary can only be updated by updating the extension, so
+// telling those users to "upgrade mockymock" sends them looking for a
+// package manager that isn't involved. `feature` is a short noun phrase
+// ("interactive debugging", "creating a test suite").
+export function describeTooOldCli(executablePath: string, extensionPath: string, feature: string): string {
+  if (isBundledExecutable(executablePath, extensionPath)) {
+    return `The mockymock CLI bundled with this extension doesn't support ${feature} yet. Update the mockymock extension to its latest release to get it.`;
+  }
+  return `mockymock at "${executablePath}" is too old to support ${feature}. Upgrade mockymock and try again, or clear the mockymock.executablePath setting to use the CLI bundled with this extension.`;
+}
+
+// The full "why can't I use X?" explanation for a failed supports*() probe.
+// A false from those probes could mean "found but too old" OR "not found at
+// all" -- a second, cheap --version probe distinguishes them so a missing
+// binary is told to fix its setup instead of to "upgrade" something that
+// isn't there (the same describeRefreshError mapping the side views use).
+export async function describeUnsupportedFeature(
+  run: CommandRunner,
+  executablePath: string,
+  extensionPath: string,
+  feature: string
+): Promise<string> {
+  const probe = await run(executablePath, ['--version']);
+  return describeRefreshError(describeTooOldCli(executablePath, extensionPath, feature), probe.stderr);
 }
 
 export function bundledBinaryName(platform: NodeJS.Platform): string {

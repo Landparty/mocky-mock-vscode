@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { runCommand } from '../environment/commandRunner';
-import { describeRefreshError, resolveExecutablePath, supportsGenerateDataCommand } from '../environment/checks';
+import { describeUnsupportedFeature, resolveExecutablePath, supportsGenerateDataCommand } from '../environment/checks';
+import { showCliProblem, showNeedsFile } from '../environment/notify';
 import { firstNonEmptyLine } from '../environment/textUtils';
 import { COPYBOOK_ICON_CONTEXT_KEY, looksLikeCobolCandidate, looksLikeCopybook } from './copybookDetection';
 import { runGenerateData } from './generateDataRunner';
@@ -75,9 +76,7 @@ export function activateGenerateDataCommand(context: vscode.ExtensionContext): v
     vscode.commands.registerCommand('mockymock.generateData', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || !computeIsCopybook(editor.document)) {
-        vscode.window.showErrorMessage(
-          'mockymock: open a copybook file first, then run "Generate Data from Copybook".'
-        );
+        await showNeedsFile('Generate Data from Copybook', 'copybook', 'mockymock.generateData');
         return;
       }
       // The copybook guard above (and the icon's own visibility) reads the
@@ -90,10 +89,13 @@ export function activateGenerateDataCommand(context: vscode.ExtensionContext): v
       // cleanup and still wouldn't match what the user thinks they're
       // generating from).
       if (editor.document.isDirty) {
-        vscode.window.showErrorMessage(
-          'mockymock: save this copybook before generating data -- unsaved changes would not be reflected.'
+        const save = 'Save and Continue';
+        const choice = await vscode.window.showWarningMessage(
+          'mockymock: save this copybook first so the generated data matches what\'s on disk.',
+          save
         );
-        return;
+        if (choice !== save) return;
+        if (!(await editor.document.save())) return;
       }
       const activePath = editor.document.uri.fsPath;
 
@@ -102,16 +104,13 @@ export function activateGenerateDataCommand(context: vscode.ExtensionContext): v
 
       const supportsGenerateData = await supportsGenerateDataCommand(runCommand, executablePath);
       if (!supportsGenerateData) {
-        // supportsGenerateDataCommand's false could mean "found but too old"
-        // or "not found at all" -- a second, cheap probe distinguishes them,
-        // same pattern analyzeCobol.ts uses.
-        const probe = await runCommand(executablePath, ['--version']);
-        const message = describeRefreshError(
-          `mockymock at "${executablePath}" is too old to support generating data from a copybook ` +
-            "(needs cobol-parser's gen-data command). Upgrade mockymock and try again.",
-          probe.stderr
+        const message = await describeUnsupportedFeature(
+          runCommand,
+          executablePath,
+          context.extensionPath,
+          'generating data from a copybook'
         );
-        vscode.window.showErrorMessage(message);
+        await showCliProblem(message, executablePath, context.extensionPath);
         return;
       }
 

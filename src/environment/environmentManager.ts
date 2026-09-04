@@ -31,7 +31,7 @@ export class EnvironmentManager {
     context.subscriptions.push(this.statusBarItem);
     // Text-only, no show(): activateIfCutWorkspace() below decides whether
     // the item is ever revealed at startup, but ensureReady() can also
-    // reveal it later (e.g. an explicit "Check Environment Status" click in
+    // reveal it later (e.g. an explicit "Check Setup" click in
     // a workspace with no .cut file yet) -- setting real text here up front
     // means that later show() never exposes a blank item while the CLI/
     // Docker probe is still in flight.
@@ -125,7 +125,7 @@ export class EnvironmentManager {
         // mask the actual problem (most commonly, macOS Gatekeeper blocking
         // a quarantined binary). Shown as an error dialog (matching
         // installMockymock's own failure branches below) since this only
-        // runs from an explicit "Check Environment Status" invocation or a
+        // runs from an explicit "Check Setup" invocation or a
         // real test run -- not the passive activation-time refreshStatus().
         const message = permissionDeniedMessageForPath(executablePath);
         this.setStatus('$(error) mockymock: permission denied', message);

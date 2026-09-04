@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { runCommand } from '../environment/commandRunner';
-import { supportsExportCommand } from '../environment/checks';
+import { describeUnsupportedFeature, supportsExportCommand } from '../environment/checks';
+import { showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../boundaries/viewRefreshPolicy';
@@ -52,9 +53,7 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
           return;
         }
       } else {
-        vscode.window.showErrorMessage(
-          'mockymock: open a .cbl or .cut file first, then run "Export Mainframe-Ready COBOL".'
-        );
+        await showNeedsFile('Export Mainframe-Ready COBOL', 'cobol-or-cut', 'mockymock.exportMainframe');
         return;
       }
 
@@ -62,10 +61,13 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
 
       const supportsExport = await supportsExportCommand(runCommand, executablePath);
       if (!supportsExport) {
-        vscode.window.showErrorMessage(
-          `mockymock at "${executablePath}" is too old to support exporting mainframe-ready COBOL ` +
-            '(needs the export subcommand). Upgrade mockymock and try again.'
+        const message = await describeUnsupportedFeature(
+          runCommand,
+          executablePath,
+          context.extensionPath,
+          'exporting mainframe-ready COBOL'
         );
+        await showCliProblem(message, executablePath, context.extensionPath);
         return;
       }
 

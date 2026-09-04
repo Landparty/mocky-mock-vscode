@@ -22,6 +22,8 @@ import { activateOutlineProvider } from './outline/outlineProvider';
 import { activateDefinitionProviders } from './navigation/definitionProvider';
 import { activateFocusStatements } from './focusStatements/activateFocusStatements';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
+import { activateNewTestSuiteCommand, NEW_TEST_SUITE_COMMAND } from './newTestSuite/newTestSuite';
+import { showNeedsFile, WALKTHROUGH_ID } from './environment/notify';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 const TREE_VIEW_REFRESH_DEBOUNCE_MS = 300;
@@ -198,9 +200,7 @@ function activateProgramFlowView(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('mockymock.programFlow.show', async () => {
       const activeCblPath = resolveActiveCblPath();
       if (!activeCblPath) {
-        vscode.window.showErrorMessage(
-          'mockymock: open a .cbl, .cob, or .cobol file first, then run "Show Program Flow".'
-        );
+        await showNeedsFile('Show Program Flow', 'cobol', 'mockymock.programFlow.show');
         return;
       }
       void provider.refresh(activeCblPath);
@@ -227,6 +227,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateAnalyzeCobolCommand(context);
   activateMoveMismatchDiagnostics(context);
   activateGenerateDataCommand(context);
+  activateNewTestSuiteCommand(context);
   activateCobolViewVisibility(context);
   activateParagraphTreeView(context);
   activateOutlineProvider(context);
@@ -249,10 +250,26 @@ export function activate(context: vscode.ExtensionContext) {
       // prompt itself (install the CLI, start Docker, open the download
       // page); a success needs its own feedback since the status bar text
       // change alone is easy to miss on a deliberate "is this set up?" click.
+      // In a workspace with no suite yet, "ready" naturally leads to "so
+      // write one" -- offer that next step right on the toast.
       if (result.ok) {
-        vscode.window.showInformationMessage('mockymock: ready to run tests.');
+        const createSuite = 'Create a Test Suite';
+        const actions = (await isCutWorkspace()) ? [] : [createSuite];
+        const choice = await vscode.window.showInformationMessage(
+          'mockymock is ready: the CLI and Docker are both available.',
+          ...actions
+        );
+        if (choice === createSuite) {
+          await vscode.commands.executeCommand(NEW_TEST_SUITE_COMMAND);
+        }
       }
-    })
+    }),
+    // The Getting Started walkthrough VS Code shows on install, reachable
+    // again later from the Command Palette. The third argument (toSide)
+    // is false: open it as a full editor, like the Welcome page does.
+    vscode.commands.registerCommand('mockymock.openWalkthrough', () =>
+      vscode.commands.executeCommand('workbench.action.openWalkthrough', WALKTHROUGH_ID, false)
+    )
   );
 }
 
