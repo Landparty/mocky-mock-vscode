@@ -21,7 +21,13 @@ import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { resolveExecutablePath, supportsTraceFlag, supportsDebugCommand, supportsMutateCommand } from '../environment/checks';
+import {
+  describeTooOldCli,
+  resolveExecutablePath,
+  supportsTraceFlag,
+  supportsDebugCommand,
+  supportsMutateCommand,
+} from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
@@ -642,9 +648,7 @@ export function activateTestController(
 
     const supportsMutate = await supportsMutateCommand(runCommand, executablePath);
     if (!supportsMutate) {
-      const message =
-        `mockymock at "${executablePath}" is too old to support mutation testing ` +
-        '(needs the mutate subcommand). Upgrade mockymock and try again.';
+      const message = describeTooOldCli(executablePath, context.extensionPath, 'mutation testing');
       run.appendOutput(toCrlf(`${message}\n`), undefined, fileItem);
       run.errored(fileItem, new vscode.TestMessage(message));
       return;
@@ -781,9 +785,7 @@ export function activateTestController(
 
     const supportsTrace = await supportsTraceFlag(runCommand, executablePath);
     if (!supportsTrace) {
-      const message =
-        `mockymock at "${executablePath}" is too old to support execution tracing ` +
-        '(needs --trace-json). Upgrade mockymock and try again.';
+      const message = describeTooOldCli(executablePath, context.extensionPath, 'execution tracing');
       run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
       run.errored(caseItem, new vscode.TestMessage(message));
       return;
@@ -911,9 +913,7 @@ export function activateTestController(
 
     const supportsDebug = await supportsDebugCommand(runCommand, executablePath);
     if (!supportsDebug) {
-      const message =
-        `mockymock at "${executablePath}" is too old to support interactive debugging ` +
-        '(needs the debug subcommand). Upgrade mockymock and try again.';
+      const message = describeTooOldCli(executablePath, context.extensionPath, 'interactive debugging');
       run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
       run.errored(caseItem, new vscode.TestMessage(message));
       return;

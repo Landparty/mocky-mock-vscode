@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { runCommand } from '../environment/commandRunner';
-import { describeRefreshError, supportsAnalyzeCommand } from '../environment/checks';
+import { describeUnsupportedFeature, supportsAnalyzeCommand } from '../environment/checks';
+import { showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { CobolAnalyzer, runAnalyze } from './analysisRunner';
 
@@ -42,14 +43,13 @@ function getOutputChannel(): vscode.OutputChannel {
 async function runAnalyzerCommand(
   context: vscode.ExtensionContext,
   analyzer: CobolAnalyzer,
-  label: string
+  label: string,
+  analyzerCommandId: string
 ): Promise<void> {
   const editor = vscode.window.activeTextEditor;
   const activePath = editor?.document.uri.fsPath;
   if (!activePath || !/\.(cbl|cob|cobol)$/i.test(activePath)) {
-    vscode.window.showErrorMessage(
-      `mockymock: open a .cbl, .cob, or .cobol file first, then run "${label}" analysis.`
-    );
+    await showNeedsFile(`Analyze: ${label}`, 'cobol', `mockymock.analyzeCobol.${analyzerCommandId}`);
     return;
   }
 
@@ -57,18 +57,8 @@ async function runAnalyzerCommand(
 
   const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
   if (!supportsAnalyze) {
-    // supportsAnalyzeCommand's false could mean "found but too old" or
-    // "not found at all" -- a second, cheap probe distinguishes them so
-    // a missing binary doesn't get told to "upgrade" (there's nothing to
-    // upgrade). Reuses the same CLI_NOT_FOUND_MESSAGE/describeRefreshError
-    // pattern the Boundaries view already uses for this exact ambiguity.
-    const probe = await runCommand(executablePath, ['--version']);
-    const message = describeRefreshError(
-      `mockymock at "${executablePath}" is too old to support COBOL analysis ` +
-        '(needs the analyze subcommand). Upgrade mockymock and try again.',
-      probe.stderr
-    );
-    vscode.window.showErrorMessage(message);
+    const message = await describeUnsupportedFeature(runCommand, executablePath, context.extensionPath, 'COBOL analysis');
+    await showCliProblem(message, executablePath, context.extensionPath);
     return;
   }
 
@@ -124,20 +114,21 @@ export function activateAnalyzeCobolCommand(context: vscode.ExtensionContext): v
           label: opt.label,
           description: opt.description,
           analyzer: opt.analyzer,
+          id: opt.id,
         })),
         { placeHolder: 'Choose a cobol-parser analyzer to run' }
       );
       if (!picked) {
         return;
       }
-      await runAnalyzerCommand(context, picked.analyzer, picked.label);
+      await runAnalyzerCommand(context, picked.analyzer, picked.label, picked.id);
     })
   );
 
   for (const opt of ANALYZER_OPTIONS) {
     context.subscriptions.push(
       vscode.commands.registerCommand(`mockymock.analyzeCobol.${opt.id}`, () =>
-        runAnalyzerCommand(context, opt.analyzer, opt.label)
+        runAnalyzerCommand(context, opt.analyzer, opt.label, opt.id)
       )
     );
   }

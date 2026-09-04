@@ -5,6 +5,27 @@
 Download the `.vsix` and install it in VS Code to start unit-testing your
 COBOL today — see you on the *wildside*.
 
+## Quick start
+
+1. **Install** the `.vsix` for your OS from the
+   [latest release](https://github.com/Landparty/mocky-mock-vscode/releases/latest)
+   (`Extensions` → `…` → `Install from VSIX…`). The mockymock CLI is bundled;
+   you also need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+   to run tests.
+2. **Open a COBOL program** (`.cbl`, `.cob` or `.cobol`) and click the
+   beaker icon in the editor title bar — **New Test Suite for This Program**.
+   mockymock reads the program and writes a `.cut` suite next to it, one
+   test case per paragraph with every `CALL`, file, SQL, CICS and IMS
+   boundary already mocked.
+3. **Press play** in the Test Explorer (or the green arrow beside any
+   `TESTCASE`). The first run checks your setup and starts Docker Desktop
+   for you if it isn't running.
+
+A **Getting Started** walkthrough opens on install and is always one
+command away (`mockymock: Open Getting Started Guide`). If something's
+off, `mockymock: Check Setup (CLI and Docker)` diagnoses it and fixes
+what it can.
+
 ## Why mockymock
 
 Unit testing and debugging COBOL is normally gated behind provisioning a
@@ -25,6 +46,11 @@ it does and how to use it.
 
 ## Features
 
+- **New Test Suite in one click** — scaffolds a runnable `.cut` next to any
+  COBOL program, boundaries pre-mocked; falls back to a starter template
+  when the CLI can't analyze the program, so you always get a file to edit.
+- **Getting Started walkthrough** and an empty-state Test Explorer that
+  points at the next step, so the first test never needs the docs.
 - **Test Explorer tree** for every `.cut` file, with tag filtering.
 - **Run single tests or subsets**, including "rerun failed."
 - **Failures land on the failing line**, with an expected/actual diff.
@@ -42,7 +68,9 @@ it does and how to use it.
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
   compiler instead of GnuCOBOL, zero Docker needed.
 - **Environment bootstrap** — auto-installs the CLI and starts Docker
-  Desktop for you, with a status bar item to check or retry.
+  Desktop for you, with a status bar item to check or retry. Every
+  "can't do that" message carries the button that fixes it (check setup,
+  open the file, update the extension).
 - **No silent failures** — anything mockymock can't attribute to a test
   case still surfaces as an error, not a false green.
 
@@ -84,8 +112,8 @@ The bundled `mockymock` binary isn't signed with a paid Apple Developer
 Program certificate, so on first activation the extension automatically
 clears the macOS quarantine flag on it (the thing Gatekeeper checks) —
 no action needed on your part. If a fresh install still shows "mockymock:
-permission denied" in the status bar, run `mockymock: Check Environment
-Status` to see the exact bundled binary path, then in Terminal:
+permission denied" in the status bar, run `mockymock: Check Setup (CLI and
+Docker)` to see the exact bundled binary path, then in Terminal:
 
 ```bash
 xattr -d com.apple.quarantine <path-from-the-command-above>
@@ -100,7 +128,10 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 | `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
 | `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in after this setting's own entries, which win on a duplicate path |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
+| `mockymock.moveCheckOnSave` | `true` | Flag `MOVE` statements with mismatched data categories as diagnostics when a COBOL file is opened or saved (static, no Docker) |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |
+
+All of the defaults work out of the box; most users never touch these.
 
 ## Requirements
 
@@ -124,8 +155,16 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 
 ## Generating tests
 
-Seeded test-data generation (what the removed "COBOL Boundaries" view used
-to do) now lives in the `mockymock` Claude Code skill instead of a sidebar
+**New Test Suite for This Program** (beaker icon on any open COBOL file,
+also in the right-click menu and the empty Test Explorer) runs
+`mockymock generate` and writes `PROG.cut` next to `PROG.cbl`: one
+`TESTCASE` per paragraph, every boundary mocked, no Docker needed. It never
+overwrites an existing suite — it opens it instead. If the CLI can't
+analyze the program (a parse error, an unresolved copybook), you still get
+a minimal starter suite plus the reason, so there's always a file to edit.
+
+Seeded test-*data* generation (what the removed "COBOL Boundaries" view used
+to do) lives in the `mockymock` Claude Code skill instead of a sidebar
 UI — install it with `mockymock skills install` and ask your assistant to
 generate tests for a program. See the mocky-mock repo's skill docs.
 

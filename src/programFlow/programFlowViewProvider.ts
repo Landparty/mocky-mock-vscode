@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { runCommand } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { describeRefreshError, supportsAnalyzeCommand } from '../environment/checks';
+import { describeRefreshError, describeUnsupportedFeature, supportsAnalyzeCommand } from '../environment/checks';
 import { RefreshGuard } from '../boundaries/refreshGuard';
 import { ProgramFlowFetchError } from '../paragraphTree/programFlowClient';
 import { fetchProgramFlowShared } from '../paragraphTree/sharedProgramFlowFetch';
@@ -157,12 +157,8 @@ export class ProgramFlowViewProvider implements vscode.WebviewViewProvider {
 
       const supportsAnalyze = await supportsAnalyzeCommand(runCommand, executablePath);
       if (!supportsAnalyze) {
-        const probe = await runCommand(executablePath, ['--version']);
         throw new ProgramFlowFetchError(
-          describeRefreshError(
-            `mockymock at "${executablePath}" is too old to support Program Flow (needs the analyze subcommand). Upgrade mockymock and try again.`,
-            probe.stderr
-          )
+          await describeUnsupportedFeature(runCommand, executablePath, this.context.extensionPath, 'Program Flow')
         );
       }
 
