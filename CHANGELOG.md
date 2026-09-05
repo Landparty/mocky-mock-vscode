@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.12.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.11.0...v0.12.0) (2026-09-05)
+
+
+### Features
+
+* add editor right-click menu for cobol-parser analyzers and Program Flow ([9a96080](https://github.com/Landparty/mocky-mock-vscode/commit/9a96080c027e8fc5ce69cc65656f4c63a4690ae2))
+* **debug:** give hand-authored launch configs a schema and copybook defaults ([d48b0a6](https://github.com/Landparty/mocky-mock-vscode/commit/d48b0a65ff07857bfc242f6a62c9d41904dce489))
+* implement COBOL definition and reference providers for improved navigation ([fd2917a](https://github.com/Landparty/mocky-mock-vscode/commit/fd2917a065091b0c43a2a83455eecf8ab1f520e4))
+* move COBOL language support and analysis to the cobol-analyzer extension ([e32defb](https://github.com/Landparty/mocky-mock-vscode/commit/e32defb3e80d968828aa78cbaef37f494c9debdc))
+* resolve copybook paths from a zapp.yml at the workspace root ([4705e58](https://github.com/Landparty/mocky-mock-vscode/commit/4705e584fd7b839bb84ac193d56a2b526bed1388))
+* resolve copybook paths from a zapp.yml at the workspace root ([3769bdf](https://github.com/Landparty/mocky-mock-vscode/commit/3769bdfc7ef2a1b55e44ac35feddcf8921da6a1e))
+* simpler, friendlier first-run experience ([e7d5ddf](https://github.com/Landparty/mocky-mock-vscode/commit/e7d5ddf3f39e7972f88d312db80c8a37117e75d4))
+* **syntax:** highlight SORT/MERGE/RELEASE/RETURN, EXPECT comparisons, TERMINAL ([7c02bf5](https://github.com/Landparty/mocky-mock-vscode/commit/7c02bf585ebf04b17625b623b7dce8a3fb410f8f))
+
+
+### Bug Fixes
+
+* address code-review findings on the earlier bug-fix commit ([77a1be8](https://github.com/Landparty/mocky-mock-vscode/commit/77a1be8b59638c287b295039837d362f48904388))
+* address code-review findings on zapp.yml copybook resolution ([fb983a8](https://github.com/Landparty/mocky-mock-vscode/commit/fb983a8ebedc0f714b0aec761032e8f98353513d))
+* address eight bugs found in a full-extension code review ([92a6581](https://github.com/Landparty/mocky-mock-vscode/commit/92a65819c73974c3c3972608e7b4e5571b32f5c8))
+* address final whole-branch review findings for boundaries removal ([274a786](https://github.com/Landparty/mocky-mock-vscode/commit/274a78655bebad345b2228a63bdf109081bc3140))
+* address repo-audit findings (hygiene, lint, deps, docs) ([e602523](https://github.com/Landparty/mocky-mock-vscode/commit/e6025231985086b80eb63ad807bf39701bbc1602))
+* close four more boundary/reconciliation bugs of the same class ([da8ab0a](https://github.com/Landparty/mocky-mock-vscode/commit/da8ab0a3878b1f77ac832469b1553aabc93a81f0))
+* **environment:** make the darwin CLI-path fallback test hermetic ([3aed7cf](https://github.com/Landparty/mocky-mock-vscode/commit/3aed7cf491567f8db654fb68bddeced07640fbb0))
+* **testing:** surface the run-report signals the JSON path was dropping ([c64e758](https://github.com/Landparty/mocky-mock-vscode/commit/c64e758f4f03e4b45275c93db97994ece621ea0f))
+* three bugs surfaced by adversarial re-review of the last commit ([1cebb36](https://github.com/Landparty/mocky-mock-vscode/commit/1cebb36c8a0b9f36713f58237402334fce6c9307))
+* update references to cobol-parser in workflow and documentation ([7d4f24c](https://github.com/Landparty/mocky-mock-vscode/commit/7d4f24c0d6b473fecab5a72143aae60bc3d45536))
+
 ## [0.11.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.10.0...v0.11.0) (2026-08-14)
 
 
