@@ -1,5 +1,4 @@
 src/**
-media/**
 **/*.test.ts
 .vscode/**
 .mocharc.json
@@ -31,8 +30,7 @@ node_modules/**
 esbuild.js
 PUBLISHING.md
 
-# esbuild bundles the extension into out/extension.js and the webview
-# client into out/media/paragraphTree/main.js (+ styles.css); nothing else
+# esbuild bundles the extension into out/extension.js; nothing else
 # under out/ (per-module tsc output from a `tsc -p ./`-era build, leftover
 # on a contributor's machine or a not-fully-clean CI checkout, plus dev
 # sourcemaps) should ever ship. Negations below name exact files only --
@@ -44,7 +42,3 @@ PUBLISHING.md
 # ever claw them back out.
 out/**
 !out/extension.js
-!out/media/paragraphTree/main.js
-!out/media/paragraphTree/styles.css
-!out/media/programFlow/main.js
-!out/media/programFlow/styles.css

@@ -1,6 +1,6 @@
 // Pure, vscode-independent pieces of the "New Test Suite" command -- kept
-// free of the vscode import (like export/exportRunner.ts and
-// generateData/generateDataRunner.ts) so they're unit-testable under mocha.
+// free of the vscode import (like export/exportRunner.ts) so they're
+// unit-testable under mocha.
 // newTestSuite.ts (vscode-touching command registration) is the only
 // production consumer.
 import * as path from 'path';

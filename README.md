@@ -74,6 +74,20 @@ it does and how to use it.
 - **No silent failures** — anything mockymock can't attribute to a test
   case still surfaces as an error, not a false green.
 
+## COBOL language support and analysis
+
+This extension owns `.cut` test suites. COBOL **language support and static
+analysis** — syntax highlighting, Outline, Go to Definition, the Paragraph
+Tree and Program Flow views, and the analyzers (dead code, I/O sequence,
+MOVE type checks, linkage checks, IMS DL/I, dynamic CALL) — live in the
+companion **COBOL Analyzer** extension, which bundles the `cobol-parser`
+CLI.
+
+The two are complementary and are designed to be installed together. Only
+COBOL Analyzer contributes the COBOL grammar, so there is no conflict.
+mockymock keeps working on its own; you just won't get COBOL highlighting or
+the analysis views without it.
+
 ## Compiler
 
 mockymock compiles and runs your COBOL with [GnuCOBOL](https://gnucobol.sourceforge.io/),

@@ -22,7 +22,7 @@ import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
 import { showNeedsFile } from '../environment/notify';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
-import { isCobolPath } from '../boundaries/viewRefreshPolicy';
+import { isCobolPath } from '../environment/cobolPaths';
 import { buildGenerateArgs, buildStarterCut, parseGeneratedCaseCount, starterCutFacts } from './cutTemplate';
 
 export const NEW_TEST_SUITE_COMMAND = 'mockymock.newTestSuite';

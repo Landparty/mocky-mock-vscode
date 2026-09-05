@@ -156,7 +156,7 @@ export function cutSuitesFromCollectJson(text: string): CutSuite[] | null {
 }
 
 // The three extensions package.json registers for the `cobol` language --
-// keep in sync with viewRefreshPolicy.ts's isCobolPath. Probed in this
+// keep in sync with environment/cobolPaths.ts's isCobolPath. Probed in this
 // order; .cbl stays the default when none exists (error messages then name
 // the conventional pairing).
 const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol'];

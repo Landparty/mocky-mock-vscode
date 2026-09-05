@@ -4,14 +4,9 @@ import { spawnSync } from 'child_process';
 import { buildRunArgs } from '../testing/mockymockRunner';
 import { buildMutateArgs } from '../testing/mutationRunner';
 import { buildExportArgs } from '../export/exportRunner';
-import { buildAnalyzeArgs, CobolAnalyzer } from '../analysis/analysisRunner';
-import { buildGenerateDataArgs } from '../generateData/generateDataRunner';
 import { buildDebugArgs, buildLintArgs } from '../debug/debugArgs';
 import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
 import { parseLintOutput } from '../linting/lintOutput';
-import { parseMoveMismatchOutput } from '../analysis/moveMismatchOutput';
-import { sanitizeNodeId } from '../programFlow/programFlowNodeIndex';
-import type { ProgramFlowReport } from '../paragraphTree/programFlowModel';
 
 // Everything this extension does, it does by spawning the mockymock CLI and
 // parsing what comes back. Every OTHER test in this repo checks that against
@@ -140,32 +135,6 @@ describe('mockymock CLI contract (live)', function () {
       assertFlagsAccepted(['collect'], ['collect', '--cut', CUT, '--json']);
     });
 
-    // Each analyzer is reached through mockymock's `analyze` passthrough to
-    // cobol-parser's own CLI, so --compact/--copybook-path have to exist on
-    // the cobol-parser subcommand, not on mockymock.
-    const analyzers: CobolAnalyzer[] = [
-      'dead-code',
-      'program-flow',
-      'io-sequence',
-      'move-type-check',
-      'linkage-check',
-      'language-env',
-      'ims-dli',
-      'analyze',
-    ];
-    for (const analyzer of analyzers) {
-      it(`buildAnalyzeArgs for ${analyzer}`, () => {
-        const args = buildAnalyzeArgs(analyzer, CBL, ['/copybooks']);
-        assert.deepStrictEqual(args.slice(0, 2), ['analyze', analyzer]);
-        assertFlagsAccepted(['analyze', analyzer], args);
-      });
-    }
-
-    it('buildGenerateDataArgs', () => {
-      const args = buildGenerateDataArgs('/tmp/CUSTOMER.cpy');
-      assert.deepStrictEqual(args.slice(0, 2), ['analyze', 'gen-data']);
-      assertFlagsAccepted(['analyze', 'gen-data'], args);
-    });
 
     // The capability probes in environment/checks.ts gate whole features on
     // a substring of these same --help texts; a probe that silently starts
@@ -175,10 +144,6 @@ describe('mockymock CLI contract (live)', function () {
       assert.ok(helpFor(['debug']).includes('--dap-stdio'), 'supportsDebugCommand would now report false');
       assert.ok(helpFor(['export']).includes('--output'), 'supportsExportCommand would now report false');
       assert.ok(helpFor(['mutate']).includes('--json-report'), 'supportsMutateCommand would now report false');
-      assert.ok(
-        helpFor(['analyze']).includes('COBOL_PARSER_ARGS'),
-        'supportsAnalyzeCommand would now report false'
-      );
     });
   });
 
@@ -218,63 +183,7 @@ describe('mockymock CLI contract (live)', function () {
       );
     });
 
-    it('parseMoveMismatchOutput parses a real `analyze move-type-check`', () => {
-      const result = cli(buildAnalyzeArgs('move-type-check', CBL, []));
-      assert.strictEqual(result.code, 0, result.stderr);
-      const parsed = parseMoveMismatchOutput(result.stdout);
-      assert.ok(Array.isArray(parsed.problems), 'move-type-check JSON no longer parses into problems');
-      assert.strictEqual(
-        typeof parsed.unresolvedCount,
-        'number',
-        "the report's unresolved_count is what tells the user 'no problems' isn't 'fully checked'"
-      );
-    });
 
-    it('the program-flow JSON still carries the fields the tree view reads', () => {
-      const result = cli(buildAnalyzeArgs('program-flow', CBL, []));
-      assert.strictEqual(result.code, 0, result.stderr);
-      const report = JSON.parse(result.stdout) as ProgramFlowReport;
-      assert.ok(Array.isArray(report.nodes) && report.nodes.length > 0, 'expected flow nodes');
-      assert.ok(Array.isArray(report.edges), 'expected an edges array');
-      for (const node of report.nodes) {
-        assert.ok(typeof node.name === 'string' && node.name.length > 0);
-        assert.ok(
-          typeof node.location?.line === 'number',
-          `node ${node.name} has no location.line; the Program Flow view navigates by it`
-        );
-      }
-    });
 
-    // sanitizeNodeId is a hand-port of cobol-parser's _sanitize_id, and the
-    // ONLY thing that turns a clicked SVG node back into a source line. If
-    // the two ever diverge, clicking a node silently stops navigating --
-    // no error, no diagnostic. Checking the ported function against ids the
-    // real generator emitted is the only way to catch that.
-    it('sanitizeNodeId reproduces the ids in a real mermaid diagram', () => {
-      const flow = cli(buildAnalyzeArgs('program-flow', CBL, []));
-      const mermaid = cli(['analyze', 'program-flow', CBL, '--format', 'mermaid']);
-      assert.strictEqual(mermaid.code, 0, mermaid.stderr);
-
-      const report = JSON.parse(flow.stdout) as ProgramFlowReport;
-      // Node declarations look like `    SOME_ID["label"]` / `{"..."}` /
-      // `(["..."])`; an edge line always contains an arrow.
-      const declaredIds = new Set(
-        mermaid.stdout
-          .split('\n')
-          .filter((line) => !line.includes('-->') && !line.trimStart().startsWith('class'))
-          .map((line) => /^\s{4}([A-Za-z_][A-Za-z0-9_]*)[[({]/.exec(line)?.[1])
-          .filter((id): id is string => id !== undefined)
-      );
-      assert.ok(declaredIds.size > 0, `no node ids found in the mermaid output:\n${mermaid.stdout}`);
-
-      for (const node of report.nodes) {
-        assert.ok(
-          declaredIds.has(sanitizeNodeId(node.name)),
-          `sanitizeNodeId("${node.name}") = "${sanitizeNodeId(node.name)}" is not a node id in the ` +
-            `generated diagram -- the port of cobol-parser's _sanitize_id has drifted, and clicking ` +
-            `that node would silently fail to navigate`
-        );
-      }
-    });
   });
 });

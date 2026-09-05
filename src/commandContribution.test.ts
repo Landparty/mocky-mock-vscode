@@ -9,13 +9,10 @@ import * as path from 'path';
 // unregistered-but-declared one is dead weight no menu can reach. Nothing
 // else in this repo checks that the two sides agree.
 //
-// The eight per-analyzer commands are registered from a loop over
-// ANALYZER_OPTIONS in analysis/analyzeCobol.ts rather than as literals, so
-// they are matched against that array's `id` fields instead. That module
-// imports 'vscode' (unresolvable under mocha, which is why this reads the
-// source text rather than importing it) -- the same reason the other
-// manifest contract tests in this repo read package.json rather than
-// importing it.
+// This reads the source text rather than importing it: the modules that
+// register commands import 'vscode', which mocha cannot resolve outside a
+// running Extension Host -- the same reason the other manifest contract
+// tests in this repo read package.json rather than importing it.
 interface Manifest {
   contributes: {
     commands?: Array<{ command: string; title: string; category?: string }>;
@@ -26,10 +23,6 @@ interface Manifest {
 
 const repoRoot = process.cwd();
 const manifest: Manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
-
-function readSource(relativePath: string): string {
-  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
-}
 
 // Every src/**/*.ts file, so a command registered in a module this test
 // doesn't know about is still counted.
@@ -46,25 +39,15 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
-const ANALYZER_COMMAND_PREFIX = 'mockymock.analyzeCobol.';
-
 const declaredCommands = (manifest.contributes.commands ?? []).map((c) => c.command);
 
-const literallyRegistered = new Set<string>();
+const registeredCommands = new Set<string>();
 for (const file of sourceFiles(path.join(repoRoot, 'src'))) {
   const text = fs.readFileSync(file, 'utf8');
   for (const match of text.matchAll(/registerCommand\(\s*'([^']+)'/g)) {
-    literallyRegistered.add(match[1]);
+    registeredCommands.add(match[1]);
   }
 }
-
-// The `id:` fields of ANALYZER_OPTIONS, which the registration loop turns
-// into `mockymock.analyzeCobol.${id}`.
-const analyzeCobolSource = readSource('src/analysis/analyzeCobol.ts');
-const analyzerIds = [...analyzeCobolSource.matchAll(/\{\s*id:\s*'([^']+)'/g)].map((m) => m[1]);
-const analyzerCommands = analyzerIds.map((id) => `${ANALYZER_COMMAND_PREFIX}${id}`);
-
-const registeredCommands = new Set<string>([...literallyRegistered, ...analyzerCommands]);
 
 describe('package.json command contribution', () => {
   it('registers a handler for every declared command', () => {
@@ -86,14 +69,25 @@ describe('package.json command contribution', () => {
     );
   });
 
-  it('found the ANALYZER_OPTIONS ids (guards this test against its own regex rotting)', () => {
-    // If the array is ever reshaped so the regex above stops matching,
-    // analyzerCommands silently empties and the first assertion would then
-    // fail loudly rather than pass vacuously -- but only if something also
-    // pins the expected count, which is what this does.
-    assert.ok(analyzerIds.length >= 8, `expected to find the analyzer ids, found: ${analyzerIds.join(', ')}`);
-    assert.ok(analyzerIds.includes('deadCode'));
-    assert.ok(analyzerIds.includes('dynamicCall'));
+  // Guards the two assertions above against passing vacuously if the regex
+  // ever stops matching (e.g. a refactor to double-quoted ids).
+  it('found the registrations at all', () => {
+    assert.ok(registeredCommands.size > 0, 'no registerCommand() calls were found in src/');
+    assert.ok(declaredCommands.length > 0, 'no commands are declared in package.json');
+  });
+
+  // The COBOL analysis commands moved to the cobol-analyzer extension. If one
+  // reappears here, the two extensions are contributing the same command id
+  // and whichever loads last silently wins.
+  it('no longer declares any command from the migrated COBOL analysis surface', () => {
+    const migrated = declaredCommands.filter((c) =>
+      /^mockymock\.(analyzeCobol|programFlow|paragraphTree|generateData|focusStatements)/.test(c)
+    );
+    assert.deepStrictEqual(
+      migrated,
+      [],
+      `these belong to the cobol-analyzer extension now: ${migrated.join(', ')}`
+    );
   });
 
   it('points every menu entry at a declared command', () => {
@@ -115,16 +109,5 @@ describe('package.json command contribution', () => {
         }
       }
     }
-  });
-
-  it('lists every analyzer in the Analyze COBOL submenu', () => {
-    const submenuEntries = (manifest.contributes.menus?.['mockymock.analyzeCobol.submenu'] ?? [])
-      .map((e) => e.command)
-      .filter((c): c is string => c !== undefined);
-    assert.deepStrictEqual(
-      [...submenuEntries].sort(),
-      [...analyzerCommands].sort(),
-      'the Analyze COBOL submenu and ANALYZER_OPTIONS have drifted apart'
-    );
   });
 });

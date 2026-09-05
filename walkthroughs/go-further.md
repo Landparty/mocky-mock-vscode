@@ -8,13 +8,14 @@ Choose **Mutation Test** from the same dropdown. mockymock re-runs your suite ag
 
 ## Understanding a program
 
-Right-click any COBOL file for:
+Right-click any COBOL file for **New Test Suite for This Program**.
 
-- **New Test Suite for This Program**
-- **mockymock: Analyze COBOL** -- dead code, I/O sequence, MOVE type checks, linkage checks, and more
-- **Show Program Flow** -- a diagram of PERFORM / GO TO / CALL relationships, with a **Paragraph Tree** view alongside it in the Explorer
-
-The **Outline** panel and breadcrumbs understand divisions, sections, paragraphs and data items, and **Go to Definition** works on paragraph names.
+For reading the program itself -- COBOL syntax highlighting, an Outline of
+divisions, sections and paragraphs, Go to Definition, a Paragraph Tree, a
+Program Flow diagram, and the static analyzers (dead code, I/O sequence,
+MOVE type checks, linkage checks and more) -- install the companion
+**COBOL Analyzer** extension. The two work well side by side: this one owns
+`.cut` test suites, that one owns COBOL language support and analysis.
 
 ## Taking tests to the mainframe
 

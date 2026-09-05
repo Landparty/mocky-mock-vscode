@@ -14,8 +14,6 @@ import {
   supportsTraceFlag,
   supportsDebugCommand,
   supportsExportCommand,
-  supportsAnalyzeCommand,
-  supportsGenerateDataCommand,
   supportsMutateCommand,
   supportsGenerateCommand,
   describeTooOldCli,
@@ -170,69 +168,7 @@ describe('supportsExportCommand', () => {
   });
 });
 
-describe('supportsAnalyzeCommand', () => {
-  it('returns true when analyze --help lists the COBOL_PARSER_ARGS passthrough', async () => {
-    const ok = await supportsAnalyzeCommand(
-      fakeRunner({
-        code: 0,
-        stdout: 'usage: mockymock analyze [-h] ...\n\npositional arguments:\n  COBOL_PARSER_ARGS  ...\n',
-        stderr: '',
-      }),
-      'mockymock'
-    );
-    assert.strictEqual(ok, true);
-  });
 
-  it('returns false for a CLI predating the analyze subcommand', async () => {
-    const ok = await supportsAnalyzeCommand(
-      fakeRunner({ code: 2, stdout: '', stderr: "argument command: invalid choice: 'analyze'" }),
-      'mockymock'
-    );
-    assert.strictEqual(ok, false);
-  });
-
-  it('returns false when the command cannot be run at all', async () => {
-    const ok = await supportsAnalyzeCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
-    assert.strictEqual(ok, false);
-  });
-});
-
-describe('supportsGenerateDataCommand', () => {
-  it('returns true when analyze gen-data --help exits 0', async () => {
-    const ok = await supportsGenerateDataCommand(
-      fakeRunner({
-        code: 0,
-        stdout: 'usage: cobol-parser gen-data [-h] [--rows N] [--seed N] file\n',
-        stderr: '',
-      }),
-      'mockymock'
-    );
-    assert.strictEqual(ok, true);
-  });
-
-  it('returns false for a CLI whose pinned cobolparser predates gen-data', async () => {
-    const ok = await supportsGenerateDataCommand(
-      fakeRunner({ code: 2, stdout: '', stderr: "cobol-parser: error: argument command: invalid choice: 'gen-data'" }),
-      'mockymock'
-    );
-    assert.strictEqual(ok, false);
-  });
-
-  it('probes the exact analyze gen-data --help arguments', async () => {
-    let capturedArgs: string[] | undefined;
-    const run: CommandRunner = async (_cmd, args) => {
-      capturedArgs = args;
-      return { code: 0, stdout: '', stderr: '' };
-    };
-    await supportsGenerateDataCommand(run, 'mockymock');
-    assert.deepStrictEqual(capturedArgs, ['analyze', 'gen-data', '--help']);
-  });
-
-  it('returns false when the command cannot be run at all', async () => {
-    const ok = await supportsGenerateDataCommand(fakeRunner({ code: -1, stdout: '', stderr: 'command not found' }), 'mockymock');
-    assert.strictEqual(ok, false);
-  });
-});
 
 describe('supportsMutateCommand', () => {
   it('returns true when mutate --help lists --json-report', async () => {
