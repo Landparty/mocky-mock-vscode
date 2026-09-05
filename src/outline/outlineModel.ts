@@ -1,7 +1,7 @@
 // src/outline/outlineModel.ts
 //
-// Pure text scan -> VS Code Outline tree, no `vscode` import (repo
-// convention -- see paragraphTree/programFlowModel.ts). Targets IBM
+// Pure text scan -> outline tree, no `vscode` import (repo convention --
+// pure logic lives outside vscode-importing files). Targets IBM
 // Enterprise COBOL FIXED FORMAT ONLY: the `>>SOURCE FORMAT FREE` directive
 // and free-format source generally are out of scope, behavior on a
 // free-format file is undefined/best-effort. A whole-line floating `*>`
@@ -36,6 +36,11 @@
 // original casing, since normalizing a user's own identifier would be wrong.
 // This asymmetry is intentional, not an inconsistency to fix.
 
+// NOTE: the DocumentSymbolProvider that turned this into VS Code's Outline
+// view moved to the cobol-analyzer extension with the rest of the COBOL
+// language surface. This model stays because newTestSuite/cutTemplate.ts
+// scaffolds a .cut from a program's paragraph structure -- exactly what
+// this produces -- so it is a test-authoring dependency here, not dead code.
 export type OutlineNodeKind = 'division' | 'programId' | 'section' | 'dataItem' | 'paragraph';
 
 export interface OutlineNode {

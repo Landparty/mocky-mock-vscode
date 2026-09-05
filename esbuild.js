@@ -4,6 +4,10 @@
 // close to readable source -- see PUBLISHING.md. Dev builds keep a
 // sourcemap for the "Run Extension" launch config's breakpoint mapping
 // (.vscode/launch.json's outFiles).
+//
+// There are no webview bundles here any more: the Paragraph Tree and
+// Program Flow views (and their media/ clients) moved to the cobol-analyzer
+// extension, which builds them with its own copy of this script.
 const esbuild = require('esbuild');
 
 const production = process.argv.includes('--production');
@@ -22,41 +26,11 @@ async function main() {
     sourcesContent: false,
     logLevel: 'info',
   });
-  // Runs inside the webview's isolated browser context -- a separate
-  // bundle from out/extension.js (platform: 'browser', no 'vscode'
-  // external, since the webview never imports it).
-  const webviewCtx = await esbuild.context({
-    entryPoints: ['media/paragraphTree/main.ts'],
-    bundle: true,
-    format: 'iife',
-    platform: 'browser',
-    outfile: 'out/media/paragraphTree/main.js',
-    minify: production,
-    sourcemap: !production,
-    sourcesContent: false,
-    logLevel: 'info',
-  });
-  const programFlowWebviewCtx = await esbuild.context({
-    entryPoints: ['media/programFlow/main.ts'],
-    bundle: true,
-    format: 'iife',
-    platform: 'browser',
-    outfile: 'out/media/programFlow/main.js',
-    minify: production,
-    sourcemap: !production,
-    sourcesContent: false,
-    logLevel: 'info',
-  });
-  const fs = require('fs');
-  fs.mkdirSync('out/media/paragraphTree', { recursive: true });
-  fs.copyFileSync('media/paragraphTree/styles.css', 'out/media/paragraphTree/styles.css');
-  fs.mkdirSync('out/media/programFlow', { recursive: true });
-  fs.copyFileSync('media/programFlow/styles.css', 'out/media/programFlow/styles.css');
   if (watch) {
-    await Promise.all([extensionCtx.watch(), webviewCtx.watch(), programFlowWebviewCtx.watch()]);
+    await extensionCtx.watch();
   } else {
-    await Promise.all([extensionCtx.rebuild(), webviewCtx.rebuild(), programFlowWebviewCtx.rebuild()]);
-    await Promise.all([extensionCtx.dispose(), webviewCtx.dispose(), programFlowWebviewCtx.dispose()]);
+    await extensionCtx.rebuild();
+    await extensionCtx.dispose();
   }
 }
 

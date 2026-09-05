@@ -131,13 +131,16 @@ describe('package.json Test Explorer welcome contribution', () => {
 describe('package.json Command Palette gating', () => {
   const palette = manifest.contributes.menus?.commandPalette ?? [];
 
-  it('hides every per-analyzer command from the palette (they live in the Analyze COBOL submenu)', () => {
-    const analyzerCommands = [...declaredCommands].filter((c) => c.startsWith('mockymock.analyzeCobol.'));
-    assert.ok(analyzerCommands.length >= 8);
-    for (const command of analyzerCommands) {
-      const entry = palette.find((e) => e.command === command);
-      assert.ok(entry && entry.when === 'false', `${command} should be hidden from the Command Palette`);
-    }
+  // The per-analyzer commands this used to gate moved to the cobol-analyzer
+  // extension along with the rest of the COBOL analysis surface, so there is
+  // nothing left here to hide from the palette. What still matters is that
+  // none of them came back: a command id declared by both extensions is
+  // resolved by load order, silently.
+  it('no longer declares the migrated COBOL analysis commands', () => {
+    const migrated = [...declaredCommands].filter((c) =>
+      /^mockymock\.(analyzeCobol|programFlow|paragraphTree|generateData|focusStatements)/.test(c)
+    );
+    assert.deepStrictEqual(migrated, [], `these belong to cobol-analyzer now: ${migrated.join(', ')}`);
   });
 
   it('keeps the entry points a new user needs reachable from any editor', () => {

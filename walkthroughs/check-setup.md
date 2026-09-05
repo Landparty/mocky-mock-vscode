@@ -15,4 +15,4 @@ The result shows in the status bar at the bottom of the window:
 You can re-run this at any time from the Command Palette:
 **mockymock: Check Setup (CLI and Docker)**.
 
-> **Tip:** Docker is only needed to *run* tests. Creating a suite, linting it, and the COBOL analyzers all work without it.
+> **Tip:** Docker is only needed to *run* tests. Creating a suite and linting it work without it.

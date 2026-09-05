@@ -21,7 +21,6 @@
   ],
   "activationEvents": [
     "workspaceContains:**/*.cut",
-    "onLanguage:cobol",
     "onStartupFinished"
   ],
   "main": "./out/extension.js",
@@ -48,105 +47,6 @@
         "command": "mockymock.exportMainframe",
         "title": "Export Mainframe-Ready COBOL",
         "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol",
-        "title": "Analyze COBOL File...",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.deadCode",
-        "title": "Analyze: Dead Code",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.programFlow",
-        "title": "Analyze: Program Flow",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.ioSequence",
-        "title": "Analyze: I/O Sequence",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.moveTypeCheck",
-        "title": "Analyze: MOVE Type Check",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.linkageCheck",
-        "title": "Analyze: Linkage Check",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.languageEnv",
-        "title": "Analyze: Language Environment",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.imsDli",
-        "title": "Analyze: IMS DLI",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.analyzeCobol.dynamicCall",
-        "title": "Analyze: Dynamic Call Analysis",
-        "category": "mockymock"
-      },
-      {
-        "command": "mockymock.programFlow.show",
-        "title": "Show Program Flow",
-        "category": "mockymock",
-        "icon": "$(type-hierarchy-sub)"
-      },
-      {
-        "command": "mockymock.generateData",
-        "title": "Generate Data from Copybook",
-        "category": "mockymock",
-        "icon": "$(table)"
-      },
-      {
-        "command": "mockymock.paragraphTree.refresh",
-        "title": "Refresh Paragraph Tree",
-        "category": "mockymock",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "mockymock.programFlow.refresh",
-        "title": "Refresh Program Flow",
-        "category": "mockymock",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "mockymock.focusStatements.toggle",
-        "title": "Toggle Focus on SQL/CICS/MQ/CALL Statements",
-        "category": "mockymock",
-        "icon": "$(fold)"
-      }
-    ],
-    "views": {
-      "explorer": [
-        {
-          "id": "mockymock.paragraphTree",
-          "name": "Paragraph Tree",
-          "type": "webview",
-          "icon": "$(list-tree)",
-          "when": "mockymock.cobolOpen"
-        },
-        {
-          "id": "mockymock.programFlow",
-          "name": "Program Flow",
-          "type": "webview",
-          "icon": "$(type-hierarchy-sub)",
-          "when": "mockymock.cobolOpen"
-        }
-      ]
-    },
-    "submenus": [
-      {
-        "id": "mockymock.analyzeCobol.submenu",
-        "label": "mockymock: Analyze COBOL"
       }
     ],
     "menus": {
@@ -155,16 +55,6 @@
           "command": "mockymock.newTestSuite",
           "when": "resourceLangId == cobol",
           "group": "navigation@1"
-        },
-        {
-          "command": "mockymock.generateData",
-          "when": "mockymock.activeEditorIsCopybook",
-          "group": "navigation"
-        },
-        {
-          "command": "mockymock.focusStatements.toggle",
-          "when": "resourceLangId == cobol",
-          "group": "navigation"
         }
       ],
       "editor/context": [
@@ -172,124 +62,12 @@
           "command": "mockymock.newTestSuite",
           "when": "resourceLangId == cobol",
           "group": "mockymock@0"
-        },
-        {
-          "submenu": "mockymock.analyzeCobol.submenu",
-          "when": "resourceLangId == cobol",
-          "group": "mockymock@1"
-        },
-        {
-          "command": "mockymock.programFlow.show",
-          "when": "resourceLangId == cobol",
-          "group": "mockymock@2"
-        }
-      ],
-      "mockymock.analyzeCobol.submenu": [
-        {
-          "command": "mockymock.analyzeCobol.deadCode",
-          "group": "1_analyzers@1"
-        },
-        {
-          "command": "mockymock.analyzeCobol.programFlow",
-          "group": "1_analyzers@2"
-        },
-        {
-          "command": "mockymock.analyzeCobol.ioSequence",
-          "group": "1_analyzers@3"
-        },
-        {
-          "command": "mockymock.analyzeCobol.moveTypeCheck",
-          "group": "1_analyzers@4"
-        },
-        {
-          "command": "mockymock.analyzeCobol.linkageCheck",
-          "group": "1_analyzers@5"
-        },
-        {
-          "command": "mockymock.analyzeCobol.languageEnv",
-          "group": "1_analyzers@6"
-        },
-        {
-          "command": "mockymock.analyzeCobol.imsDli",
-          "group": "1_analyzers@7"
-        },
-        {
-          "command": "mockymock.analyzeCobol.dynamicCall",
-          "group": "1_analyzers@8"
-        }
-      ],
-      "view/title": [
-        {
-          "command": "mockymock.paragraphTree.refresh",
-          "when": "view == mockymock.paragraphTree",
-          "group": "navigation@1"
-        },
-        {
-          "command": "mockymock.programFlow.refresh",
-          "when": "view == mockymock.programFlow",
-          "group": "navigation@1"
         }
       ],
       "commandPalette": [
         {
-          "command": "mockymock.analyzeCobol.deadCode",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.programFlow",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.ioSequence",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.moveTypeCheck",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.linkageCheck",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.languageEnv",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.imsDli",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.analyzeCobol.dynamicCall",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.paragraphTree.refresh",
-          "when": "false"
-        },
-        {
-          "command": "mockymock.programFlow.refresh",
-          "when": "false"
-        },
-        {
           "command": "mockymock.newTestSuite",
           "when": "resourceLangId == cobol || resourceLangId == cut"
-        },
-        {
-          "command": "mockymock.analyzeCobol",
-          "when": "resourceLangId == cobol"
-        },
-        {
-          "command": "mockymock.programFlow.show",
-          "when": "resourceLangId == cobol"
-        },
-        {
-          "command": "mockymock.focusStatements.toggle",
-          "when": "resourceLangId == cobol"
-        },
-        {
-          "command": "mockymock.generateData",
-          "when": "mockymock.activeEditorIsCopybook"
         },
         {
           "command": "mockymock.exportMainframe",
@@ -370,17 +148,6 @@
     ],
     "languages": [
       {
-        "id": "cut",
-        "aliases": [
-          "mockymock .cut",
-          "cut"
-        ],
-        "extensions": [
-          ".cut"
-        ],
-        "configuration": "./language/cut-language-configuration.json"
-      },
-      {
         "id": "cobol",
         "aliases": [
           "COBOL",
@@ -390,8 +157,18 @@
           ".cbl",
           ".cob",
           ".cobol"
+        ]
+      },
+      {
+        "id": "cut",
+        "aliases": [
+          "mockymock .cut",
+          "cut"
         ],
-        "configuration": "./language/cobol-language-configuration.json"
+        "extensions": [
+          ".cut"
+        ],
+        "configuration": "./language/cut-language-configuration.json"
       }
     ],
     "breakpoints": [
@@ -404,11 +181,6 @@
         "language": "cut",
         "scopeName": "source.cut",
         "path": "./syntaxes/cut.tmLanguage.json"
-      },
-      {
-        "language": "cobol",
-        "scopeName": "source.cobol",
-        "path": "./syntaxes/cobol.tmLanguage.json"
       }
     ],
     "snippets": [
@@ -439,12 +211,6 @@
           "default": true,
           "scope": "resource",
           "description": "Run 'mockymock lint' (static checks only, no Docker) on open/save of a .cut file and show the problems as diagnostics."
-        },
-        "mockymock.moveCheckOnSave": {
-          "type": "boolean",
-          "default": true,
-          "scope": "resource",
-          "description": "Run 'mockymock analyze move-type-check' (static checks only, no Docker) when a .cbl/.cob/.cobol file becomes the active editor or is saved, and show MOVE statement data-category mismatches as diagnostics."
         },
         "mockymock.maxParallelRuns": {
           "type": "number",
@@ -528,7 +294,7 @@
     ]
   },
   "scripts": {
-    "check-types": "tsc --noEmit -p ./ && tsc --noEmit -p ./media/paragraphTree && tsc --noEmit -p ./media/programFlow",
+    "check-types": "tsc --noEmit -p ./",
     "compile": "npm run check-types && node esbuild.js",
     "watch": "tsc -watch -p ./",
     "lint": "eslint .",
@@ -555,10 +321,8 @@
     "typescript-eslint": "^8.67.0"
   },
   "dependencies": {
-    "dompurify": "^3.3.3",
     "fast-xml-parser": "^5.11.0",
     "glob": "^13.0.6",
-    "mermaid": "^11.16.1",
     "yaml": "^2.9.0"
   },
   "overrides": {

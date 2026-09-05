@@ -6,7 +6,7 @@ import { describeUnsupportedFeature, supportsExportCommand } from '../environmen
 import { showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
-import { isCobolPath } from '../boundaries/viewRefreshPolicy';
+import { isCobolPath } from '../environment/cobolPaths';
 import { runExport } from './exportRunner';
 
 function defaultOutputPath(cblPath: string): string {

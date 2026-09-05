@@ -89,35 +89,7 @@ export async function supportsExportCommand(run: CommandRunner, executablePath: 
   });
 }
 
-// Same "check first, degrade gracefully" pattern as supportsDebugCommand/
-// supportsExportCommand, but for the `analyze` subcommand: an installed
-// CLI that predates `mockymock analyze` exits 2 (argparse's "invalid
-// choice" for an unknown subcommand) on `analyze --help`. Checking for
-// `COBOL_PARSER_ARGS` specifically -- the explicit metavar on the
-// passthrough's REMAINDER argument -- rather than just a zero exit code
-// also catches the unlikely case of an `analyze` subcommand existing
-// without the expected passthrough argument.
-export async function supportsAnalyzeCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  return probeCapability(run, executablePath, 'analyze', async () => {
-    const result = await run(executablePath, ['analyze', '--help']);
-    return result.code === 0 && result.stdout.includes('COBOL_PARSER_ARGS');
-  });
-}
 
-// Same "check first, degrade gracefully" pattern as supportsAnalyzeCommand,
-// but for the `gen-data` cobol-parser subcommand specifically -- reached via
-// mockymock's `analyze` passthrough. supportsAnalyzeCommand alone would pass
-// on any mockymock build whose *pinned cobolparser* predates `gen-data`,
-// which then fails at runtime with argparse's "invalid choice: 'gen-data'"
-// instead of a clean upgrade message. `analyze gen-data --help` exits 0
-// (argparse short-circuits --help before validating other args) exactly
-// when gen-data exists in that build's cobolparser.
-export async function supportsGenerateDataCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
-  return probeCapability(run, executablePath, 'gen-data', async () => {
-    const result = await run(executablePath, ['analyze', 'gen-data', '--help']);
-    return result.code === 0;
-  });
-}
 
 // Same "check first, degrade gracefully" pattern as supportsDebugCommand/
 // supportsExportCommand, but for the `mutate` subcommand: an installed CLI
