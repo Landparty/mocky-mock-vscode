@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Write, run, debug and cover COBOL unit tests from VS Code -- no mainframe needed.",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "publisher": "lanparty",
   "private": true,
   "license": "GPL-3.0-only",
