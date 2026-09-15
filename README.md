@@ -62,7 +62,9 @@ it does and how to use it.
   original `.cbl`, with a mutation score.
 - **Continuous run** — re-run a test automatically on file change.
 - **Cancellation** that actually kills the in-flight run.
-- **Live linting** on open/save, zero Docker needed.
+- **Live `.cut` linting** on open/save, zero Docker needed — the suite
+  checked against the program it tests. (COBOL source itself is linted by
+  the companion COBOL Analyzer extension; the two never overlap.)
 - **`.cut` language support** — syntax highlighting, folding, snippets.
 - **Export Mainframe-Ready COBOL** — write the instrumented build to a
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
@@ -74,19 +76,80 @@ it does and how to use it.
 - **No silent failures** — anything mockymock can't attribute to a test
   case still surfaces as an error, not a false green.
 
-## COBOL language support and analysis
+## Companion extension: COBOL Analyzer
 
-This extension owns `.cut` test suites. COBOL **language support and static
-analysis** — syntax highlighting, Outline, Go to Definition, the Paragraph
-Tree and Program Flow views, and the analyzers (dead code, I/O sequence,
-MOVE type checks, linkage checks, IMS DL/I, dynamic CALL) — live in the
-companion **COBOL Analyzer** extension, which bundles the `cobol-parser`
-CLI.
+mockymock and [**COBOL Analyzer**](https://github.com/Landparty/cobol-analyzer)
+are two halves of one COBOL workflow, deliberately split so neither ships
+the other's job. mockymock owns everything that **runs your program**;
+COBOL Analyzer owns everything that **reads it without running it**. Install
+both and they interlock; install either alone and it still works, minus the
+other half.
 
-The two are complementary and are designed to be installed together. Only
-COBOL Analyzer contributes the COBOL grammar, so there is no conflict.
-mockymock keeps working on its own; you just won't get COBOL highlighting or
-the analysis views without it.
+| You want to | Extension | How |
+|---|---|---|
+| Write, run, debug a COBOL unit test | **mockymock** | `.cut` suites, Test Explorer, interactive debugger |
+| Coverage, mutation score, execution trace | **mockymock** | run profiles in the Test Explorer |
+| Mainframe-ready instrumented build | **mockymock** | **Export Mainframe-Ready COBOL** |
+| COBOL syntax highlighting, Outline, Go to Definition | **COBOL Analyzer** | the `cobol` grammar and language configuration |
+| Completion, rename, format, fixed-format column guardrails | **COBOL Analyzer** | in-process editing providers |
+| Dead code, unused variables, MOVE type checks, I/O sequence, LINKAGE, recursion, complexity, DCLGEN | **COBOL Analyzer** | `cobol-parser lint` on save, and **Analyze COBOL File…** |
+| Program Flow diagram, workspace debt table, cross-file clone detection | **COBOL Analyzer** | `cobol-parser` analyzers and `scan` |
+| Expand `COPY` members, decode a record image, generate CSV from a copybook | **COBOL Analyzer** | **Show Expanded Source**, **Record Viewer**, **Generate Data from Copybook** |
+| Cross-file navigation, JCL → COBOL dataset answers, Call Hierarchy | **COBOL Analyzer** | its workspace index |
+
+A natural loop across the two: read the program with COBOL Analyzer's
+Outline and **Analyze COBOL File…**, then click the beaker for **New Test
+Suite for This Program** here, then run and debug it in the Test Explorer,
+then check the coverage gutter against the analyzer's dead-code findings.
+
+### What each extension deliberately does not do
+
+These are the seams — the places where a feature looks like it should be in
+both and is in exactly one, on purpose:
+
+- **The `cobol` grammar and language configuration are COBOL Analyzer's
+  alone.** VS Code resolves a grammar by `scopeName` and a language
+  configuration by language id, and two extensions contributing the same one
+  is a conflict with no priority rule. mockymock ships neither.
+- **mockymock still contributes a *minimal* `cobol` language entry** — the
+  id and the `.cbl`/`.cob`/`.cobol` extensions, no grammar, no
+  configuration. Language ids *merge* across extensions where grammars do
+  not, and VS Code only offers the breakpoint gutter on a language some
+  extension named in `contributes.breakpoints`. Dropping the entry would
+  silently disable COBOL breakpoints for anyone running mockymock without
+  COBOL Analyzer. It is not a second COBOL language; it is the debugger's
+  hook. `src/companionExtension.test.ts` pins both halves of that.
+- **The MOVE type check lives only in COBOL Analyzer now.** It used to be a
+  `mockymock.moveCheckOnSave` diagnostic here; it moved with the rest of the
+  analysis surface and is now the `move-type-check` rule inside
+  `cobol-parser lint` (`cobolAnalyzer.moveCheckOnSave`,
+  `cobolAnalyzer.lintRules`). Two extensions publishing the same finding
+  would double every squiggle, so this side no longer runs it at all.
+- **Two lints, two file types, no overlap.** `mockymock lint` checks `.cut`
+  suites against their paired program. COBOL Analyzer's lint checks the
+  COBOL (and JCL) itself. Neither publishes diagnostics on the other's
+  files.
+- **Two CLIs, two "Check Setup" commands.** mockymock drives the bundled
+  `mockymock` binary (and Docker, for GnuCOBOL); COBOL Analyzer drives a
+  bundled `cobol-parser`. They are different programs, so
+  `mockymock.executablePath` and `cobolAnalyzer.executablePath` are never
+  inherited from one another — see [Settings](#settings).
+- **Test *data* generation is split by what it is for.** COBOL Analyzer's
+  **Generate Data from Copybook** produces CSV rows from a record layout for
+  you to look at. Seeded fixture generation *for a test suite* is
+  mockymock's (`mockymock generate --with-data`, and the `mockymock` Claude
+  Code skill) — same underlying `cobol-parser` generators, different
+  deliverable.
+
+### Sharing one copybook setup
+
+Both extensions pass `--copybook-path` to their own CLI, so they need the
+same answer to "where do the copybooks live". They read it from each other:
+`mockymock.copybookPaths` falls back to `cobolAnalyzer.copybookPaths` when
+it is unset, and COBOL Analyzer does the mirror image. Set either one and
+both extensions use it; set both and each uses its own. A
+`zapp.yml`/`zapp.yaml` at the workspace root (the file IBM Z Open Editor's
+DBB tooling uses) is honored by both on top of that.
 
 ## Compiler
 
@@ -140,12 +203,15 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 | Setting | Default | Purpose |
 |---|---|---|
 | `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
-| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in after this setting's own entries, which win on a duplicate path |
+| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). When left unset it falls back to `cobolAnalyzer.copybookPaths`, so one copybook setup serves both extensions — see [Sharing one copybook setup](#sharing-one-copybook-setup). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in after this setting's own entries, which win on a duplicate path |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
-| `mockymock.moveCheckOnSave` | `true` | Flag `MOVE` statements with mismatched data categories as diagnostics when a COBOL file is opened or saved (static, no Docker) |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |
 
 All of the defaults work out of the box; most users never touch these.
+
+`mockymock.executablePath` is never inherited from `cobolAnalyzer.executablePath`
+and vice versa: they point at two different programs. `copybookPaths` is the
+one setting the two extensions deliberately share.
 
 ## Requirements
 
