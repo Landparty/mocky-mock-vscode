@@ -65,6 +65,10 @@ it does and how to use it.
 - **Live `.cut` linting** on open/save, zero Docker needed — the suite
   checked against the program it tests. (COBOL source itself is linted by
   the companion COBOL Analyzer extension; the two never overlap.)
+- **`.cut` editor intelligence** — completion for `MOCK` categories and the
+  program's own real boundary keys, hover text on tally counters, `CAPTURE`
+  targets and refusal codes, and a **Quick Fix** that inserts a missing
+  `MOCK` block for you.
 - **`.cut` language support** — syntax highlighting, folding, snippets.
 - **Export Mainframe-Ready COBOL** — write the instrumented build to a
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL

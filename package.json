@@ -47,6 +47,11 @@
         "command": "mockymock.exportMainframe",
         "title": "Export Mainframe-Ready COBOL",
         "category": "mockymock"
+      },
+      {
+        "command": "mockymock.fillMissingMocks",
+        "title": "Fill Missing Mocks (mockymock generate --fill)",
+        "category": "mockymock"
       }
     ],
     "menus": {
@@ -72,6 +77,10 @@
         {
           "command": "mockymock.exportMainframe",
           "when": "resourceLangId == cobol || resourceLangId == cut"
+        },
+        {
+          "command": "mockymock.fillMissingMocks",
+          "when": "resourceLangId == cut"
         }
       ]
     },

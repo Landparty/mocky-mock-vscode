@@ -10,6 +10,9 @@ import { healBundledBinaryOnDarwin } from './environment/macSelfHeal';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from './discovery/cutDiscovery';
 import { activateNewTestSuiteCommand, NEW_TEST_SUITE_COMMAND } from './newTestSuite/newTestSuite';
 import { WALKTHROUGH_ID } from './environment/notify';
+import { activateCutCompletion } from './completion/cutCompletionProvider';
+import { activateCutHover } from './hover/cutHoverProvider';
+import { activateLintCodeActions } from './linting/lintCodeActionProvider';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
@@ -34,7 +37,10 @@ export function activate(context: vscode.ExtensionContext) {
   void healBundledBinaryOnDarwin(context.extensionPath);
   const environmentManager = new EnvironmentManager(context);
   activateTestController(context, environmentManager);
-  activateLintDiagnostics(context);
+  const relint = activateLintDiagnostics(context);
+  activateLintCodeActions(context, relint);
+  activateCutCompletion(context);
+  activateCutHover(context);
   activateExportMainframeCommand(context);
   activateNewTestSuiteCommand(context);
 
