@@ -72,7 +72,21 @@ export function activateLintCodeActions(
     vscode.languages.registerCodeActionsProvider('cut', provider, {
       providedCodeActionKinds: [vscode.CodeActionKind.QuickFix],
     }),
-    vscode.commands.registerCommand('mockymock.fillMissingMocks', async (uri: vscode.Uri) => {
+    vscode.commands.registerCommand('mockymock.fillMissingMocks', async (uri?: vscode.Uri) => {
+      const target = uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!target || target.scheme !== 'file') {
+        void vscode.window.showErrorMessage('mockymock: open a .cut file to fill its missing mocks.');
+        return;
+      }
+      uri = target;
+      // `generate --fill` rewrites the file on disk. An unsaved buffer
+      // would not be reloaded by VS Code, the fill would run against the
+      // stale on-disk text, and the user's next save would overwrite it.
+      const open = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === target.fsPath);
+      if (open?.isDirty && !(await open.save())) {
+        void vscode.window.showErrorMessage('mockymock: save the .cut file before filling its missing mocks.');
+        return;
+      }
       const cutPath = uri.fsPath;
       const cblPath = resolveCblPath(cutPath);
       const { executablePath, copybookPaths } = resolveInvocationConfig(context, uri);

@@ -36,12 +36,23 @@ export const MOCK_CATEGORIES = [
   'MQ',
 ] as const;
 
+// Categories whose key the DSL requires in double quotes (mocky-mock's
+// dsl/parser.py `_QUOTED_CATS`). CALL is in both sets there: the quoted
+// form is a static CALL, the bare form is a dynamic CALL (DYNCALL).
+export const QUOTED_CATEGORIES: ReadonlySet<string> = new Set(['CALL', 'MQ', 'SQL', 'CICS', 'DLI']);
+
 export type CompletionContext =
   | { kind: 'category' }
-  | { kind: 'key'; category: string };
+  // `partial` is the token already typed after the category (possibly
+  // empty, possibly starting with a `"`): the span a completion item must
+  // replace, since VS Code's default word boundary stops at `-` and `"`.
+  | { kind: 'key'; category: string; partial: string };
 
-const AFTER_MOCK_RE = /^\s*MOCK\s*$/i;
-const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+\S*$/i;
+// The category position needs the whitespace after MOCK: at `MOCK|` the
+// editor's current word is MOCK itself, so an accepted category would
+// replace it and the list is filtered against a word no category matches.
+const AFTER_MOCK_RE = /^\s*MOCK\s+$/i;
+const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+(\S*)$/i;
 
 // `lineTextBeforeCursor` is everything on the current line up to (not
 // including) the cursor -- exactly what VS Code's CompletionItemProvider
@@ -52,7 +63,7 @@ export function detectCompletionContext(lineTextBeforeCursor: string): Completio
   }
   const match = AFTER_MOCK_CATEGORY_RE.exec(lineTextBeforeCursor);
   if (match) {
-    return { kind: 'key', category: match[1].toUpperCase() };
+    return { kind: 'key', category: match[1].toUpperCase(), partial: match[2] };
   }
   return null;
 }
@@ -61,31 +72,75 @@ export interface BoundaryInfo {
   category: string;
   key: string | null;
   keys: string[];
+  // The exact `MOCK <category> <key>` header mocky-mock's own scaffold
+  // would write for this site (quoted where the DSL requires it, a text
+  // prefix for SQL/CICS/DLI), or null when the scaffold skips the site.
+  // Optional: an older CLI does not emit it.
+  directive?: string | null;
   label: string;
   paragraph: string;
   line: number;
   matchText: string | null;
 }
 
-// Filters `collect --boundaries`' own JSON array to the keys relevant for
-// `category` (case-insensitive on the category, since a .cut author may
-// have typed it in either case before the key is even complete). `MQ` is
-// not a real mock_surface category (an MQ call is CALL with `is_mq=true`
-// under the hood, per mocky-mock's dsl/model.py) -- boundaries reports it
-// as CALL, so `MQ` and `CALL` share the same key pool here.
-export function filterBoundaryKeysForCategory(
-  boundaries: BoundaryInfo[],
-  category: string
-): BoundaryInfo[] {
+export interface KeyCandidate {
+  // What to put after `MOCK <category> ` -- already quoted when the DSL
+  // wants quotes, so accepting the item yields a line the parser accepts.
+  insertText: string;
+  boundary: BoundaryInfo;
+}
+
+function quoted(key: string): string {
+  return `"${key}"`;
+}
+
+// Everything the user may write after `MOCK <category> ` for this
+// program, from `collect --boundaries`' JSON. Case-insensitive on the
+// category (a .cut author may have typed it in either case before the
+// key is even complete).
+//
+// - `MQ` is not a real mock_surface category (an MQ call is CALL with
+//   `is_mq=true` under the hood), so `MQ` and `CALL` share the CALL pool.
+// - `MOCK CALL <bare-word>` is a *dynamic* CALL, so CALL also offers every
+//   DYNCALL site's identifier, unquoted.
+// - A multi-key site (`OPEN INV-FILE RPT-FILE`) is one site with several
+//   valid keys; every one of them is offered.
+// - SQL/CICS/DLI sites have no key of their own -- the DSL keys them on a
+//   quoted prefix of the statement text, which only the CLI's `directive`
+//   knows how to spell (the same shortest-unique prefix `generate` uses).
+export function boundaryKeyCandidates(boundaries: BoundaryInfo[], category: string): KeyCandidate[] {
   const normalized = category.toUpperCase();
   const target = normalized === 'MQ' ? 'CALL' : normalized;
-  const seenKeys = new Set<string>();
-  const result: BoundaryInfo[] = [];
+  const quote = QUOTED_CATEGORIES.has(normalized);
+  const seen = new Set<string>();
+  const result: KeyCandidate[] = [];
+  const push = (insertText: string, boundary: BoundaryInfo): void => {
+    if (!insertText || seen.has(insertText)) return;
+    seen.add(insertText);
+    result.push({ insertText, boundary });
+  };
   for (const boundary of boundaries) {
-    if (boundary.category !== target || boundary.key === null) continue;
-    if (seenKeys.has(boundary.key)) continue;
-    seenKeys.add(boundary.key);
-    result.push(boundary);
+    if (boundary.category === 'DYNCALL' && target === 'CALL') {
+      for (const key of boundary.keys) push(key, boundary);
+      continue;
+    }
+    if (boundary.category !== target) continue;
+    const keys = boundary.keys.length > 0 ? boundary.keys : boundary.key ? [boundary.key] : [];
+    if (keys.length === 0) {
+      // SQL/CICS/DLI: only the CLI-rendered directive is usable.
+      const fromDirective = keyFromDirective(boundary.directive);
+      if (fromDirective) push(fromDirective, boundary);
+      continue;
+    }
+    for (const key of keys) push(quote ? quoted(key) : key, boundary);
   }
   return result;
+}
+
+// `MOCK SQL "UPDATE INVENTORY"` -> `"UPDATE INVENTORY"`; null when the
+// directive is absent or not of that shape.
+export function keyFromDirective(directive: string | null | undefined): string | null {
+  if (!directive) return null;
+  const match = /^MOCK\s+[A-Za-z]+\s+(.+?)(?:\s+ROWS)?$/i.exec(directive.trim());
+  return match ? match[1] : null;
 }

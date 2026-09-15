@@ -7,7 +7,7 @@ import { buildExportArgs } from '../export/exportRunner';
 import { buildDebugArgs, buildLintArgs } from '../debug/debugArgs';
 import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
 import { parseLintOutput } from '../linting/lintOutput';
-import { BoundaryInfo, filterBoundaryKeysForCategory } from '../completion/cutCompletionLogic';
+import { BoundaryInfo, boundaryKeyCandidates } from '../completion/cutCompletionLogic';
 
 // Everything this extension does, it does by spawning the mockymock CLI and
 // parsing what comes back. Every OTHER test in this repo checks that against
@@ -140,6 +140,10 @@ describe('mockymock CLI contract (live)', function () {
       assertFlagsAccepted(['collect'], ['collect', CBL, '--cut', CUT, '--json', '--boundaries']);
     });
 
+    it('the generate --fill call lintCodeActionProvider makes', () => {
+      assertFlagsAccepted(['generate'], ['generate', CBL, '--fill', CUT, '--copybook-path', '/copybooks']);
+    });
+
     it('the explain --json call cutHoverProvider makes', () => {
       assertFlagsAccepted(['explain'], ['explain', 'UNRESOLVED_COPYBOOK', '--json']);
     });
@@ -206,9 +210,14 @@ describe('mockymock CLI contract (live)', function () {
       const openBoundaries = boundaries.filter((b) => b.category === 'OPEN');
       assert.ok(openBoundaries.length > 0, 'expected the example to have at least one OPEN boundary');
       assert.ok(
-        filterBoundaryKeysForCategory(boundaries, 'open').length > 0,
-        'filterBoundaryKeysForCategory found no keys for a category real output has boundaries for'
+        boundaryKeyCandidates(boundaries, 'open').length > 0,
+        'boundaryKeyCandidates found no keys for a category real output has boundaries for'
       );
+      // The CLI renders the exact header the DSL parses; the extension
+      // inserts it verbatim rather than re-deriving the quoting rules.
+      for (const b of boundaries) {
+        assert.ok(b.directive === null || typeof b.directive === 'string');
+      }
     });
 
     it('cutHoverProvider parses a real `explain --json`', () => {

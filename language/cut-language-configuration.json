@@ -3,6 +3,7 @@
     "lineComment": "*>"
   },
   "brackets": [["(", ")"]],
+  "wordPattern": "[A-Za-z0-9][A-Za-z0-9-]*",
   "autoClosingPairs": [
     { "open": "(", "close": ")" },
     { "open": "\"", "close": "\"", "notIn": ["string"] }

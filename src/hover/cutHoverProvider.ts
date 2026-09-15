@@ -21,6 +21,12 @@ async function explainCode(
   if (explanationCache.has(code)) return explanationCache.get(code)!;
   const { executablePath } = resolveInvocationConfig(context, uri);
   const result = await runCommand(executablePath, ['explain', code, '--json']);
+  if (result.code !== 0) {
+    // Not cached: the CLI may simply not be installed yet, or the
+    // configured executable may change -- a permanent null would leave
+    // this code tooltip-less for the rest of the session.
+    return null;
+  }
   let explanation: string | null;
   try {
     const payload = JSON.parse(result.stdout) as { explanation?: string };

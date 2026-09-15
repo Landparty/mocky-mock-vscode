@@ -13,8 +13,8 @@ import { resolveInvocationConfig } from '../environment/invocationConfig';
 import {
   BoundaryInfo,
   MOCK_CATEGORIES,
+  boundaryKeyCandidates,
   detectCompletionContext,
-  filterBoundaryKeysForCategory,
 } from './cutCompletionLogic';
 
 interface BoundaryCacheEntry {
@@ -58,13 +58,18 @@ async function loadBoundaries(
   for (const p of copybookPaths) args.push('--copybook-path', p);
 
   const result = await runCommand(executablePath, args);
-  if (result.code !== 0) return null;
-  let payload: { boundaries?: BoundaryInfo[] };
-  try {
-    payload = JSON.parse(result.stdout);
-  } catch {
-    return null;
+  let payload: { boundaries?: BoundaryInfo[] } = {};
+  if (result.code === 0) {
+    try {
+      payload = JSON.parse(result.stdout);
+    } catch {
+      payload = {};
+    }
   }
+  // A failed `collect` (the .cbl does not parse yet, the CLI is absent) is
+  // cached as an empty list against the same mtimes, so a typist inside a
+  // broken file does not spawn a CLI process on every keystroke; the next
+  // save of either file invalidates it.
   const boundaries = payload.boundaries ?? [];
   boundaryCache.set(cutPath, {
     cutMtimeMs: cutStat.mtimeMs,
@@ -94,9 +99,18 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
 
       const boundaries = await loadBoundaries(context, document);
       if (!boundaries) return undefined;
-      const matches = filterBoundaryKeysForCategory(boundaries, completionContext.category);
-      return matches.map((boundary) => {
-        const item = new vscode.CompletionItem(boundary.key ?? '', vscode.CompletionItemKind.Value);
+      const candidates = boundaryKeyCandidates(boundaries, completionContext.category);
+      // Replace exactly the token typed so far (which may start with a
+      // quote and contain hyphens): VS Code's default word boundary stops
+      // at both, so without an explicit range accepting `INV-FILE` after
+      // typing `INV-F` would yield `INV-INV-FILE`.
+      const range = new vscode.Range(
+        position.translate(0, -completionContext.partial.length),
+        position
+      );
+      return candidates.map(({ insertText, boundary }) => {
+        const item = new vscode.CompletionItem(insertText, vscode.CompletionItemKind.Value);
+        item.range = range;
         item.detail = `${boundary.label} in ${boundary.paragraph} (line ${boundary.line})`;
         return item;
       });
@@ -106,14 +120,14 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider('cut', provider, ' '),
     vscode.workspace.onDidSaveTextDocument((document) => {
-      if (document.uri.fsPath.endsWith('.cut') || document.uri.fsPath.match(/\.(cbl|cob)$/i)) {
+      if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {
         // A saved .cut/.cbl may have changed the boundary set; the mtime
         // check above would already catch this on the next request, but
         // dropping the cache entry outright avoids serving a stale list
         // for the split second before the new mtime is observed.
         const cutPath = document.uri.fsPath.endsWith('.cut')
           ? document.uri.fsPath
-          : document.uri.fsPath.replace(/\.(cbl|cob)$/i, '.cut');
+          : document.uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');
         boundaryCache.delete(cutPath);
       }
     })

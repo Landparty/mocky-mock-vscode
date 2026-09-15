@@ -48,12 +48,17 @@ jobs:
       # cobol-parser resolves from PyPI as an ordinary pinned dependency
       # (see mocky-mock's .okf/integration.md), so installing mocky-mock
       # itself is enough to get the whole CLI surface this test exercises.
+      # MOCKYMOCK_REF (a repository variable) picks the mocky-mock branch to
+      # install, default main -- so an extension PR that depends on a CLI
+      # change still in review can be checked against that branch instead
+      # of failing until the two merge in the right order.
       - name: Install the mockymock CLI from source
         if: steps.token.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.ORG_PAT }}
+          MOCKYMOCK_REF: ${{ vars.MOCKYMOCK_REF }}
         run: |
-          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/Landparty/mocky-mock.git" /tmp/mocky-mock
+          git clone --depth 1 --branch "${MOCKYMOCK_REF:-main}" "https://x-access-token:${GH_TOKEN}@github.com/Landparty/mocky-mock.git" /tmp/mocky-mock
           python -m pip install --upgrade pip
           python -m pip install /tmp/mocky-mock
           mockymock --version

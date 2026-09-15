@@ -77,6 +77,10 @@
         {
           "command": "mockymock.exportMainframe",
           "when": "resourceLangId == cobol || resourceLangId == cut"
+        },
+        {
+          "command": "mockymock.fillMissingMocks",
+          "when": "resourceLangId == cut"
         }
       ]
     },
