@@ -10,7 +10,16 @@ import { cutRelativeLine, parseLintOutput } from './lintOutput';
 // saved .cut file whose paired .cbl exists, and publishes the problems as
 // editor diagnostics — the same "problems before you run anything" loop
 // pytest users get from collection errors.
-export function activateLintDiagnostics(context: vscode.ExtensionContext): void {
+//
+// Returns a `relint(uri)` trigger so another feature (lintCodeActionProvider's
+// `generate --fill` command, which changes the .cut file on disk without
+// going through a user-initiated save) can ask for a fresh lint pass
+// against the same shared diagnostic collection, instead of duplicating
+// this module's lint-invocation/parsing logic or waiting on an event that
+// an external file write never fires.
+export function activateLintDiagnostics(
+  context: vscode.ExtensionContext
+): (uri: vscode.Uri) => void {
   const collection = vscode.languages.createDiagnosticCollection('mockymock');
   context.subscriptions.push(collection);
 
@@ -112,4 +121,11 @@ export function activateLintDiagnostics(context: vscode.ExtensionContext): void 
   for (const document of vscode.workspace.textDocuments) {
     void lintDocument(document);
   }
+
+  return (uri: vscode.Uri) => {
+    const document = vscode.workspace.textDocuments.find(
+      (d) => d.uri.fsPath === uri.fsPath
+    );
+    if (document) void lintDocument(document);
+  };
 }

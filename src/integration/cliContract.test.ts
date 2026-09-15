@@ -7,6 +7,7 @@ import { buildExportArgs } from '../export/exportRunner';
 import { buildDebugArgs, buildLintArgs } from '../debug/debugArgs';
 import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
 import { parseLintOutput } from '../linting/lintOutput';
+import { BoundaryInfo, filterBoundaryKeysForCategory } from '../completion/cutCompletionLogic';
 
 // Everything this extension does, it does by spawning the mockymock CLI and
 // parsing what comes back. Every OTHER test in this repo checks that against
@@ -135,6 +136,13 @@ describe('mockymock CLI contract (live)', function () {
       assertFlagsAccepted(['collect'], ['collect', '--cut', CUT, '--json']);
     });
 
+    it('the collect --boundaries call cutCompletionProvider makes', () => {
+      assertFlagsAccepted(['collect'], ['collect', CBL, '--cut', CUT, '--json', '--boundaries']);
+    });
+
+    it('the explain --json call cutHoverProvider makes', () => {
+      assertFlagsAccepted(['explain'], ['explain', 'UNRESOLVED_COPYBOOK', '--json']);
+    });
 
     // The capability probes in environment/checks.ts gate whole features on
     // a substring of these same --help texts; a probe that silently starts
@@ -183,7 +191,34 @@ describe('mockymock CLI contract (live)', function () {
       );
     });
 
+    it('cutCompletionProvider parses a real `collect --boundaries`', () => {
+      const result = cli(['collect', CBL, '--cut', CUT, '--json', '--boundaries']);
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout) as { boundaries?: BoundaryInfo[] };
+      const boundaries = payload.boundaries ?? [];
+      assert.ok(boundaries.length > 0, 'expected at least one boundary from the invupdt example');
+      for (const b of boundaries) {
+        assert.strictEqual(typeof b.category, 'string');
+        assert.strictEqual(typeof b.label, 'string');
+        assert.strictEqual(typeof b.paragraph, 'string');
+        assert.ok(Number.isInteger(b.line));
+      }
+      const openBoundaries = boundaries.filter((b) => b.category === 'OPEN');
+      assert.ok(openBoundaries.length > 0, 'expected the example to have at least one OPEN boundary');
+      assert.ok(
+        filterBoundaryKeysForCategory(boundaries, 'open').length > 0,
+        'filterBoundaryKeysForCategory found no keys for a category real output has boundaries for'
+      );
+    });
 
-
+    it('cutHoverProvider parses a real `explain --json`', () => {
+      const result = cli(['explain', 'UNRESOLVED_COPYBOOK', '--json']);
+      assert.strictEqual(result.code, 0, result.stderr);
+      const payload = JSON.parse(result.stdout) as { explanation?: string };
+      assert.ok(
+        typeof payload.explanation === 'string' && payload.explanation.length > 0,
+        `expected a non-empty explanation, got:\n${result.stdout}`
+      );
+    });
   });
 });
