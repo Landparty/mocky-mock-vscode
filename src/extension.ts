@@ -13,6 +13,7 @@ import { WALKTHROUGH_ID } from './environment/notify';
 import { activateCutCompletion } from './completion/cutCompletionProvider';
 import { activateCutHover } from './hover/cutHoverProvider';
 import { activateLintCodeActions } from './linting/lintCodeActionProvider';
+import { activateCounterpartNavigation } from './navigation/counterpart';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
@@ -43,6 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCutHover(context);
   activateExportMainframeCommand(context);
   activateNewTestSuiteCommand(context);
+  activateCounterpartNavigation(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(

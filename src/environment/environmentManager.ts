@@ -10,6 +10,7 @@ import {
   permissionDeniedMessageForPath,
   resolveExecutablePath,
 } from './checks';
+import { presentStatus, SetupState, statusTooltipMarkdown } from './statusPresentation';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 
 export interface ReadyResult {
@@ -35,7 +36,7 @@ export class EnvironmentManager {
     // a workspace with no .cut file yet) -- setting real text here up front
     // means that later show() never exposes a blank item while the CLI/
     // Docker probe is still in flight.
-    this.setStatus('$(sync) mockymock: checking…', 'Checking for the mockymock CLI and Docker…');
+    this.setStatus('checking');
     void this.activateIfCutWorkspace();
   }
 
@@ -61,9 +62,16 @@ export class EnvironmentManager {
     void this.refreshStatus();
   }
 
-  private setStatus(text: string, tooltip?: string) {
-    this.statusBarItem.text = text;
-    this.statusBarItem.tooltip = tooltip ?? text;
+  private setStatus(state: SetupState, detail?: string) {
+    const p = presentStatus(state, detail);
+    this.statusBarItem.text = p.text;
+    this.statusBarItem.backgroundColor = p.background ? new vscode.ThemeColor(p.background) : undefined;
+    const tooltip = new vscode.MarkdownString(statusTooltipMarkdown(p), true);
+    // Only our own three commands are linked from the hover.
+    tooltip.isTrusted = {
+      enabledCommands: ['mockymock.checkEnvironment', 'mockymock.openWalkthrough', 'workbench.action.openSettings'],
+    };
+    this.statusBarItem.tooltip = tooltip;
   }
 
   // Read-only status probe for the status bar: reports what's there without
@@ -78,19 +86,19 @@ export class EnvironmentManager {
     const mockymockProbe = await runCommand(executablePath, ['--version']);
     if (mockymockProbe.code !== 0) {
       if (mockymockProbe.stderr === 'permission denied') {
-        this.setStatus('$(error) mockymock: permission denied', permissionDeniedMessageForPath(executablePath));
+        this.setStatus('cli-blocked', permissionDeniedMessageForPath(executablePath));
       } else {
-        this.setStatus('$(warning) mockymock: CLI not found', 'Click to install the mockymock CLI');
+        this.setStatus('cli-missing');
       }
       return;
     }
     const dockerStatus = await checkDocker(runCommand);
     if (dockerStatus === 'available') {
-      this.setStatus('$(check) mockymock: ready');
+      this.setStatus('ready');
     } else if (dockerStatus === 'daemon-down') {
-      this.setStatus('$(warning) mockymock: Docker not running', 'Click to start Docker Desktop');
+      this.setStatus('docker-stopped');
     } else {
-      this.setStatus('$(warning) mockymock: Docker not installed', 'Click to open the Docker Desktop download page');
+      this.setStatus('docker-missing');
     }
   }
 
@@ -128,13 +136,13 @@ export class EnvironmentManager {
         // runs from an explicit "Check Setup" invocation or a
         // real test run -- not the passive activation-time refreshStatus().
         const message = permissionDeniedMessageForPath(executablePath);
-        this.setStatus('$(error) mockymock: permission denied', message);
+        this.setStatus('cli-blocked', message);
         vscode.window.showErrorMessage(message);
         return { ok: false, message };
       }
       const installed = await this.installMockymock(executablePath);
       if (!installed) {
-        this.setStatus('$(error) mockymock: CLI not found');
+        this.setStatus('cli-missing');
         return {
           ok: false,
           message: 'mockymock CLI is not installed and automatic install failed. See the mocky-mock README for manual install steps.',
@@ -144,28 +152,28 @@ export class EnvironmentManager {
 
     const dockerStatus = await checkDocker(runCommand);
     if (dockerStatus === 'available') {
-      this.setStatus('$(check) mockymock: ready');
+      this.setStatus('ready');
       return { ok: true, message: 'ready' };
     }
 
     if (dockerStatus === 'daemon-down') {
       const { started, launchError } = await this.startDockerDesktopAndWait();
       if (started) {
-        this.setStatus('$(check) mockymock: ready');
+        this.setStatus('ready');
         return { ok: true, message: 'ready' };
       }
       const message = describeDockerStartFailure(launchError);
-      this.setStatus('$(error) mockymock: Docker did not start', message);
+      this.setStatus('docker-failed', message);
       return { ok: false, message };
     }
 
-    this.setStatus('$(warning) mockymock: Docker not installed', 'Click to install Docker Desktop');
+    this.setStatus('docker-missing');
     this.promptInstallDocker();
     return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.' };
   }
 
   private async installMockymock(executablePath: string): Promise<boolean> {
-    this.setStatus('$(sync~spin) mockymock: installing CLI…');
+    this.setStatus('installing');
 
     const uvOk = await checkCommandAvailable(runCommand, 'uv', ['--version']);
     if (!uvOk) {
