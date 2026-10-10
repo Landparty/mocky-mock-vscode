@@ -20,7 +20,7 @@ import { runCommand } from '../environment/commandRunner';
 import { supportsGenerateCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
-import { showNeedsFile } from '../environment/notify';
+import { focusClickedFile, showNeedsFile } from '../environment/notify';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../environment/cobolPaths';
 import { buildGenerateArgs, buildStarterCut, parseGeneratedCaseCount, starterCutFacts } from './cutTemplate';
@@ -65,7 +65,8 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
   });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('mockymock.newTestSuite', async () => {
+    vscode.commands.registerCommand('mockymock.newTestSuite', async (uri?: vscode.Uri) => {
+      await focusClickedFile(uri);
       const editor = vscode.window.activeTextEditor;
       const activePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
 

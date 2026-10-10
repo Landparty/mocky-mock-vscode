@@ -6,6 +6,9 @@ tsconfig.json
 tsconfig.eslint.json
 eslint.config.mjs
 docs/**
+# Design previews (preview/ux-preview.html): browser-only mockups for
+# reviewers, not part of the extension.
+preview/**
 **/*.map
 .gitignore
 .superpowers/**

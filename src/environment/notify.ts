@@ -69,3 +69,13 @@ export async function showNeedsFile(actionLabel: string, wanted: WantedFile, rer
   await vscode.window.showTextDocument(picked[0]);
   await vscode.commands.executeCommand(rerunCommand);
 }
+
+// Menu-invoked commands (Explorer right-click, editor title bar) receive the
+// clicked file's Uri; the one-shot commands all act on the active editor, so
+// bring the clicked file to the front first. A no-op from the Command
+// Palette, where no Uri is passed.
+export async function focusClickedFile(uri: unknown): Promise<void> {
+  if (!(uri instanceof vscode.Uri) || uri.scheme !== 'file') return;
+  if (vscode.window.activeTextEditor?.document.uri.fsPath === uri.fsPath) return;
+  await vscode.window.showTextDocument(uri);
+}

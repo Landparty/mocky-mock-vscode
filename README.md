@@ -46,9 +46,19 @@ it does and how to use it.
 
 ## Features
 
+Want to see the editor experience before installing? Open
+[`preview/ux-preview.html`](preview/ux-preview.html) in a browser: an
+interactive mock of the title-bar buttons, right-click menus and status bar.
+
 - **New Test Suite in one click** — scaffolds a runnable `.cut` next to any
   COBOL program, boundaries pre-mocked; falls back to a starter template
   when the CLI can't analyze the program, so you always get a file to edit.
+- **One click between a program and its suite** — the beaker on a COBOL
+  program becomes **Open Test Suite** once one exists, a `.cut` file's title
+  bar jumps back to its program, and `Ctrl+Alt+O` (`Cmd+Alt+O`) flips
+  between the two.
+- **Right-click anywhere** — New Test Suite, Fill In Missing Mocks and
+  Export Mainframe-Ready COBOL are in the editor and Explorer context menus.
 - **Getting Started walkthrough** and an empty-state Test Explorer that
   points at the next step, so the first test never needs the docs.
 - **Test Explorer tree** for every `.cut` file, with tag filtering.
@@ -74,7 +84,8 @@ it does and how to use it.
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
   compiler instead of GnuCOBOL, zero Docker needed.
 - **Environment bootstrap** — auto-installs the CLI and starts Docker
-  Desktop for you, with a status bar item to check or retry. Every
+  Desktop for you, with a quiet status bar item that only turns
+  yellow/red when something needs you (hover it for what and how to fix). Every
   "can't do that" message carries the button that fixes it (check setup,
   open the file, update the extension).
 - **No silent failures** — anything mockymock can't attribute to a test
@@ -193,7 +204,7 @@ The bundled `mockymock` binary isn't signed with a paid Apple Developer
 Program certificate, so on first activation the extension automatically
 clears the macOS quarantine flag on it (the thing Gatekeeper checks) —
 no action needed on your part. If a fresh install still shows "mockymock:
-permission denied" in the status bar, run `mockymock: Check Setup (CLI and
+CLI blocked" in the status bar, run `mockymock: Check Setup (CLI and
 Docker)` to see the exact bundled binary path, then in Terminal:
 
 ```bash
@@ -240,7 +251,7 @@ one setting the two extensions deliberately share.
 ## Generating tests
 
 **New Test Suite for This Program** (beaker icon on any open COBOL file,
-also in the right-click menu and the empty Test Explorer) runs
+also in the editor and Explorer right-click menus and the empty Test Explorer) runs
 `mockymock generate` and writes `PROG.cut` next to `PROG.cbl`: one
 `TESTCASE` per paragraph, every boundary mocked, no Docker needed. It never
 overwrites an existing suite — it opens it instead. If the CLI can't

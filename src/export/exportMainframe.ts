@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { runCommand } from '../environment/commandRunner';
 import { describeUnsupportedFeature, supportsExportCommand } from '../environment/checks';
-import { showCliProblem, showNeedsFile } from '../environment/notify';
+import { focusClickedFile, showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../environment/cobolPaths';
@@ -23,7 +23,8 @@ function defaultOutputPath(cblPath: string): string {
 // command-design.md).
 export function activateExportMainframeCommand(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('mockymock.exportMainframe', async () => {
+    vscode.commands.registerCommand('mockymock.exportMainframe', async (uri?: vscode.Uri) => {
+      await focusClickedFile(uri);
       const editor = vscode.window.activeTextEditor;
       const activePath = editor?.document.uri.fsPath;
       let cblPath: string;

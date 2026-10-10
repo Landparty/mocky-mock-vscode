@@ -1,0 +1,486 @@
+<!doctype html>
+<!-- Interactive mock of the editor UX changes from PR #75. Open it in a browser;
+     it does not run mockymock. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>body{margin:0}[hidden]{display:none!important}</style>
+<title>mockymock UX Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a single editor window mock, the thing being shown, with a short
+   key below it. Palette follows VS Code's own Modern themes so the mock reads
+   as the real product; the accent is the beaker teal. */
+:root {
+  --page: #eef1f4;
+  --ink: #1f2328;
+  --muted: #5d6670;
+  --chrome: #f8f8f8;
+  --editor: #ffffff;
+  --line: #e1e4e8;
+  --tab-idle: #ececec;
+  --accent: #0b7f86;
+  --accent-soft: #d6eff0;
+  --status: #f8f8f8;
+  --status-fg: #3b3b3b;
+  --warn-bg: #f5c451;
+  --warn-fg: #2a2000;
+  --err-bg: #c7322f;
+  --err-fg: #ffffff;
+  --menu: #ffffff;
+  --menu-hover: #0b7f86;
+  --kw: #0b5cad;
+  --str: #a3501c;
+  --cmt: #4f7a3a;
+  --num: #0f7a5c;
+  --gutter: #8a939c;
+  --shadow: 0 8px 28px rgba(16, 24, 32, .16);
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #141619; --ink: #e6e8eb; --muted: #9aa3ad; --chrome: #1f1f1f;
+    --editor: #1a1a1a; --line: #2e3238; --tab-idle: #252526; --accent: #3cc1c9;
+    --accent-soft: #123a3d; --status: #181818; --status-fg: #cccccc;
+    --warn-bg: #d9a520; --warn-fg: #1d1500; --err-bg: #b3312e; --err-fg: #ffffff;
+    --menu: #252526; --menu-hover: #0e6e74; --kw: #6cb2f2; --str: #e0a072;
+    --cmt: #7fae6a; --num: #7fd1b0; --gutter: #6b737c;
+    --shadow: 0 10px 30px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #141619; --ink: #e6e8eb; --muted: #9aa3ad; --chrome: #1f1f1f;
+  --editor: #1a1a1a; --line: #2e3238; --tab-idle: #252526; --accent: #3cc1c9;
+  --accent-soft: #123a3d; --status: #181818; --status-fg: #cccccc;
+  --warn-bg: #d9a520; --warn-fg: #1d1500; --err-bg: #b3312e; --err-fg: #ffffff;
+  --menu: #252526; --menu-hover: #0e6e74; --kw: #6cb2f2; --str: #e0a072;
+  --cmt: #7fae6a; --num: #7fd1b0; --gutter: #6b737c;
+  --shadow: 0 10px 30px rgba(0, 0, 0, .5); color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.55; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 32px 16px 56px; display: grid; gap: 28px; }
+
+header { display: grid; gap: 6px; max-width: 68ch; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font-size: clamp(24px, 4vw, 32px); line-height: 1.15; margin: 0; font-weight: 600; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); }
+
+/* ---------- the window ---------- */
+.window { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: var(--shadow); background: var(--editor); position: relative; }
+.titlebar { display: flex; align-items: stretch; background: var(--chrome); border-bottom: 1px solid var(--line); min-height: 38px; }
+.tabs { display: flex; min-width: 0; overflow-x: auto; }
+.tab { all: unset; cursor: pointer; display: flex; align-items: center; gap: 8px; padding: 0 14px; font: 13px var(--sans); color: var(--muted); background: var(--tab-idle); border-right: 1px solid var(--line); white-space: nowrap; }
+.tab[aria-selected="true"] { background: var(--editor); color: var(--ink); box-shadow: inset 0 2px 0 var(--accent); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.tab .ext { font: 500 10px var(--mono); padding: 1px 5px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); }
+.tab[hidden] { display: none !important; }
+
+.actions { margin-left: auto; display: flex; align-items: center; gap: 2px; padding: 0 6px; position: relative; }
+.icon-btn { all: unset; cursor: pointer; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 5px; color: var(--ink); position: relative; }
+.icon-btn:hover, .icon-btn:focus-visible { background: var(--accent-soft); color: var(--accent); }
+.icon-btn:focus-visible { outline: 2px solid var(--accent); }
+.icon-btn.spot { color: var(--accent); }
+.icon-btn.spot::after { content: ""; position: absolute; inset: -3px; border-radius: 8px; border: 2px solid var(--accent); opacity: .55; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .1; } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.spot::after { animation: none; } }
+.icon-btn .tip { position: absolute; top: 34px; right: 0; white-space: nowrap; font: 12px var(--sans); background: var(--menu); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .12s; z-index: 5; }
+.icon-btn:hover .tip, .icon-btn:focus-visible .tip { opacity: 1; }
+svg.i { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+.editor { display: grid; grid-template-columns: auto 1fr; font: 13px/1.6 var(--mono); min-height: 340px; overflow-x: auto; cursor: context-menu; }
+.gutter { padding: 12px 10px 12px 14px; color: var(--gutter); text-align: right; user-select: none; font-variant-numeric: tabular-nums; }
+pre.code { margin: 0; padding: 12px 18px 12px 6px; white-space: pre; color: var(--ink); min-width: 0; }
+.kw { color: var(--kw); } .str { color: var(--str); } .cmt { color: var(--cmt); font-style: italic; } .num { color: var(--num); }
+.play { color: #2f9e44; margin-right: 4px; }
+
+/* context menu */
+.menu { position: absolute; z-index: 10; min-width: 250px; background: var(--menu); border: 1px solid var(--line); border-radius: 6px; padding: 4px; box-shadow: var(--shadow); font: 13px var(--sans); }
+.menu button { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 10px; padding: 5px 10px; border-radius: 4px; cursor: pointer; color: var(--ink); }
+.menu button:hover, .menu button:focus-visible { background: var(--menu-hover); color: #fff; }
+.menu button.dim { color: var(--muted); cursor: default; }
+.menu button.dim:hover { background: none; color: var(--muted); }
+.menu .kbd { margin-left: auto; font: 11px var(--mono); opacity: .75; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 2px; }
+.menu .new { font: 600 9px var(--mono); letter-spacing: .06em; padding: 1px 4px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); }
+
+/* status bar */
+.statusbar { display: flex; align-items: stretch; gap: 0; background: var(--status); color: var(--status-fg); border-top: 1px solid var(--line); font: 12px var(--sans); min-height: 24px; position: relative; flex-wrap: wrap; }
+.sb { all: unset; cursor: pointer; padding: 3px 10px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sb:hover { background: rgba(127, 127, 127, .15); }
+.sb:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.sb.warn { background: var(--warn-bg); color: var(--warn-fg); }
+.sb.err { background: var(--err-bg); color: var(--err-fg); }
+.sb svg.i { width: 14px; height: 14px; }
+.sb.spin svg { animation: spin 1.2s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .sb.spin svg { animation: none; } }
+.sb-right { margin-left: auto; display: flex; }
+.sb-right span { padding: 3px 10px; opacity: .8; }
+
+.hover-card { position: absolute; left: 8px; bottom: 30px; z-index: 8; width: min(380px, calc(100% - 16px)); background: var(--menu); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); padding: 12px 14px; font: 13px/1.5 var(--sans); display: grid; gap: 8px; }
+.hover-card p { margin: 0; }
+.hover-card .hint { color: var(--muted); }
+.hover-card .links { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.hover-card .links a { color: var(--accent); text-decoration: none; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.hover-card .links a:hover { text-decoration: underline; }
+
+.toast { position: absolute; right: 12px; bottom: 34px; z-index: 9; max-width: min(360px, calc(100% - 24px)); background: var(--menu); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 12px; font: 13px var(--sans); box-shadow: var(--shadow); }
+
+/* ---------- controls + key ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; font-size: 14px; }
+.controls label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.controls .group { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.controls .group > span { color: var(--muted); margin-right: 2px; }
+.chip { all: unset; cursor: pointer; font: 12px var(--mono); padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); background: var(--editor); }
+.chip[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); }
+kbd { font: 12px var(--mono); padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--editor); }
+
+.key { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 22px 28px; }
+.key section { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.key h2 { margin: 0; font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.key h2 svg { color: var(--accent); }
+.key p { margin: 0; color: var(--muted); font-size: 14px; }
+.key .was { font: 12px var(--mono); color: var(--muted); }
+.key .was s { opacity: .8; }
+footer { color: var(--muted); font-size: 13px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="beaker" viewBox="0 0 16 16"><path d="M6 1.5h4M6.5 1.5v4.2L2.6 12.6a1.3 1.3 0 0 0 1.1 1.9h8.6a1.3 1.3 0 0 0 1.1-1.9L9.5 5.7V1.5M4.3 9.5h7.4"/></symbol>
+    <symbol id="goto" viewBox="0 0 16 16"><path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5L9.5 1.5ZM9.5 1.5V5H13M6 10h4.5M8.8 8.2 10.5 10l-1.7 1.8"/></symbol>
+    <symbol id="wand" viewBox="0 0 16 16"><path d="m2 14 8.5-8.5M9 4l3 3M11.5 1.5v2M14.5 4.5h-2M13.6 2.4l-1.2 1.2"/></symbol>
+    <symbol id="export" viewBox="0 0 16 16"><path d="M8 10V1.8M5 4.5 8 1.5l3 3M3 8.5v5h10v-5"/></symbol>
+    <symbol id="dots" viewBox="0 0 16 16"><path d="M3.5 8h.01M8 8h.01M12.5 8h.01" stroke-width="2.4"/></symbol>
+    <symbol id="check" viewBox="0 0 16 16"><path d="m3 8.5 3 3 7-7"/></symbol>
+    <symbol id="warn" viewBox="0 0 16 16"><path d="M8 2 1.5 13.5h13L8 2ZM8 6.5v3.2M8 11.6h.01"/></symbol>
+    <symbol id="err" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><path d="m5.8 5.8 4.4 4.4M10.2 5.8l-4.4 4.4"/></symbol>
+    <symbol id="sync" viewBox="0 0 16 16"><path d="M13.5 8A5.5 5.5 0 0 1 3.6 11.3M2.5 8a5.5 5.5 0 0 1 9.9-3.3M12.6 2v2.9H9.7M3.4 14v-2.9h2.9"/></symbol>
+    <symbol id="pulse" viewBox="0 0 16 16"><path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/></symbol>
+    <symbol id="book" viewBox="0 0 16 16"><path d="M2 3h4a2 2 0 0 1 2 2v8.5a1.5 1.5 0 0 0-1.5-1.5H2V3ZM14 3h-4a2 2 0 0 0-2 2v8.5a1.5 1.5 0 0 1 1.5-1.5H14V3Z"/></symbol>
+    <symbol id="gear" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></symbol>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">mocky-mock-vscode · PR #75</span>
+    <h1>What the new editor experience looks like</h1>
+    <p>An interactive mock of the changes. Switch tabs, click the title-bar buttons, right-click the code, and click the status bar item to cycle through its states. Nothing here runs mockymock; it only shows the UI.</p>
+  </header>
+
+  <div class="controls" role="group" aria-label="Mock controls">
+    <label><input type="checkbox" id="hasSuite" checked> <span>CLAIMSEG.cut already exists</span></label>
+    <div class="group" id="stateGroup"><span>Status bar:</span></div>
+    <span>Press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> to flip files</span>
+  </div>
+
+  <div class="window" id="win">
+    <div class="titlebar">
+      <div class="tabs" role="tablist" aria-label="Open editors">
+        <button class="tab" role="tab" id="tab-cbl" data-file="cbl" aria-selected="true"><span class="ext">CBL</span>CLAIMSEG.cbl</button>
+        <button class="tab" role="tab" id="tab-cut" data-file="cut" aria-selected="false"><span class="ext">CUT</span>CLAIMSEG.cut</button>
+      </div>
+      <div class="actions" id="actions"></div>
+    </div>
+    <div class="editor" id="editor" tabindex="0" aria-label="Editor. Right-click or press Shift+F10 for the context menu.">
+      <div class="gutter" id="gutter"></div>
+      <pre class="code" id="code"></pre>
+    </div>
+    <div class="statusbar">
+      <button class="sb" id="sbItem" aria-describedby="hoverCard"></button>
+      <div class="sb-right"><span id="sbLang">COBOL</span><span>UTF-8</span><span>Ln 12, Col 8</span></div>
+    </div>
+    <div class="hover-card" id="hoverCard" role="tooltip" hidden></div>
+    <div class="menu" id="menu" role="menu" hidden></div>
+    <div class="toast" id="toast" role="status" hidden></div>
+  </div>
+
+  <div class="key">
+    <section>
+      <h2><svg class="i"><use href="#beaker"/></svg>Program and suite, one click apart</h2>
+      <p>On a program that already has a suite, the beaker opens that suite instead of offering to create one. A suite's title bar has a button back to its program. <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> (<kbd>Cmd</kbd>+<kbd>Alt</kbd>+<kbd>O</kbd> on macOS) flips between them.</p>
+      <span class="was">before: the beaker always said <s>New Test Suite</s></span>
+    </section>
+    <section>
+      <h2><svg class="i"><use href="#dots"/></svg>Right-click entry points</h2>
+      <p>New Test Suite, Fill In Missing Mocks and Export Mainframe-Ready COBOL are in the editor and Explorer context menus and the title bar's "…" menu, so you rarely need the Command Palette.</p>
+      <span class="was">before: palette only for Fill and Export</span>
+    </section>
+    <section>
+      <h2><svg class="i"><use href="#check"/></svg>A status bar that stays quiet</h2>
+      <p>When everything works, it shows just the name and a check. A problem turns it yellow or red and says what to do. Hover for the reason, plus links to Check Setup, the guide and settings.</p>
+      <span class="was">before: <s>✓ mockymock: ready</s>, same colour for every state</span>
+    </section>
+    <section>
+      <h2><svg class="i"><use href="#wand"/></svg>Plain-language commands</h2>
+      <p>Every command has an icon. "Fill In Missing Mocks" drops the CLI flag from its name and shows progress while it runs.</p>
+      <span class="was">before: <s>Fill Missing Mocks (mockymock generate --fill)</s></span>
+    </section>
+  </div>
+
+  <footer>Mock built for PR #75 on mocky-mock-vscode. The source shown is the CLAIMSEG example from the repository's <code>examples/</code> folder.</footer>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const icon = (name) => `<svg class="i" aria-hidden="true"><use href="#${name}"/></svg>`;
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const SOURCES = {
+    cbl: [
+      '       <k>IDENTIFICATION DIVISION</k>.',
+      '       <k>PROGRAM-ID</k>. CLAIMSEG.',
+      '',
+      '       <k>DATA DIVISION</k>.',
+      '       <k>WORKING-STORAGE SECTION</k>.',
+      '       01  WS-CLAIM-STATUS      <k>PIC</k> XX <k>VALUE</k> <k>SPACES</k>.',
+      '       01  WS-CLAIM-AMOUNT      <k>PIC</k> 9(7)V99 <k>VALUE</k> <n>0</n>.',
+      '       01  WS-CLAIM-FOUND       <k>PIC</k> X <k>VALUE</k> <s>"N"</s>.',
+      '',
+      '       <k>PROCEDURE DIVISION</k>.',
+      '       1000-RETRIEVE-CLAIM.',
+      '           <k>EXEC DLI</k>',
+      '               GU SEGMENT(CLAIM-SEG) INTO(WS-CLAIM-AMOUNT)',
+      '           <k>END-EXEC</k>',
+      '           <k>IF</k> WS-CLAIM-STATUS = <k>SPACES</k>',
+      '               <k>MOVE</k> <s>"Y"</s> <k>TO</k> WS-CLAIM-FOUND',
+      '           <k>END-IF</k>.',
+    ],
+    cut: [
+      '<k>TESTSUITE</k> <s>"CLAIMSEG IMS DL/I claim retrieval"</s>',
+      '',
+      '<c>*> Every EXEC DLI is spliced out before compiling,</c>',
+      '<c>*> so no IMS runtime is needed.</c>',
+      '',
+      '<p>▶</p><k>TESTCASE</k> <s>"1000-RETRIEVE-CLAIM finds a claim"</s>',
+      '    <k>MOCK DLI</k> <s>"GU"</s>',
+      '        <k>MOVE</k> <n>250.00</n> <k>TO</k> WS-CLAIM-AMOUNT',
+      '        <k>MOVE</k> <k>SPACES</k> <k>TO</k> WS-CLAIM-STATUS',
+      '    <k>END-MOCK</k>',
+      '    <k>PERFORM</k> 1000-RETRIEVE-CLAIM',
+      '    <k>EXPECT</k> WS-CLAIM-FOUND <k>TO BE</k> <s>"Y"</s>',
+      '    <k>VERIFY DLI</k> <s>"GU"</s> <k>WAS CALLED ONCE</k>',
+      '',
+      '<p>▶</p><k>TESTCASE</k> <s>"1000-RETRIEVE-CLAIM flags not-found"</s>',
+      '    <k>MOCK DLI</k> <s>"GU"</s>',
+      '        <k>MOVE</k> <s>"GE"</s> <k>TO</k> WS-CLAIM-STATUS',
+    ],
+  };
+  const paint = (line) => esc(line)
+    .replace(/&lt;k&gt;(.*?)&lt;\/k&gt;/g, '<span class="kw">$1</span>')
+    .replace(/&lt;s&gt;(.*?)&lt;\/s&gt;/g, '<span class="str">$1</span>')
+    .replace(/&lt;n&gt;(.*?)&lt;\/n&gt;/g, '<span class="num">$1</span>')
+    .replace(/&lt;c&gt;(.*?)&lt;\/c&gt;/g, '<span class="cmt">$1</span>')
+    .replace(/&lt;p&gt;(.*?)&lt;\/p&gt;/g, '<span class="play" title="Run test">$1</span>');
+
+  const STATES = {
+    checking:       { cls: 'spin', icon: 'sync',  text: 'mockymock', summary: 'Checking for the mockymock CLI and Docker…', hint: 'Click to run the full setup check.' },
+    ready:          { cls: '',     icon: 'check', text: 'mockymock', summary: 'Ready: the mockymock CLI and Docker are both available.', hint: 'Click to re-check your setup.' },
+    'docker-stopped': { cls: 'warn', icon: 'warn', text: 'mockymock: start Docker', summary: 'Docker Desktop is installed but not running. Tests need it to compile COBOL.', hint: 'Click to start Docker Desktop.' },
+    'docker-missing': { cls: 'warn', icon: 'warn', text: 'mockymock: Docker needed', summary: 'Docker Desktop is required to run tests and was not found.', hint: 'Click to open the Docker Desktop download page.' },
+    'cli-missing':  { cls: 'warn', icon: 'warn',  text: 'mockymock: CLI not found', summary: 'The mockymock CLI could not be found.', hint: 'Click to install it.' },
+    'cli-blocked':  { cls: 'err',  icon: 'err',   text: 'mockymock: CLI blocked', summary: 'macOS Gatekeeper refused to run the bundled mockymock CLI.', hint: 'Click for how to fix it.' },
+  };
+
+  const state = { file: 'cbl', hasSuite: true, status: 'ready' };
+  let toastTimer;
+
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.hidden = true; }, 3200);
+  }
+
+  function setFile(file) {
+    if (file === 'cut' && !state.hasSuite) return;
+    state.file = file;
+    render();
+  }
+
+  function newSuite() {
+    if (state.hasSuite) { setFile('cut'); return; }
+    state.hasSuite = true;
+    $('hasSuite').checked = true;
+    state.file = 'cut';
+    render();
+    toast('Created CLAIMSEG.cut with 4 starter test cases. Every boundary is mocked: fill in the MOVE and EXPECT lines and press play.');
+  }
+
+  const ACTIONS = {
+    newSuite: { icon: 'beaker', label: 'New Test Suite for This Program', run: newSuite },
+    openSuite: { icon: 'beaker', label: 'Open Test Suite', run: () => setFile('cut') },
+    openProgram: { icon: 'goto', label: 'Open Program Under Test', run: () => setFile('cbl') },
+    fill: { icon: 'wand', label: 'Fill In Missing Mocks', run: () => toast('Filling in missing mocks… Added MOCK DLI "ISRT" to 1 test case.') },
+    exportMf: { icon: 'export', label: 'Export Mainframe-Ready COBOL', run: () => toast('Exported mainframe-ready source to CLAIMSEG.mainframe.cbl') },
+  };
+
+  function render() {
+    // tabs
+    $('tab-cut').hidden = !state.hasSuite;
+    for (const id of ['tab-cbl', 'tab-cut']) {
+      const el = $(id);
+      el.setAttribute('aria-selected', String(el.dataset.file === state.file));
+      el.tabIndex = el.dataset.file === state.file ? 0 : -1;
+    }
+    // editor
+    const lines = SOURCES[state.file];
+    $('code').innerHTML = lines.map(paint).join('\n');
+    $('gutter').innerHTML = lines.map((_, i) => i + 1).join('<br>');
+    $('sbLang').textContent = state.file === 'cbl' ? 'COBOL' : 'mockymock .cut';
+    // title-bar actions
+    const primary = state.file === 'cut' ? 'openProgram' : (state.hasSuite ? 'openSuite' : 'newSuite');
+    $('actions').innerHTML =
+      `<button class="icon-btn spot" data-action="${primary}" aria-label="${ACTIONS[primary].label}">${icon(ACTIONS[primary].icon)}<span class="tip">${ACTIONS[primary].label}</span></button>` +
+      `<button class="icon-btn" data-more aria-label="More actions" aria-haspopup="menu">${icon('dots')}<span class="tip">More Actions…</span></button>`;
+    // status bar
+    const s = STATES[state.status];
+    const sb = $('sbItem');
+    sb.className = `sb ${s.cls}`;
+    sb.innerHTML = `${icon(s.icon)}<span>${s.text}</span>`;
+    sb.setAttribute('aria-label', `${s.text}. ${s.summary} ${s.hint}`);
+    $('hoverCard').innerHTML =
+      `<p><strong>mockymock</strong> — ${s.summary}</p><p class="hint">${s.hint}</p>` +
+      `<div class="links"><a data-go="checking">${icon('pulse')}Check Setup</a><a data-go="guide">${icon('book')}Getting Started</a><a data-go="settings">${icon('gear')}Settings</a></div>`;
+    for (const chip of document.querySelectorAll('.chip')) chip.setAttribute('aria-pressed', String(chip.dataset.state === state.status));
+  }
+
+  // menus
+  function menuItems(kind) {
+    const items = [];
+    if (kind === 'more') {
+      if (state.file === 'cut') items.push('fill');
+      if (state.file === 'cut' || state.hasSuite) items.push('exportMf');
+      if (!items.length) return [{ dim: 'Nothing else for this file yet' }];
+      return items.map((a) => ({ action: a }));
+    }
+    const base = [{ dim: 'Go to Definition', kbd: 'F12' }, { dim: 'Find All References', kbd: '⇧F12' }, { sep: true }];
+    if (state.file === 'cbl') base.push({ action: state.hasSuite ? 'openSuite' : 'newSuite', kbd: state.hasSuite ? 'Ctrl+Alt+O' : '', isNew: state.hasSuite });
+    else { base.push({ action: 'openProgram', kbd: 'Ctrl+Alt+O', isNew: true }); base.push({ action: 'fill', isNew: true }); }
+    base.push({ sep: true }, { dim: 'Cut', kbd: 'Ctrl+X' }, { dim: 'Copy', kbd: 'Ctrl+C' }, { dim: 'Paste', kbd: 'Ctrl+V' });
+    return base;
+  }
+
+  function openMenu(kind, x, y) {
+    const m = $('menu');
+    m.innerHTML = menuItems(kind).map((it) => {
+      if (it.sep) return '<hr>';
+      if (it.dim) return `<button class="dim" role="menuitem" tabindex="-1">${it.dim}${it.kbd ? `<span class="kbd">${it.kbd}</span>` : ''}</button>`;
+      const a = ACTIONS[it.action];
+      return `<button role="menuitem" data-action="${it.action}">${icon(a.icon)}<span>${a.label}</span>${it.isNew ? '<span class="new">NEW</span>' : ''}${it.kbd ? `<span class="kbd">${it.kbd}</span>` : ''}</button>`;
+    }).join('');
+    m.hidden = false;
+    const win = $('win').getBoundingClientRect();
+    const w = m.offsetWidth, h = m.offsetHeight;
+    m.style.left = `${Math.max(6, Math.min(x, win.width - w - 6))}px`;
+    m.style.top = `${Math.max(6, Math.min(y, win.height - h - 6))}px`;
+    const first = m.querySelector('button[data-action]');
+    if (first) first.focus();
+  }
+  const closeMenu = () => { $('menu').hidden = true; };
+
+  // wiring
+  const group = $('stateGroup');
+  for (const key of Object.keys(STATES)) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.dataset.state = key;
+    b.textContent = key;
+    group.appendChild(b);
+  }
+  group.addEventListener('click', (e) => {
+    const b = e.target.closest('.chip');
+    if (b) { state.status = b.dataset.state; render(); }
+  });
+
+  $('hasSuite').addEventListener('change', (e) => {
+    state.hasSuite = e.target.checked;
+    if (!state.hasSuite) state.file = 'cbl';
+    render();
+  });
+
+  document.querySelector('.tabs').addEventListener('click', (e) => {
+    const t = e.target.closest('.tab');
+    if (t) setFile(t.dataset.file);
+  });
+
+  $('win').addEventListener('click', (e) => {
+    const act = e.target.closest('[data-action]');
+    if (act) { closeMenu(); ACTIONS[act.dataset.action].run(); return; }
+    const more = e.target.closest('[data-more]');
+    if (more) {
+      const win = $('win').getBoundingClientRect(), r = more.getBoundingClientRect();
+      openMenu('more', r.right - win.left - 250, r.bottom - win.top + 4);
+      return;
+    }
+    const go = e.target.closest('[data-go]');
+    if (go) {
+      $('hoverCard').hidden = true;
+      if (go.dataset.go === 'checking') {
+        state.status = 'checking'; render();
+        setTimeout(() => { state.status = 'ready'; render(); toast('mockymock is ready: the CLI and Docker are both available.'); }, 1400);
+      } else toast(go.dataset.go === 'guide' ? 'Opened the Getting Started guide.' : 'Opened Settings filtered to mockymock.');
+      return;
+    }
+    if (!e.target.closest('#menu')) closeMenu();
+  });
+
+  $('editor').addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const win = $('win').getBoundingClientRect();
+    openMenu('editor', e.clientX - win.left, e.clientY - win.top);
+  });
+  $('editor').addEventListener('keydown', (e) => {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      openMenu('editor', 60, 60);
+    }
+  });
+
+  // status bar: hover shows the card, click runs Check Setup
+  const sb = $('sbItem'), card = $('hoverCard');
+  let hideTimer;
+  const showCard = () => { clearTimeout(hideTimer); card.hidden = false; };
+  const hideCard = () => { hideTimer = setTimeout(() => { card.hidden = true; }, 220); };
+  sb.addEventListener('mouseenter', showCard);
+  sb.addEventListener('mouseleave', hideCard);
+  sb.addEventListener('focus', showCard);
+  sb.addEventListener('blur', hideCard);
+  card.addEventListener('mouseenter', showCard);
+  card.addEventListener('mouseleave', hideCard);
+  sb.addEventListener('click', () => {
+    const s = state.status;
+    if (s === 'ready' || s === 'checking') {
+      state.status = 'checking'; render();
+      setTimeout(() => { state.status = 'ready'; render(); toast('mockymock is ready: the CLI and Docker are both available.'); }, 1400);
+    } else {
+      toast(STATES[s].hint.replace(/^Click to /, 'Running: ').replace(/^Click for /, 'Showing: '));
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeMenu(); card.hidden = true; }
+    if ((e.ctrlKey || e.metaKey) && e.altKey && (e.key === 'o' || e.key === 'O' || e.code === 'KeyO')) {
+      e.preventDefault();
+      if (state.file === 'cbl') { if (state.hasSuite) setFile('cut'); else toast('No suite yet: use the beaker to create CLAIMSEG.cut.'); }
+      else setFile('cbl');
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
