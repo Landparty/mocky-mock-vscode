@@ -45,11 +45,11 @@
           "name": "keyword.control.mock.cut"
         },
         {
-          "match": "^\\s*(BEFORE-ALL|BEFORE-EACH)\\s*$",
+          "match": "^\\s*(BEFORE-ALL|BEFORE-EACH|AFTER-EACH|AFTER-ALL)\\s*$",
           "name": "keyword.control.structure.cut"
         },
         {
-          "match": "^\\s*(?i:(END-BEFORE))\\.?\\s*$",
+          "match": "^\\s*(?i:(END-BEFORE|END-AFTER))\\.?\\s*$",
           "name": "keyword.control.structure.cut"
         },
         {
