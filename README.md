@@ -46,6 +46,10 @@ it does and how to use it.
 
 ## Features
 
+Want to see the editor experience before installing? Open
+[`preview/ux-preview.html`](preview/ux-preview.html) in a browser: an
+interactive mock of the title-bar buttons, right-click menus and status bar.
+
 - **New Test Suite in one click** — scaffolds a runnable `.cut` next to any
   COBOL program, boundaries pre-mocked; falls back to a starter template
   when the CLI can't analyze the program, so you always get a file to edit.
