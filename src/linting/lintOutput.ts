@@ -24,6 +24,14 @@ export interface LintProblem {
 const REFUSED_RE = /^mockymock lint: refused \((?<code>[A-Z_]+)\): (?<message>.*)$/;
 const INVALID_CUT_RE = /^mockymock lint: invalid \.cut file .*?: line (?<line>\d+): (?<message>.*)$/;
 const GENERIC_PROBLEM_RE = /^mockymock lint: (?<message>(?!no problems found\.)(?!\d+ problem\(s\) found\.).+)$/;
+// Transparency notes lint prints under the same prefix, ahead of any
+// problems: a refusal waived because no selected case can reach it, and the
+// DFHRESP(...) expansion summary. Informational -- never a problem.
+const NOTE_RE = /^mockymock lint: (?:.* waived: |expanded \d+ DFHRESP\()/;
+// A malformed cobol.yml / mockymock.toml (or a cobol.yml the installed
+// cobol-parser is too old to read) stops every config-reading command before
+// it runs, with one bare `mockymock: <path>: ...` line and exit 1.
+const CONFIG_ERROR_RE = /^mockymock: (?<message>.+)$/;
 // Refusal messages frequently embed "line N" for the offending statement --
 // kept for display (lintGate.ts's blocking-dialog text), but it is a .cbl
 // line, never a .cut one; see LintProblem.line's doc comment.
@@ -58,6 +66,12 @@ export function parseLintOutput(stdout: string): LintProblem[] {
         message: match.groups.message,
         code: match.groups.code,
       });
+      continue;
+    }
+    if (NOTE_RE.test(line)) continue;
+    match = CONFIG_ERROR_RE.exec(line);
+    if (match?.groups) {
+      problems.push({ line: null, message: match.groups.message, code: null });
       continue;
     }
     match = GENERIC_PROBLEM_RE.exec(line);

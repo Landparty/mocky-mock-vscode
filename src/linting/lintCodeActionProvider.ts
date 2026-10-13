@@ -1,3 +1,4 @@
+import * as path from 'path';
 // src/linting/lintCodeActionProvider.ts
 //
 // A Quick Fix on an UNMOCKED_* lint diagnostic: run `mockymock generate
@@ -13,7 +14,7 @@
 // docs/2026-09-15-cut-editor-intelligence-design.md.
 import * as vscode from 'vscode';
 import { resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { hasSuggestedFix } from './lintCodeActionLogic';
 
@@ -93,7 +94,7 @@ export function activateLintCodeActions(
       const args = ['generate', cblPath, '--fill', cutPath];
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
-      const result = await runCommand(executablePath, args);
+      const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
       if (result.code !== 0) {
         void vscode.window.showErrorMessage(
           `mockymock generate --fill failed: ${result.stderr || result.stdout || 'unknown error'}`

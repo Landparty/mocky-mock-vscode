@@ -80,6 +80,33 @@ describe('parseLintOutput', () => {
   });
 });
 
+describe('parseLintOutput: notes and config errors', () => {
+  it('skips waiver and DFHRESP-expansion notes, keeping the real problem', () => {
+    const stdout = [
+      "mockymock lint: unresolved COPY statement at line 45 waived: it is confined to paragraph '9000-ERR', which no selected test case can execute -- commenting lines 45-45 out of the instrumented source so GnuCOBOL never sees the unresolvable COPY",
+      'mockymock lint: expanded 2 DFHRESP(...) call(s) to their EIBRESP values (NORMAL=0, NOTFND=13), as the CICS translator would',
+      'mockymock lint: refused (UNMATCHED_MOCK): MOCK CALL "X" matches no call site',
+      'mockymock lint: 1 problem(s) found.',
+    ].join('\n');
+    assert.deepStrictEqual(parseLintOutput(stdout), [
+      { line: null, message: 'MOCK CALL "X" matches no call site', code: 'UNMATCHED_MOCK' },
+    ]);
+  });
+
+  it('reports a project config error (bare `mockymock:` line) as a file-level problem', () => {
+    const stdout =
+      "mockymock: /ws/cobol.yml needs a cobol-parser that can read it (>= 1.10). Upgrade with 'pip install -U cobol-parser', or move these settings into a mockymock.toml.\n";
+    assert.deepStrictEqual(parseLintOutput(stdout), [
+      {
+        line: null,
+        message:
+          "/ws/cobol.yml needs a cobol-parser that can read it (>= 1.10). Upgrade with 'pip install -U cobol-parser', or move these settings into a mockymock.toml.",
+        code: null,
+      },
+    ]);
+  });
+});
+
 describe('cutRelativeLine', () => {
   it('trusts the line only for CUT_PARSE_ERROR, the one code the CLI documents as .cut-relative', () => {
     assert.strictEqual(cutRelativeLine({ line: 7, message: 'x', code: 'CUT_PARSE_ERROR' }), 7);

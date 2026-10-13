@@ -13,8 +13,18 @@ export type CommandRunner = (
   command: string,
   args: string[],
   onOutput?: OutputListener,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  cwd?: string
 ) => Promise<CommandResult>;
+
+// The CLI finds its project config (cobol.yml, mockymock.toml or
+// [tool.mockymock] in pyproject.toml) by walking up from its working
+// directory. Spawned with the extension host's cwd -- wherever VS Code was
+// launched from -- that config applied only by accident, so every call that
+// acts on a .cut/.cbl runs from that file's directory instead.
+export function runCommandIn(cwd: string): CommandRunner {
+  return (command, args, onOutput, signal) => runCommand(command, args, onOutput, signal, cwd);
+}
 
 // When spawn() is invoked with `shell: true`, Node hands the args array to cmd.exe by
 // joining it into a single command-line string WITHOUT adding any quoting of its own.
@@ -63,7 +73,7 @@ export function describeSpawnError(err: NodeJS.ErrnoException): string {
   return err.code === 'EACCES' ? 'permission denied' : 'command not found';
 }
 
-export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
+export const runCommand: CommandRunner = (command, args, onOutput, signal, cwd) => {
   return new Promise((resolve) => {
     let stdout = '';
     let stderr = '';
@@ -93,6 +103,7 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal) => {
       child = spawn(spawnCommand, spawnArgs, {
         shell: useShell,
         signal,
+        cwd,
         env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
       });
     } catch (err) {

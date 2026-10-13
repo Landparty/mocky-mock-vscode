@@ -16,7 +16,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { runCommand } from '../environment/commandRunner';
+import { runCommandIn } from '../environment/commandRunner';
 import { supportsGenerateCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
@@ -118,6 +118,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor.document.uri);
       const channel = getOutputChannel();
 
+      const runCommand = runCommandIn(path.dirname(cblPath));
       const canGenerate = await supportsGenerateCommand(runCommand, executablePath);
       if (canGenerate) {
         const result = await vscode.window.withProgress(

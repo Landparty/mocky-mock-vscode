@@ -1,8 +1,9 @@
 // src/linting/lintDiagnostics.ts
+import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { cutRelativeLine, parseLintOutput } from './lintOutput';
 
@@ -57,7 +58,7 @@ export function activateLintDiagnostics(
       const args = ['lint', cblPath, '--cut', cutPath];
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
-      const result = await runCommand(executablePath, args);
+      const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
       if (result.code === 0) {
         collection.delete(document.uri);
         return;

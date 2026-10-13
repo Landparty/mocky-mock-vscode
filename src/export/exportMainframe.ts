@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { runCommand } from '../environment/commandRunner';
+import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { describeUnsupportedFeature, supportsExportCommand } from '../environment/checks';
 import { showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
@@ -97,7 +97,7 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Exporting mainframe-ready COBOL...' },
-        () => runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommand)
+        () => runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommandIn(path.dirname(cutPath)))
       );
       if (result.exitCode !== 0) {
         vscode.window.showErrorMessage(`mockymock export failed:\n${result.stdout}${result.stderr}`);

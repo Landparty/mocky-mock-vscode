@@ -1,3 +1,4 @@
+import * as path from 'path';
 // src/completion/cutCompletionProvider.ts
 //
 // Completion for the .cut DSL: MOCK category names (static), then the
@@ -8,7 +9,7 @@
 // repo) for the design this implements.
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import {
   BoundaryInfo,
@@ -57,7 +58,7 @@ async function loadBoundaries(
   const args = ['collect', cblPath, '--cut', cutPath, '--json', '--boundaries'];
   for (const p of copybookPaths) args.push('--copybook-path', p);
 
-  const result = await runCommand(executablePath, args);
+  const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
   let payload: { boundaries?: BoundaryInfo[] } = {};
   if (result.code === 0) {
     try {
