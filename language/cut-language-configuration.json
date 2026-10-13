@@ -14,7 +14,7 @@
   ],
   "folding": {
     "markers": {
-      "start": "^\\s*(MOCK\\b|BEFORE-ALL\\s*$|BEFORE-EACH\\s*$|AFTER-EACH\\s*$|AFTER-ALL\\s*$)",
+      "start": "^\\s*(MOCK\\b|(BEFORE|AFTER)-(ALL|EACH)\\s*$)",
       "end": "^\\s*(END-MOCK|END-BEFORE|END-AFTER)\\.?\\s*$"
     }
   }

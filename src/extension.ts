@@ -17,6 +17,7 @@ import { activateLintCodeActions } from './linting/lintCodeActionProvider';
 import { resolveExecutablePath } from './environment/checks';
 import { runCommandIn } from './environment/commandRunner';
 import { formatDoctorReport, parseDoctorJson, projectProblems } from './environment/doctorReport';
+import { activateCounterpartNavigation } from './navigation/counterpart';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
@@ -71,6 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCutHover(context);
   activateExportMainframeCommand(context);
   activateNewTestSuiteCommand(context);
+  activateCounterpartNavigation(context);
 
   context.subscriptions.push(
     vscode.debug.registerDebugAdapterDescriptorFactory(

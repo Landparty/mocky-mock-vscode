@@ -27,52 +27,127 @@
   "contributes": {
     "commands": [
       {
-        "command": "mockymock.checkEnvironment",
-        "title": "Check Setup (CLI and Docker)",
-        "category": "mockymock",
-        "icon": "$(pulse)"
-      },
-      {
         "command": "mockymock.newTestSuite",
         "title": "New Test Suite for This Program",
         "category": "mockymock",
         "icon": "$(beaker)"
       },
       {
-        "command": "mockymock.openWalkthrough",
-        "title": "Open Getting Started Guide",
-        "category": "mockymock"
+        "command": "mockymock.openTestSuite",
+        "title": "Open Test Suite",
+        "category": "mockymock",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "mockymock.openProgram",
+        "title": "Open Program Under Test",
+        "category": "mockymock",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "mockymock.fillMissingMocks",
+        "title": "Fill In Missing Mocks",
+        "category": "mockymock",
+        "icon": "$(wand)"
       },
       {
         "command": "mockymock.exportMainframe",
         "title": "Export Mainframe-Ready COBOL",
-        "category": "mockymock"
+        "category": "mockymock",
+        "icon": "$(export)"
       },
       {
-        "command": "mockymock.fillMissingMocks",
-        "title": "Fill Missing Mocks (mockymock generate --fill)",
-        "category": "mockymock"
+        "command": "mockymock.checkEnvironment",
+        "title": "Check Setup (CLI and Docker)",
+        "category": "mockymock",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "mockymock.openWalkthrough",
+        "title": "Open Getting Started Guide",
+        "category": "mockymock",
+        "icon": "$(book)"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "mockymock.newTestSuite",
-          "when": "resourceLangId == cobol",
+          "when": "resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/) && !mockymock.activeProgramHasSuite",
           "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.openTestSuite",
+          "when": "resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/) && mockymock.activeProgramHasSuite",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.openProgram",
+          "when": "resourceLangId == cut && mockymock.activeSuiteHasProgram",
+          "group": "navigation@1"
+        },
+        {
+          "command": "mockymock.fillMissingMocks",
+          "when": "resourceLangId == cut",
+          "group": "1_mockymock@1"
+        },
+        {
+          "command": "mockymock.exportMainframe",
+          "when": "resourceLangId == cut || resourceLangId == cobol && mockymock.activeProgramHasSuite",
+          "group": "1_mockymock@2"
         }
       ],
       "editor/context": [
         {
           "command": "mockymock.newTestSuite",
-          "when": "resourceLangId == cobol",
+          "when": "resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/) && !mockymock.activeProgramHasSuite",
           "group": "mockymock@0"
+        },
+        {
+          "command": "mockymock.openTestSuite",
+          "when": "resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/) && mockymock.activeProgramHasSuite",
+          "group": "mockymock@0"
+        },
+        {
+          "command": "mockymock.openProgram",
+          "when": "resourceLangId == cut && mockymock.activeSuiteHasProgram",
+          "group": "mockymock@0"
+        },
+        {
+          "command": "mockymock.fillMissingMocks",
+          "when": "resourceLangId == cut",
+          "group": "mockymock@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "mockymock.newTestSuite",
+          "when": "resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/)",
+          "group": "7_mockymock@1"
+        },
+        {
+          "command": "mockymock.fillMissingMocks",
+          "when": "resourceLangId == cut",
+          "group": "7_mockymock@1"
+        },
+        {
+          "command": "mockymock.exportMainframe",
+          "when": "resourceLangId == cut",
+          "group": "7_mockymock@2"
         }
       ],
       "commandPalette": [
         {
           "command": "mockymock.newTestSuite",
           "when": "resourceLangId == cobol || resourceLangId == cut"
+        },
+        {
+          "command": "mockymock.openTestSuite",
+          "when": "resourceLangId == cobol"
+        },
+        {
+          "command": "mockymock.openProgram",
+          "when": "resourceLangId == cut"
         },
         {
           "command": "mockymock.exportMainframe",
@@ -201,11 +276,6 @@
     "configuration": {
       "title": "mockymock",
       "properties": {
-        "mockymock.executablePath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the mockymock executable. Leave empty to use the CLI binary bundled in this extension (if present), otherwise resolve 'mockymock' from PATH."
-        },
         "mockymock.copybookPaths": {
           "type": "array",
           "items": {
@@ -213,20 +283,29 @@
           },
           "default": [],
           "scope": "resource",
-          "description": "Folder paths passed as --copybook-path on every mockymock run, for resolving COPY / EXEC SQL INCLUDE members. Relative paths resolve against the .cut file's workspace folder. Resource-scoped so each folder in a multi-root workspace can set its own via that folder's .vscode/settings.json. When this setting is unset anywhere, cobolAnalyzer.copybookPaths is used instead, so one copybook setup serves both this extension and the companion COBOL Analyzer extension (which does the mirror-image fallback); setting this to an empty list explicitly means empty, not inherited. If a zapp.yml or zapp.yaml exists at the workspace root (the same file IBM Z Open Editor's DBB tooling uses), its cobol-language local library locations are also merged in automatically, after this setting's own entries (this setting wins on a duplicate path)."
+          "order": 1,
+          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
         },
         "mockymock.lintOnSave": {
           "type": "boolean",
           "default": true,
           "scope": "resource",
-          "description": "Run 'mockymock lint' (static checks only, no Docker) on open/save of a .cut file and show the problems as diagnostics."
+          "order": 2,
+          "markdownDescription": "Check `.cut` suites against their program as you open and save them, and show problems in the editor. Fast and offline — no Docker needed."
         },
         "mockymock.maxParallelRuns": {
           "type": "number",
           "default": 1,
           "minimum": 1,
           "scope": "window",
-          "description": "How many .cut files may run concurrently in one test run. Each run compiles and executes inside the shared mockymock-cobc container; raise this only if your setup tolerates concurrent compiles."
+          "order": 3,
+          "markdownDescription": "How many `.cut` files may run at once. Each compiles in the shared GnuCOBOL container, so keep this at `1` unless your machine has room to spare."
+        },
+        "mockymock.executablePath": {
+          "type": "string",
+          "default": "",
+          "order": 4,
+          "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build."
         }
       }
     },
@@ -279,7 +358,7 @@
           {
             "id": "debugTests",
             "title": "Debug a test case",
-            "description": "Set a breakpoint in your .cbl, then right-click a test case and pick **Debug (Interactive)** to step through your original COBOL with live variables. Prefer a read-only view? **Debug (Execution Trace)** prints the executed path and every mock that fired.",
+            "description": "Set a breakpoint in your .cbl, then right-click a test case and pick **Debug (Interactive)** to step through your original COBOL with live variables. Prefer a read-only view? **Debug (Execution Trace)** prints the executed path and every mock that fired.\n[Open Test Explorer](command:workbench.view.testing.focus)",
             "media": {
               "markdown": "walkthroughs/debug-tests.md"
             },
@@ -290,7 +369,7 @@
           {
             "id": "goFurther",
             "title": "Coverage, mutation testing and more",
-            "description": "**Run with Coverage** paints executed lines on your .cbl. **Mutation Test** tells you which bugs your tests would miss. Right-click any COBOL file for static analyzers, a Program Flow diagram, and a mainframe-ready export.\n[Browse the examples](https://github.com/Landparty/mocky-mock-vscode/tree/main/examples)",
+            "description": "**Run with Coverage** paints executed lines on your .cbl. **Mutation Test** tells you which bugs your tests would miss. The button in the editor title bar (or Ctrl+Alt+O, Cmd+Alt+O on macOS) jumps between a program and its suite. For COBOL language support and static analysis, add the companion COBOL Analyzer extension.\n[Browse the examples](https://github.com/Landparty/mocky-mock-vscode/tree/main/examples)",
             "media": {
               "markdown": "walkthroughs/go-further.md"
             },
@@ -299,6 +378,20 @@
             ]
           }
         ]
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "mockymock.openTestSuite",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o",
+        "when": "editorTextFocus && editorLangId == cobol"
+      },
+      {
+        "command": "mockymock.openProgram",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o",
+        "when": "editorTextFocus && editorLangId == cut"
       }
     ]
   },

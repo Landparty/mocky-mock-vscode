@@ -21,7 +21,9 @@ TESTCASE "10% discount reduces net amount"
 ## Three ways to create one
 
 - Click the **beaker icon** in the editor title bar of any open COBOL program.
-- Right-click inside a COBOL program and choose **New Test Suite for This Program**.
+- Right-click inside a COBOL program, or on it in the Explorer, and choose **New Test Suite for This Program**.
 - Use the **Create a Test Suite** button in an empty Test Explorer.
 
 The generated suite is runnable as-is. Fill in the `MOVE` and `EXPECT` lines, and type `testcase`, `mock-call` or `expect` for snippets while you edit.
+
+Once a program has a suite, the beaker turns into **Open Test Suite**, and the suite's title bar gets a button back to the program -- or press `Ctrl+Alt+O` (`Cmd+Alt+O` on macOS) to flip between them.

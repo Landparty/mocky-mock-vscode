@@ -7,10 +7,13 @@ The result shows in the status bar at the bottom of the window:
 
 | Status bar | Meaning |
 |---|---|
-| `✓ mockymock: ready` | Everything works. Go write a test. |
-| `⚠ mockymock: Docker not running` | Click it to start Docker Desktop. |
-| `⚠ mockymock: Docker not installed` | Click it for the download page. |
+| `✓ mockymock` | Everything works. Go write a test. |
+| `⚠ mockymock: start Docker` | Click it to start Docker Desktop. |
+| `⚠ mockymock: Docker needed` | Click it for the download page. |
 | `⚠ mockymock: CLI not found` | Click it to install the CLI. |
+| `⊗ mockymock: CLI blocked` | The OS refused to run the CLI. Click it for the fix. |
+
+Anything that needs your attention is highlighted in the warning or error colour. Hover the item for what's wrong, plus quick links to Check Setup, this guide and the settings.
 
 You can re-run this at any time from the Command Palette:
 **mockymock: Check Setup (CLI and Docker)**.
