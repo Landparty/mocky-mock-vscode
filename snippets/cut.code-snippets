@@ -51,13 +51,28 @@
   },
   "Before each test case": {
     "prefix": "before-each",
-    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
-    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
+    "body": ["BEFORE-EACH", "    ${1:MOVE ${2:0} TO ${3:WS-FIELD}}", "END-BEFORE"],
+    "description": "BEFORE-EACH: MOVE/PERFORM steps run at the start of every TESTCASE (before its own MOVEs); may also hold shared MOCK blocks a TESTCASE can override"
   },
   "Before all test cases": {
     "prefix": "before-all",
-    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
-    "description": "BEFORE-ALL block of shared mocks (BEFORE-EACH and TESTCASE mocks override these)"
+    "body": ["BEFORE-ALL", "    PERFORM ${1:0100-INIT}", "END-BEFORE"],
+    "description": "BEFORE-ALL: steps run once before the first TESTCASE; every TESTCASE starts from the state they leave. MOCK blocks here answer during BEFORE-ALL/AFTER-ALL and are shared defaults"
+  },
+  "Shared mocks for every test case": {
+    "prefix": "before-each-mock",
+    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
+  },
+  "After each test case": {
+    "prefix": "after-each",
+    "body": ["AFTER-EACH", "    ${1:PERFORM ${2:9000-CLEANUP}}", "END-AFTER"],
+    "description": "AFTER-EACH: MOVE/PERFORM steps run at the end of every TESTCASE, after its EXPECT/VERIFY"
+  },
+  "After all test cases": {
+    "prefix": "after-all",
+    "body": ["AFTER-ALL", "    PERFORM ${1:9000-CLOSE}", "END-AFTER"],
+    "description": "AFTER-ALL: steps run once after the last TESTCASE (with BEFORE-ALL's mocks)"
   },
   "Mock a paragraph or section": {
     "prefix": "mock-paragraph",

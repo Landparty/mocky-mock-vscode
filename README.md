@@ -70,6 +70,10 @@ it does and how to use it.
   targets and refusal codes, and a **Quick Fix** that inserts a missing
   `MOCK` block for you.
 - **`.cut` language support** — syntax highlighting, folding, snippets.
+- **Setup and teardown like JUnit** — `BEFORE-ALL`, `BEFORE-EACH`,
+  `AFTER-EACH` and `AFTER-ALL` blocks run `MOVE`/`PERFORM` steps once per
+  suite or around every test case; every case starts from the state
+  `BEFORE-ALL` left. Type `before-all`, `after-each`, … for a snippet.
 - **Export Mainframe-Ready COBOL** — write the instrumented build to a
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
   compiler instead of GnuCOBOL, zero Docker needed.
