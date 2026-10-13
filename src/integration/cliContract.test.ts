@@ -1,5 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import { spawnSync } from 'child_process';
 import { buildRunArgs } from '../testing/mockymockRunner';
 import { buildMutateArgs } from '../testing/mutationRunner';
@@ -8,6 +10,7 @@ import { buildDebugArgs, buildLintArgs } from '../debug/debugArgs';
 import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
 import { parseLintOutput } from '../linting/lintOutput';
 import { BoundaryInfo, boundaryKeyCandidates } from '../completion/cutCompletionLogic';
+import { parseDoctorJson } from '../environment/doctorReport';
 
 // Everything this extension does, it does by spawning the mockymock CLI and
 // parsing what comes back. Every OTHER test in this repo checks that against
@@ -30,8 +33,8 @@ const CLI = process.env.MOCKYMOCK_CLI ?? 'mockymock';
 // container to do anything real, so this file exercises their ARGUMENT
 // contract (via --help, which argparse short-circuits before validating
 // anything) and leaves their execution to the manual/CI integration path.
-function cli(args: string[]): { code: number; stdout: string; stderr: string } {
-  const result = spawnSync(CLI, args, { encoding: 'utf8' });
+function cli(args: string[], cwd?: string): { code: number; stdout: string; stderr: string } {
+  const result = spawnSync(CLI, args, { encoding: 'utf8', cwd });
   return {
     code: result.status ?? -1,
     stdout: result.stdout ?? '',
@@ -218,6 +221,56 @@ describe('mockymock CLI contract (live)', function () {
       for (const b of boundaries) {
         assert.ok(b.directive === null || typeof b.directive === 'string');
       }
+    });
+
+    it('parseDoctorJson parses a real `doctor --json`, including the project checks Check Setup reports', () => {
+      // doctor exits 1 when Docker is down; its JSON is the contract either way.
+      const result = cli(['doctor', '--json']);
+      const report = parseDoctorJson(result.stdout);
+      assert.ok(report, `doctor --json output no longer parses:\n${result.stdout}${result.stderr}`);
+      const ids = report.checks.map((c) => c.id);
+      for (const id of ['cobol_parser', 'config_file']) {
+        assert.ok(ids.includes(id), `expected a '${id}' check, got: ${ids.join(', ')}`);
+      }
+    });
+
+    // runCommandIn spawns every file-scoped call from the .cut's folder on
+    // the strength of this: the CLI finds the project config by walking up
+    // from its working directory.
+    describe('project config (mockymock.toml) found from the working directory', () => {
+      let project: string;
+      let cbl: string;
+      let cut: string;
+
+      before(() => {
+        project = fs.mkdtempSync(path.join(os.tmpdir(), 'mockymock-contract-'));
+        const src = path.join(project, 'src');
+        fs.mkdirSync(src);
+        const example = path.join(process.cwd(), 'examples', 'real-world', 'ACCTPRG');
+        cbl = path.join(src, 'ACCTPRG.cbl');
+        cut = path.join(src, 'ACCTPRG.cut');
+        fs.copyFileSync(path.join(example, 'ACCTPRG.cbl'), cbl);
+        fs.copyFileSync(path.join(example, 'ACCTPRG.cut'), cut);
+        fs.cpSync(path.join(example, 'copybooks'), path.join(project, 'cpy'), { recursive: true });
+      });
+
+      after(() => fs.rmSync(project, { recursive: true, force: true }));
+
+      it("applies the config's copybook_path when run from the .cut's folder", () => {
+        fs.writeFileSync(path.join(project, 'mockymock.toml'), 'copybook_path = ["cpy"]\n');
+        const result = cli(['lint', cbl, '--cut', cut], path.dirname(cut));
+        assert.strictEqual(result.code, 0, `expected the config's copybook_path to resolve COPY:\n${result.stdout}`);
+      });
+
+      it('reports a malformed config as a lint problem, not silence', () => {
+        fs.writeFileSync(path.join(project, 'mockymock.toml'), 'copybook_path = 42\n');
+        const result = cli(['lint', cbl, '--cut', cut], path.dirname(cut));
+        assert.notStrictEqual(result.code, 0);
+        assert.ok(
+          parseLintOutput(result.stdout).length > 0,
+          `a config error must surface as a problem:\n${result.stdout}${result.stderr}`
+        );
+      });
     });
 
     it('cutHoverProvider parses a real `explain --json`', () => {
