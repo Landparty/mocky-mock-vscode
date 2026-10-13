@@ -97,6 +97,14 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
         });
       }
 
+      if (completionContext.kind === 'rows') {
+        const item = new vscode.CompletionItem('ROWS', vscode.CompletionItemKind.Keyword);
+        item.range = new vscode.Range(position.translate(0, -completionContext.partial.length), position);
+        item.detail =
+          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI call (those also need a TERMINAL ( ... ) line)';
+        return [item];
+      }
+
       const boundaries = await loadBoundaries(context, document);
       if (!boundaries) return undefined;
       const candidates = boundaryKeyCandidates(boundaries, completionContext.category);

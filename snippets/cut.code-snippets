@@ -34,6 +34,11 @@
     "body": ["MOCK READ ${1:FILE-NAME} ROWS", "    ( ${2:FIELD} = ${3:value} )", "    TERMINAL ( ${4:FIELD} = ${5:value} )", "END-MOCK"],
     "description": "MOCK READ ... ROWS cursor block with a TERMINAL group for the rows-exhausted (AT END) branch"
   },
+  "Mock a CALL with one response per call": {
+    "prefix": "mock-call-rows",
+    "body": ["MOCK ${1|CALL \"PROGRAM\",MQ \"MQGET\",DLI \"GN\"|} ROWS", "    ( ${2:FIELD} = ${3:value} )", "    TERMINAL ( ${4:FIELD} = ${5:value} )", "END-MOCK"],
+    "description": "MOCK CALL/MQ/DLI ... ROWS: row N answers the Nth call of this key in the test case; TERMINAL (required here) answers every call after the last row"
+  },
   "Verify call count": {
     "prefix": "verify",
     "body": ["VERIFY \"${1:PROGRAM}\" WAS CALLED ${2|ONCE,NEVER,AT LEAST ONCE,2 TIMES|}"],
@@ -51,13 +56,23 @@
   },
   "Before each test case": {
     "prefix": "before-each",
-    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
-    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
+    "body": ["BEFORE-EACH", "    MOVE ${1:0} TO ${2:WS-FIELD}", "END-BEFORE"],
+    "description": "BEFORE-EACH hook: MOVE/PERFORM steps run at the start of every test case, and MOCK blocks shared by every case (a TESTCASE mock with the same key overrides these)"
   },
   "Before all test cases": {
     "prefix": "before-all",
-    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
-    "description": "BEFORE-ALL block of shared mocks (BEFORE-EACH and TESTCASE mocks override these)"
+    "body": ["BEFORE-ALL", "    MOCK ${1|CALL,MQ,SQL,CICS,DLI,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT,PARAGRAPH,SECTION|} ${2:NAME}", "    END-MOCK", "    PERFORM ${3:0100-INIT}", "END-BEFORE"],
+    "description": "BEFORE-ALL hook: MOVE/PERFORM steps run once before the first test case (every case starts from the state they leave), and MOCK blocks shared by every case (BEFORE-EACH and TESTCASE mocks override these)"
+  },
+  "After each test case": {
+    "prefix": "after-each",
+    "body": ["AFTER-EACH", "    ${1|PERFORM,MOVE|} ${2:9000-CLEANUP}", "END-AFTER"],
+    "description": "AFTER-EACH hook: MOVE/PERFORM steps run at the end of every test case, after its EXPECT/VERIFY (no MOCK, EXPECT or VERIFY allowed)"
+  },
+  "After all test cases": {
+    "prefix": "after-all",
+    "body": ["AFTER-ALL", "    PERFORM ${1:9000-CLOSE-FILES}", "END-AFTER"],
+    "description": "AFTER-ALL hook: MOVE/PERFORM steps run once after the last test case, with the BEFORE-ALL mocks (no MOCK, EXPECT or VERIFY allowed)"
   },
   "Mock a paragraph or section": {
     "prefix": "mock-paragraph",

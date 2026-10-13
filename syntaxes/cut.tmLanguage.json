@@ -33,7 +33,7 @@
           }
         },
         {
-          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
+          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|INITIATE|GENERATE|TERMINATE|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
           "captures": {
             "1": { "name": "keyword.control.mock.cut" },
             "2": { "name": "storage.type.category.cut" },
@@ -45,11 +45,11 @@
           "name": "keyword.control.mock.cut"
         },
         {
-          "match": "^\\s*(BEFORE-ALL|BEFORE-EACH)\\s*$",
+          "match": "^\\s*(BEFORE-ALL|BEFORE-EACH|AFTER-EACH|AFTER-ALL)\\s*$",
           "name": "keyword.control.structure.cut"
         },
         {
-          "match": "^\\s*(?i:(END-BEFORE))\\.?\\s*$",
+          "match": "^\\s*(?i:(END-BEFORE|END-AFTER))\\.?\\s*$",
           "name": "keyword.control.structure.cut"
         },
         {
