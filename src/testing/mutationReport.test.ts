@@ -24,6 +24,7 @@ const SAMPLE = JSON.stringify({
       mutated: '           IF WS-AGE > 66',
       status: 'survived',
       detail: '',
+      hint: 'every test case starts WS-AGE at 0; seed a non-zero starting value to kill this mutant',
     },
   ],
 });
@@ -48,7 +49,10 @@ describe('parseMutationJson', () => {
       mutated: '           IF WS-AGE > 66',
       status: 'survived',
       detail: '',
+      hint: 'every test case starts WS-AGE at 0; seed a non-zero starting value to kill this mutant',
     });
+    // An older CLI (or a non-survivor) carries no hint: it reads as empty.
+    assert.strictEqual(report!.mutants[0].hint, '');
   });
 
   it('returns null for malformed or alien documents', () => {
@@ -89,8 +93,8 @@ describe('parseMutationJson', () => {
     const report = parseMutationJson(
       JSON.stringify({
         mutants: [
-          { line: 1, operator: 'a', description: '', original: '', mutated: '', status: 'killed', detail: '' },
-          { line: 2, operator: 'b', description: '', original: '', mutated: '', status: 'survived', detail: '' },
+          { line: 1, operator: 'a', description: '', original: '', mutated: '', status: 'killed', detail: '', hint: '' },
+          { line: 2, operator: 'b', description: '', original: '', mutated: '', status: 'survived', detail: '', hint: '' },
         ],
       })
     );

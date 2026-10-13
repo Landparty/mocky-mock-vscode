@@ -105,7 +105,8 @@ export function activateTestController(
     const line = Math.max(0, m.line - 1);
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
-      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"`,
+      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"` +
+        (m.hint ? `\n${m.hint}` : ''),
       vscode.DiagnosticSeverity.Warning
     );
     diagnostic.source = 'mockymock mutation';
@@ -707,7 +708,8 @@ export function activateTestController(
       const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
       const messages = survivors.map((m) => {
         const message = vscode.TestMessage.diff(
-          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})`,
+          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})` +
+            (m.hint ? `\n${m.hint}` : ''),
           m.original,
           m.mutated
         );

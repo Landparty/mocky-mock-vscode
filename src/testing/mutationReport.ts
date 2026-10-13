@@ -22,6 +22,12 @@ export interface MutantEntry {
   status: MutantStatus;
   /** First failure reason for a kill; first compile line for a stillborn. */
   detail: string;
+  /**
+   * Set only on a survivor the suite's test data probably cannot kill (e.g.
+   * every case starts the mutated field at zero): why, and what starting
+   * value to change. Empty otherwise, and on a CLI older than the field.
+   */
+  hint: string;
 }
 
 export interface MutationReport {
@@ -71,6 +77,7 @@ export function parseMutationJson(text: string): MutationReport | null {
       mutated: asString(item.mutated),
       status: item.status as MutantStatus,
       detail: asString(item.detail),
+      hint: asString(item.hint),
     });
   }
 
