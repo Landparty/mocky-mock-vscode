@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { absolutizeDebugPaths, buildDebugArgs, buildLintArgs, MockymockDebugConfiguration } from './debugArgs';
+import { absolutizeDebugPaths, buildDebugArgs, debugAdapterCwd, buildLintArgs, MockymockDebugConfiguration } from './debugArgs';
 
 describe('buildDebugArgs', () => {
   it('builds the debug --dap-stdio argv for a config with no copybook paths', () => {
@@ -87,8 +87,28 @@ describe('absolutizeDebugPaths', () => {
     assert.strictEqual(resolved.cut, abs);
   });
 
+  it('anchors relative copybook paths to the same workspace folder', () => {
+    const abs = path.resolve('/shared/cpy');
+    const resolved = absolutizeDebugPaths(
+      { program: 'src/P.cbl', cut: 'test/P.cut', copybookPaths: ['copybooks', abs] },
+      '/ws'
+    );
+    assert.deepStrictEqual(resolved.copybookPaths, [path.resolve('/ws', 'copybooks'), abs]);
+  });
+
   it('is a no-op with no workspace folder to anchor to', () => {
     const config = { program: 'P.cbl', cut: 'P.cut' };
     assert.deepStrictEqual(absolutizeDebugPaths(config, undefined), config);
+  });
+});
+
+describe('debugAdapterCwd', () => {
+  it("is the .cut's folder for an absolute cut path", () => {
+    const cut = path.resolve('/ws/test/P.cut');
+    assert.strictEqual(debugAdapterCwd({ cut }), path.dirname(cut));
+  });
+
+  it('is undefined for a still-relative cut, so relative paths keep their base', () => {
+    assert.strictEqual(debugAdapterCwd({ cut: 'tests/P.cut' }), undefined);
   });
 });

@@ -29,27 +29,26 @@ async function isCutWorkspace(): Promise<boolean> {
   return cutFile !== undefined;
 }
 
-let setupChannel: vscode.OutputChannel | undefined;
-
 // `mockymock doctor --json`, run from the active file's folder (else the
 // first workspace folder) so it finds the same cobol.yml / mockymock.toml a
 // run would. Returns the project-level problems it found -- an unreadable
 // config or a broken cobol-parser -- and logs the full report. Silent
 // (empty) on a CLI too old to have `doctor`.
-async function runDoctor(context: vscode.ExtensionContext): Promise<string[]> {
+async function runDoctor(context: vscode.ExtensionContext, channel: vscode.OutputChannel): Promise<string[]> {
   const active = vscode.window.activeTextEditor?.document.uri;
-  const scope = active?.scheme === 'file' ? active : vscode.workspace.workspaceFolders?.[0]?.uri;
-  const cwd = active?.scheme === 'file' ? path.dirname(active.fsPath) : scope?.fsPath;
+  const cwd =
+    active?.scheme === 'file' ? path.dirname(active.fsPath) : vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  // Resolved exactly as EnvironmentManager.ensureReady resolves it, so doctor
+  // reports on the same CLI the readiness check just probed.
   const executablePath = resolveExecutablePath(
-    vscode.workspace.getConfiguration('mockymock', scope).get<string>('executablePath'),
+    vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
     context.extensionPath
   );
   const result = await runCommandIn(cwd ?? process.cwd())(executablePath, ['doctor', '--json']);
   const report = parseDoctorJson(result.stdout);
   if (!report) return [];
-  setupChannel ??= vscode.window.createOutputChannel('mockymock: Setup');
-  setupChannel.appendLine(formatDoctorReport(report));
-  setupChannel.appendLine('');
+  channel.appendLine(formatDoctorReport(report));
+  channel.appendLine('');
   return projectProblems(report).map((c) => `${c.label}: ${c.detail}`);
 }
 
@@ -82,6 +81,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider(context))
   );
 
+  const setupChannel = vscode.window.createOutputChannel('mockymock: Setup');
+  context.subscriptions.push(setupChannel);
+
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.checkEnvironment', async () => {
       const result = await environmentManager.ensureReady();
@@ -92,14 +94,14 @@ export function activate(context: vscode.ExtensionContext) {
       // In a workspace with no suite yet, "ready" naturally leads to "so
       // write one" -- offer that next step right on the toast.
       if (result.ok) {
-        const problems = await runDoctor(context);
+        const problems = await runDoctor(context, setupChannel);
         if (problems.length) {
           const showReport = 'Show Report';
           const choice = await vscode.window.showWarningMessage(
             `mockymock: the CLI and Docker are available, but ${problems.join('; ')}`,
             showReport
           );
-          if (choice === showReport) setupChannel?.show();
+          if (choice === showReport) setupChannel.show();
           return;
         }
         const createSuite = 'Create a Test Suite';

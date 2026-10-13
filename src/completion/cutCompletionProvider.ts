@@ -9,7 +9,7 @@ import * as path from 'path';
 // repo) for the design this implements.
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommandIn } from '../environment/commandRunner';
+import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import {
   BoundaryInfo,
@@ -126,7 +126,15 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
     },
   };
 
+  // The cache is keyed on the .cut/.cbl mtimes only, but a project config
+  // change (copybook_path, say) changes what `collect --boundaries` sees.
+  const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const dropCache = (): void => boundaryCache.clear();
   context.subscriptions.push(
+    configWatcher,
+    configWatcher.onDidChange(dropCache),
+    configWatcher.onDidCreate(dropCache),
+    configWatcher.onDidDelete(dropCache),
     vscode.languages.registerCompletionItemProvider('cut', provider, ' '),
     vscode.workspace.onDidSaveTextDocument((document) => {
       if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {

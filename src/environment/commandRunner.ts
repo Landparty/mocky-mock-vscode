@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { spawn } from 'child_process';
 import { StringDecoder } from 'string_decoder';
 
@@ -22,8 +23,24 @@ export type CommandRunner = (
 // directory. Spawned with the extension host's cwd -- wherever VS Code was
 // launched from -- that config applied only by accident, so every call that
 // acts on a .cut/.cbl runs from that file's directory instead.
+//
+// A relative command path (a `mockymock.executablePath` like
+// `.venv/bin/mockymock`) is pinned to the extension host's cwd first, so it
+// names the same binary the setup probes -- which run without a cwd --
+// checked. A bare name (`mockymock`) is still looked up on PATH.
 export function runCommandIn(cwd: string): CommandRunner {
-  return (command, args, onOutput, signal) => runCommand(command, args, onOutput, signal, cwd);
+  return (command, args, onOutput, signal) =>
+    runCommand(anchorCommandPath(command, process.cwd()), args, onOutput, signal, cwd);
+}
+
+// The project config files the CLI layers in from the working directory
+// up. Lint results and completion's cached boundaries both depend on them,
+// so editing one has to invalidate those just like editing the .cut does.
+export const PROJECT_CONFIG_GLOB = '**/{cobol.yml,cobol.yaml,mockymock.toml,pyproject.toml}';
+
+export function anchorCommandPath(command: string, baseDir: string): string {
+  const hasSeparator = command.includes('/') || command.includes('\\');
+  return hasSeparator && !path.isAbsolute(command) ? path.resolve(baseDir, command) : command;
 }
 
 // When spawn() is invoked with `shell: true`, Node hands the args array to cmd.exe by
