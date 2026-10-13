@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { absolutizeDebugPaths } from './debugArgs';
 
 // This debug type is normally launched programmatically (see the "Debug
 // (Interactive)" test profile in testController.ts, which builds a complete
@@ -53,5 +54,18 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
     }
 
     return config;
+  }
+
+  // Runs after VS Code has substituted ${workspaceFolder} and friends, so a
+  // path that is still relative here really is relative -- see
+  // absolutizeDebugPaths for why the adapter needs it absolute.
+  resolveDebugConfigurationWithSubstitutedVariables(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration
+  ): vscode.ProviderResult<vscode.DebugConfiguration> {
+    if (typeof config.program !== 'string' || typeof config.cut !== 'string') {
+      return config;
+    }
+    return absolutizeDebugPaths({ ...config, program: config.program, cut: config.cut }, folder?.uri.fsPath);
   }
 }

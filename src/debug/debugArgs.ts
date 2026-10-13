@@ -5,6 +5,8 @@
 // a running Extension Host. debugAdapterFactory.ts casts vscode.DebugSession's
 // `configuration` (typed as vscode.DebugConfiguration, which carries a
 // `[key: string]: any` index signature) to this interface at its one call site.
+import * as path from 'path';
+
 export interface MockymockDebugConfiguration {
   program: string;
   cut: string;
@@ -37,4 +39,21 @@ export function buildLintArgs(config: Pick<MockymockDebugConfiguration, 'program
     args.push('--copybook-path', p);
   }
   return args;
+}
+
+// `mockymock debug` matches each setBreakpoints source against the program
+// it was started on by realpath, so a relative `program` (easy to write in a
+// hand-authored launch.json) would be resolved against the adapter process's
+// cwd -- not the workspace -- and every breakpoint VS Code sends (always an
+// absolute path) would come back unverified. Anchor relative program/cut paths
+// to the launching workspace folder instead; absolute paths pass through.
+export function absolutizeDebugPaths<T extends Pick<MockymockDebugConfiguration, 'program' | 'cut'>>(
+  config: T,
+  folderPath: string | undefined
+): T {
+  if (!folderPath) {
+    return config;
+  }
+  const anchor = (p: string): string => (path.isAbsolute(p) ? p : path.resolve(folderPath, p));
+  return { ...config, program: anchor(config.program), cut: anchor(config.cut) };
 }
