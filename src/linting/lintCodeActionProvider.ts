@@ -93,10 +93,13 @@ export function activateLintCodeActions(
       const args = ['generate', cblPath, '--fill', cutPath];
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
-      const result = await runCommand(executablePath, args);
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'mockymock: filling in missing mocks…' },
+        () => runCommand(executablePath, args)
+      );
       if (result.code !== 0) {
         void vscode.window.showErrorMessage(
-          `mockymock generate --fill failed: ${result.stderr || result.stdout || 'unknown error'}`
+          `mockymock couldn't fill in the missing mocks: ${result.stderr || result.stdout || 'unknown error'}`
         );
         return;
       }
