@@ -65,11 +65,13 @@ it does and how to use it.
 - **Live `.cut` linting** on open/save, zero Docker needed — the suite
   checked against the program it tests. (COBOL source itself is linted by
   the companion COBOL Analyzer extension; the two never overlap.)
-- **`.cut` editor intelligence** — completion for `MOCK` categories and the
-  program's own real boundary keys, hover text on tally counters, `CAPTURE`
+- **`.cut` editor intelligence** — completion for `MOCK` categories, the
+  program's own real boundary keys, and `ROWS` where a category takes one; hover text on tally counters, `CAPTURE`
   targets and refusal codes, and a **Quick Fix** that inserts a missing
   `MOCK` block for you.
-- **`.cut` language support** — syntax highlighting, folding, snippets.
+- **`.cut` language support** — syntax highlighting, folding, snippets,
+  including the `BEFORE-ALL`/`BEFORE-EACH`/`AFTER-EACH`/`AFTER-ALL` suite
+  hooks and per-call `MOCK CALL`/`MQ`/`DLI ... ROWS ... TERMINAL` responses.
 - **Export Mainframe-Ready COBOL** — write the instrumented build to a
   real fixed-format `.cbl`, adjusted for a mainframe (z/OS) COBOL
   compiler instead of GnuCOBOL, zero Docker needed.
@@ -154,6 +156,14 @@ it is unset, and COBOL Analyzer does the mirror image. Set either one and
 both extensions use it; set both and each uses its own. A
 `zapp.yml`/`zapp.yaml` at the workspace root (the file IBM Z Open Editor's
 DBB tooling uses) is honored by both on top of that.
+
+mockymock also reads a project config — `cobol.yml` (`project:
+copybook_path`), `mockymock.toml`, or `[tool.mockymock]` in
+`pyproject.toml` — found by walking up from the `.cut` file's folder. The
+CLI uses its `copybook_path` only when no `--copybook-path` is passed, so it
+applies when neither extension setting nor a `zapp.yml` names a folder.
+`mockymock: Check Setup` warns if that config can't be read, and a broken
+config shows up as a lint problem on the `.cut` file.
 
 ## Compiler
 
@@ -267,6 +277,9 @@ and reports which variants your tests failed to notice.
 - The **mutation score** (killed ÷ scored mutants) streams into Test Results
   along with per-mutant progress; a hang counts as killed, a mutant that
   fails to compile is excluded from the score.
+- When the CLI can tell a survivor probably *can't* be killed by your
+  current test data (every case starts the mutated field at zero, say), its
+  hint — which starting value to change — is added to the warning.
 - Mutation always exercises the whole suite (the CLI has no per-case mode),
   needs Docker like a normal run, and costs one compile+run per mutant —
   expect minutes, not seconds, on a large program.
