@@ -51,6 +51,12 @@
         "icon": "$(wand)"
       },
       {
+        "command": "mockymock.runMutationTest",
+        "title": "Run Mutation Test",
+        "category": "mockymock",
+        "icon": "$(zap)"
+      },
+      {
         "command": "mockymock.exportMainframe",
         "title": "Export Mainframe-Ready COBOL",
         "category": "mockymock",
@@ -92,9 +98,14 @@
           "group": "1_mockymock@1"
         },
         {
+          "command": "mockymock.runMutationTest",
+          "when": "resourceLangId == cut",
+          "group": "1_mockymock@2"
+        },
+        {
           "command": "mockymock.exportMainframe",
           "when": "resourceLangId == cut || resourceLangId == cobol && mockymock.activeProgramHasSuite",
-          "group": "1_mockymock@2"
+          "group": "1_mockymock@3"
         }
       ],
       "editor/context": [
@@ -156,6 +167,24 @@
         {
           "command": "mockymock.fillMissingMocks",
           "when": "resourceLangId == cut"
+        },
+        {
+          "command": "mockymock.runMutationTest",
+          "when": "resourceLangId == cut"
+        }
+      ],
+      "testing/item/context": [
+        {
+          "command": "mockymock.runMutationTest",
+          "when": "controllerId == mockymock",
+          "group": "mockymock@1"
+        }
+      ],
+      "testing/item/gutter": [
+        {
+          "command": "mockymock.runMutationTest",
+          "when": "controllerId == mockymock",
+          "group": "mockymock@1"
         }
       ]
     },
@@ -319,7 +348,7 @@
     "viewsWelcome": [
       {
         "view": "testing",
-        "contents": "No mockymock test suites yet. A test suite is a .cut file that sits next to your COBOL program.\n[Create a Test Suite](command:mockymock.newTestSuite)\nNew to mockymock? The [Getting Started guide](command:mockymock.openWalkthrough) walks you through setup, your first suite, and debugging."
+        "contents": "No mockymock test suites yet. A test suite is a .cut file named after your COBOL program, kept under tests/.\n[Create a Test Suite](command:mockymock.newTestSuite)\nNew to mockymock? The [Getting Started guide](command:mockymock.openWalkthrough) walks you through setup, your first suite, and debugging."
       }
     ],
     "walkthroughs": [
@@ -342,7 +371,7 @@
           {
             "id": "createSuite",
             "title": "Create your first test suite",
-            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite next to it. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
+            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
             "media": {
               "markdown": "walkthroughs/create-suite.md"
             },
@@ -365,7 +394,7 @@
           {
             "id": "debugTests",
             "title": "Debug a test case",
-            "description": "Set a breakpoint in your .cbl, then right-click a test case and pick **Debug (Interactive)** to step through your original COBOL with live variables. Prefer a read-only view? **Debug (Execution Trace)** prints the executed path and every mock that fired.\n[Open Test Explorer](command:workbench.view.testing.focus)",
+            "description": "Set a breakpoint in your .cbl, then right-click a test case and pick **Debug Test** to step through your original COBOL with live variables.\n[Open Test Explorer](command:workbench.view.testing.focus)",
             "media": {
               "markdown": "walkthroughs/debug-tests.md"
             },
@@ -376,7 +405,7 @@
           {
             "id": "goFurther",
             "title": "Coverage, mutation testing and more",
-            "description": "**Run with Coverage** paints executed lines on your .cbl. **Mutation Test** tells you which bugs your tests would miss. The button in the editor title bar (or Ctrl+Alt+O, Cmd+Alt+O on macOS) jumps between a program and its suite. For COBOL language support and static analysis, add the companion COBOL Analyzer extension.\n[Browse the examples](https://github.com/Landparty/mocky-mock-vscode/tree/main/examples)",
+            "description": "**Run with Coverage** paints executed lines on your .cbl. Right-click a suite in the Test Explorer and pick **Run Mutation Test** to see which bugs your tests would miss. The button in the editor title bar (or Ctrl+Alt+O, Cmd+Alt+O on macOS) jumps between a program and its suite. For COBOL language support and static analysis, add the companion COBOL Analyzer extension.\n[Browse the examples](https://github.com/Landparty/mocky-mock-vscode/tree/main/examples)",
             "media": {
               "markdown": "walkthroughs/go-further.md"
             },

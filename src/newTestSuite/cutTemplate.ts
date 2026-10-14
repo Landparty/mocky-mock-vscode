@@ -139,7 +139,10 @@ export function starterCutFacts(cblPath: string, sourceLines: string[]): Starter
 // Every `*>` line is a legal .cut comment; there is nothing here the CLI's
 // parser would reject, so the suite is runnable as-is and the Test Explorer
 // picks it up immediately.
-export function buildStarterCut(facts: StarterCutFacts): string {
+// `programLine`: the PROGRAM path to write after TESTSUITE (relative to the
+// suite), for a suite that doesn't sit beside its program -- the starter is
+// the no-CLI fallback, so it can't count on the CLI's tests/ mirroring.
+export function buildStarterCut(facts: StarterCutFacts, programLine?: string): string {
   const performTarget = facts.firstParagraph ?? 'MAIN-PARAGRAPH';
   const caseName = facts.firstParagraph
     ? `${facts.firstParagraph} runs without error`
@@ -151,6 +154,7 @@ export function buildStarterCut(facts: StarterCutFacts): string {
     '*> boundary the paragraph touches with a MOCK ... END-MOCK block.',
     '*> Type "testcase" or "mock-call" in this file for snippets.',
     `TESTSUITE "${facts.programName}"`,
+    ...(programLine ? [`PROGRAM "${programLine}"`] : []),
     '',
     `TESTCASE "${caseName}"`,
     '*>  MOVE 100 TO WS-INPUT-FIELD',

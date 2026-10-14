@@ -137,6 +137,16 @@ export async function supportsPerParagraphFlag(run: CommandRunner, executablePat
   });
 }
 
+// `mockymock suites --json` (several suites per program, suites under
+// tests/) is newer than `generate`; without it the extension pairs files
+// with its own PROGRAM-line + sibling fallback (cutDiscovery.ts).
+export async function supportsSuitesCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'suites', async () => {
+    const result = await run(executablePath, ['suites', '--help']);
+    return result.code === 0 && result.stdout.includes('--json');
+  });
+}
+
 export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" (or

@@ -4,6 +4,11 @@
     "body": ["TESTSUITE \"${1:suite name}\"", "", "TESTCASE \"${2:case name}\"", "    PERFORM ${3:PARAGRAPH-NAME}", "    EXPECT ${4:WS-FIELD} TO BE ${5:VALUE}", ""],
     "description": "TESTSUITE with a first TESTCASE"
   },
+  "Program under test": {
+    "prefix": "program",
+    "body": ["PROGRAM \"${1:../src/PROGRAM.cbl}\""],
+    "description": "PROGRAM line: the program this suite tests, relative to the .cut file (right after TESTSUITE)"
+  },
   "Test case": {
     "prefix": "testcase",
     "body": ["TESTCASE \"${1:case name}\"", "    PERFORM ${2:PARAGRAPH-NAME}", "    EXPECT ${3:WS-FIELD} TO BE ${4:VALUE}", ""],

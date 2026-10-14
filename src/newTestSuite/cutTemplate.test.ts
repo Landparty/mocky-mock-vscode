@@ -149,6 +149,13 @@ describe('starterCutFacts', () => {
 });
 
 describe('buildStarterCut', () => {
+  it('names the program on a PROGRAM line right after TESTSUITE when given one', () => {
+    const lines = buildStarterCut({ programName: 'PAY', firstParagraph: 'MAIN' }, '../../src/PAY.cbl').split('\n');
+    const suiteAt = lines.indexOf('TESTSUITE "PAY"');
+    assert.strictEqual(lines[suiteAt + 1], 'PROGRAM "../../src/PAY.cbl"');
+    assert.ok(!buildStarterCut({ programName: 'PAY', firstParagraph: 'MAIN' }).includes('PROGRAM "'));
+  });
+
   it('produces a runnable suite that PERFORMs the first paragraph', () => {
     const text = buildStarterCut({ programName: 'ORDRPROC', firstParagraph: 'PROCESS-ORDER' });
     const lines = text.split('\n');

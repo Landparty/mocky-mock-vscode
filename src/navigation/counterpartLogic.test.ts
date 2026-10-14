@@ -7,15 +7,35 @@ const p = (name: string) => path.join(dir, name);
 
 describe('counterpartOf', () => {
   it('pairs a program with its suite, reporting whether the suite exists', () => {
-    assert.deepStrictEqual(counterpartOf(p('PAY.cbl'), (f) => f === p('PAY.cut')), {
-      kind: 'suite',
-      path: p('PAY.cut'),
-      exists: true,
-    });
-    assert.deepStrictEqual(counterpartOf(p('PAY.cob'), () => false), {
+    assert.deepStrictEqual(
+      counterpartOf(p('PAY.cbl'), (f) => f === p('PAY.cut') || f === p('PAY.cbl'), () => ['PAY.cbl', 'PAY.cut']),
+      { kind: 'suite', path: p('PAY.cut'), exists: true, all: [p('PAY.cut')] }
+    );
+    assert.deepStrictEqual(counterpartOf(p('PAY.cob'), () => false, () => []), {
       kind: 'suite',
       path: p('PAY.cut'),
       exists: false,
+      all: [],
+    });
+  });
+
+  it('lists every sibling suite of a program, PROG.<topic>.cut included', () => {
+    const files = ['PAY.cbl', 'PAY.cut', 'PAY.errors.cut', 'PAYROLL.cut', 'OTHER.cut'];
+    const onDisk = new Set(files.map(p));
+    const pair = counterpartOf(p('PAY.cbl'), (f) => onDisk.has(f), () => files);
+    assert.deepStrictEqual(pair, {
+      kind: 'suite',
+      path: p('PAY.cut'),
+      exists: true,
+      all: [p('PAY.cut'), p('PAY.errors.cut')],
+    });
+  });
+
+  it('pairs a named second suite back to its program', () => {
+    assert.deepStrictEqual(counterpartOf(p('PAY.errors.cut'), (f) => f === p('PAY.cbl')), {
+      kind: 'program',
+      path: p('PAY.cbl'),
+      exists: true,
     });
   });
 
