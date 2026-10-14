@@ -1,7 +1,8 @@
 ## Your first `.cut` file
 
 A test suite is a plain-text `.cut` file named after the program it tests:
-`ORDRPROC.cbl` gets `ORDRPROC.cut` in the same folder.
+`src/orders/ORDRPROC.cbl` gets `tests/orders/ORDRPROC.cut`. A program can
+have more than one suite, like `ORDRPROC.errors.cut`.
 
 Each `TESTCASE` does three things: set up inputs with `MOVE`, run one paragraph with `PERFORM`, then check results with `EXPECT`. Anything the paragraph calls out to (a `CALL`, a file read, an SQL statement) is replaced by a `MOCK` block you control.
 
@@ -26,4 +27,4 @@ TESTCASE "10% discount reduces net amount"
 
 The generated suite is runnable as-is. Fill in the `MOVE` and `EXPECT` lines, and type `testcase`, `mock-call` or `expect` for snippets while you edit.
 
-Once a program has a suite, the beaker turns into **Open Test Suite**, and the suite's title bar gets a button back to the program -- or press `Ctrl+Alt+O` (`Cmd+Alt+O` on macOS) to flip between them.
+Once a program has a suite, the beaker turns into **Open Test Suite** (with a list to choose from when it has several, and **New Test Suite…** to add another), and the suite's title bar gets a button back to the program -- or press `Ctrl+Alt+O` (`Cmd+Alt+O` on macOS) to flip between them.

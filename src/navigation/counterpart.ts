@@ -1,11 +1,14 @@
 // src/navigation/counterpart.ts
 //
-// One click between a program and its test suite. Two context keys drive
+// One click between a program and its test suites (a picker when it has
+// several). Two context keys drive
 // the editor title bar: on a program with a suite, the beaker becomes
 // "Open Test Suite" (instead of offering to create one that already
 // exists); on a suite, a button jumps back to its program.
 import * as vscode from 'vscode';
 import { counterpartOf } from './counterpartLogic';
+import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
+import { NEW_SUITE, pickSuite } from './suitePicker';
 
 export const OPEN_TEST_SUITE_COMMAND = 'mockymock.openTestSuite';
 export const OPEN_PROGRAM_COMMAND = 'mockymock.openProgram';
@@ -34,8 +37,20 @@ async function openCounterpart(uri: unknown, wanted: 'suite' | 'program'): Promi
       await vscode.commands.executeCommand('mockymock.newTestSuite');
     } else {
       void vscode.window.showErrorMessage(
-        `mockymock: no program named like this suite was found next to it (looked for ${vscode.workspace.asRelativePath(pair.path)} and its .cob/.cobol variants).`
+        `mockymock: couldn't find the program this suite tests (looked for ${vscode.workspace.asRelativePath(pair.path)} and its .cob/.cobol variants). Add a PROGRAM "<path>" line after TESTSUITE to point at it.`
       );
+    }
+    return;
+  }
+  if (pair.kind === 'suite' && pair.all.length > 1 && target) {
+    const picked = await pickSuite(target.fsPath, pair.all);
+    if (picked === NEW_SUITE) {
+      if (vscode.window.activeTextEditor?.document.uri.fsPath !== target.fsPath) {
+        await vscode.window.showTextDocument(target);
+      }
+      await vscode.commands.executeCommand('mockymock.newTestSuite');
+    } else if (picked) {
+      await vscode.window.showTextDocument(vscode.Uri.file(picked));
     }
     return;
   }
@@ -59,6 +74,7 @@ export function activateCounterpartNavigation(context: vscode.ExtensionContext):
   context.subscriptions.push(
     watcher,
     vscode.window.onDidChangeActiveTextEditor(refresh),
+    onDidChangeSuitePairing(refresh),
     vscode.commands.registerCommand('mockymock.openTestSuite', (uri?: vscode.Uri) => openCounterpart(uri, 'suite')),
     vscode.commands.registerCommand('mockymock.openProgram', (uri?: vscode.Uri) => openCounterpart(uri, 'program'))
   );

@@ -26,6 +26,12 @@
           }
         },
         {
+          "match": "^\\s*(PROGRAM)(?=\\s+\")",
+          "captures": {
+            "1": { "name": "keyword.control.structure.cut" }
+          }
+        },
+        {
           "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)",
           "captures": {
             "1": { "name": "keyword.other.provider.cut" },

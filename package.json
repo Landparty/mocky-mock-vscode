@@ -312,7 +312,7 @@
     "viewsWelcome": [
       {
         "view": "testing",
-        "contents": "No mockymock test suites yet. A test suite is a .cut file that sits next to your COBOL program.\n[Create a Test Suite](command:mockymock.newTestSuite)\nNew to mockymock? The [Getting Started guide](command:mockymock.openWalkthrough) walks you through setup, your first suite, and debugging."
+        "contents": "No mockymock test suites yet. A test suite is a .cut file named after your COBOL program, kept under tests/.\n[Create a Test Suite](command:mockymock.newTestSuite)\nNew to mockymock? The [Getting Started guide](command:mockymock.openWalkthrough) walks you through setup, your first suite, and debugging."
       }
     ],
     "walkthroughs": [
@@ -335,7 +335,7 @@
           {
             "id": "createSuite",
             "title": "Create your first test suite",
-            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite next to it. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
+            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
             "media": {
               "markdown": "walkthroughs/create-suite.md"
             },
