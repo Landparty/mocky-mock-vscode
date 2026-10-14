@@ -264,12 +264,23 @@ one setting the two extensions deliberately share.
 ## Generating tests
 
 **New Test Suite for This Program** (beaker icon on any open COBOL file,
-also in the editor and Explorer right-click menus and the empty Test Explorer) runs
-`mockymock generate` and writes `PROG.cut` next to `PROG.cbl`: one
-`TESTCASE` per paragraph, every boundary mocked, no Docker needed. It never
-overwrites an existing suite — it opens it instead. If the CLI can't
-analyze the program (a parse error, an unresolved copybook), you still get
-a minimal starter suite plus the reason, so there's always a file to edit.
+also in the editor and Explorer right-click menus and the empty Test Explorer) writes `PROG.cut`
+next to `PROG.cbl`. When Docker is running it uses `mockymock init`: one
+`TESTCASE` per scenario through the program's entry point, every boundary
+mocked, run once so the values the program produced today become real
+`EXPECT` lines. That's a characterization suite: a change that alters what
+the program does turns it red. Without Docker it falls back to
+`mockymock generate`, which writes the same cases with no assertions yet,
+and the notification says so. Set `mockymock.newTestSuite.casePerParagraph`
+for one case per paragraph instead. It never overwrites an existing suite —
+it opens it instead. If the CLI can't analyze the program (a parse error,
+an unresolved copybook), you still get a minimal starter suite plus the
+reason, so there's always a file to edit.
+
+A test case with no `EXPECT` or `VERIFY` passes whenever its paragraph
+runs. Lint marks its `TESTCASE` line with a warning, and the Test Explorer
+keeps it green but says in its output that it asserts nothing (like
+PHPUnit's "risky" tests). Both need a CLI that reports it.
 
 Seeded test-*data* generation (what the removed "COBOL Boundaries" view used
 to do) lives in the `mockymock` Claude Code skill instead of a sidebar

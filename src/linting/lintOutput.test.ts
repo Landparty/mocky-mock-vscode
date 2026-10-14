@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { cutRelativeLine, parseLintOutput } from './lintOutput';
+import { cutRelativeLine, parseLintOutput, parseLintWarnings } from './lintOutput';
 
 describe('parseLintOutput', () => {
   it('returns nothing for a clean run', () => {
@@ -123,5 +123,39 @@ describe('cutRelativeLine', () => {
   it('is null when there is no line to begin with', () => {
     assert.strictEqual(cutRelativeLine({ line: null, message: 'x', code: 'CUT_PARSE_ERROR' }), null);
     assert.strictEqual(cutRelativeLine({ line: null, message: 'x', code: null }), null);
+  });
+});
+
+describe('parseLintWarnings', () => {
+  // Wording transcribed from mocky-mock's mockymock/cli/checks.py
+  // (no_assertion_warnings) and _cmd_lint's summary line.
+  const OUTPUT =
+    'mockymock lint: warning (NO_ASSERTION): .cut line 12: TESTCASE "bare" asserts nothing -- ' +
+    'it passes whenever its PERFORM runs. Add an EXPECT on what it writes or a VERIFY on what it calls\n' +
+    'mockymock lint: 1 warning(s).\n' +
+    'mockymock lint: no problems found.\n';
+
+  it('parses a NO_ASSERTION warning with its .cut line', () => {
+    assert.deepStrictEqual(parseLintWarnings(OUTPUT), [
+      {
+        line: 12,
+        code: 'NO_ASSERTION',
+        message:
+          'TESTCASE "bare" asserts nothing -- it passes whenever its PERFORM runs. ' +
+          'Add an EXPECT on what it writes or a VERIFY on what it calls',
+      },
+    ]);
+  });
+
+  it('never counts a warning or the warning summary as a problem', () => {
+    assert.deepStrictEqual(parseLintOutput(OUTPUT), []);
+    const withProblem = parseLintOutput(
+      'mockymock lint: refused (UNRESOLVED_COPYBOOK): COPY X could not be resolved\n' + OUTPUT +
+        'mockymock lint: 1 problem(s) found.\n'
+    );
+    assert.deepStrictEqual(
+      withProblem.map((p) => p.code),
+      ['UNRESOLVED_COPYBOOK']
+    );
   });
 });

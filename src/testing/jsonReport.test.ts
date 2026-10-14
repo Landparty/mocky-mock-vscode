@@ -4,6 +4,7 @@ import {
   mapJsonReport,
   formatAdvisorySignals,
   formatDuplicateCaseStarts,
+  formatRiskyPass,
 } from './jsonReport';
 
 const SAMPLE_REPORT = JSON.stringify({
@@ -86,6 +87,25 @@ describe('parseJsonReport', () => {
 
 describe('mapJsonReport', () => {
   const report = parseJsonReport(SAMPLE_REPORT)!;
+
+  it('keeps a risky case green but marks it, and says why', () => {
+    const risky = parseJsonReport(
+      JSON.stringify({
+        cases: [
+          { name: 'bare', status: 'passed', failures: [], assertions: 0, risky: true },
+          { name: 'asserts', status: 'passed', failures: [], assertions: 1, risky: false },
+        ],
+      })
+    )!;
+    const outcomes = mapJsonReport(['bare', 'asserts'], risky);
+    assert.deepStrictEqual(outcomes.get('bare'), { kind: 'passed', risky: true });
+    assert.deepStrictEqual(outcomes.get('asserts'), { kind: 'passed' });
+    assert.match(formatRiskyPass('bare'), /^"bare" passed, but asserts nothing/);
+  });
+
+  it('treats a report without the risky field as not risky', () => {
+    assert.strictEqual(report.cases[0].risky, false);
+  });
 
   it('maps passed/failed with structured details', () => {
     const outcomes = mapJsonReport(['happy path', 'failing case'], report);

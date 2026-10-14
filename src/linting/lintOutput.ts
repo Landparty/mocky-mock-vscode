@@ -28,6 +28,34 @@ const GENERIC_PROBLEM_RE = /^mockymock lint: (?<message>(?!no problems found\.)(
 // problems: a refusal waived because no selected case can reach it, and the
 // DFHRESP(...) expansion summary. Informational -- never a problem.
 const NOTE_RE = /^mockymock lint: (?:.* waived: |expanded \d+ DFHRESP\()/;
+// Warnings never change lint's exit code (mocky-mock 2026-10-14+): today
+// only NO_ASSERTION, a TESTCASE with no EXPECT or VERIFY. Its `.cut line N`
+// is .cut-relative, unlike a refusal's embedded line. Kept out of
+// parseLintOutput so a warning can never block a debug session (lintGate).
+const WARNING_RE = /^mockymock lint: warning \((?<code>[A-Z_]+)\): (?:\.cut line (?<line>\d+): )?(?<message>.*)$/;
+const WARNING_COUNT_RE = /^mockymock lint: \d+ warning\(s\)\.$/;
+
+export interface LintWarning {
+  /** 1-based .cut line, or null when the warning names none. */
+  line: number | null;
+  message: string;
+  code: string;
+}
+
+export function parseLintWarnings(stdout: string): LintWarning[] {
+  const warnings: LintWarning[] = [];
+  for (const rawLine of stdout.split(/\r?\n/)) {
+    const match = WARNING_RE.exec(rawLine.trimEnd());
+    if (match?.groups) {
+      warnings.push({
+        line: match.groups.line ? Number(match.groups.line) : null,
+        message: match.groups.message,
+        code: match.groups.code,
+      });
+    }
+  }
+  return warnings;
+}
 // A malformed cobol.yml / mockymock.toml (or a cobol.yml the installed
 // cobol-parser is too old to read) stops every config-reading command before
 // it runs, with one bare `mockymock: <path>: ...` line and exit 1.
@@ -69,6 +97,7 @@ export function parseLintOutput(stdout: string): LintProblem[] {
       continue;
     }
     if (NOTE_RE.test(line)) continue;
+    if (WARNING_RE.test(line) || WARNING_COUNT_RE.test(line)) continue;
     match = CONFIG_ERROR_RE.exec(line);
     if (match?.groups) {
       problems.push({ line: null, message: match.groups.message, code: null });

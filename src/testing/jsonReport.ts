@@ -19,6 +19,8 @@ export interface JsonReportCase {
   status: 'passed' | 'failed' | 'crashed' | 'not_run';
   failures: JsonReportFailure[];
   crashDetail?: string | null;
+  // Passed with no EXPECT/VERIFY. Absent (false) from a CLI that predates it.
+  risky: boolean;
 }
 
 // A CASE START marker whose id was already in use. mockymock treats this as
@@ -111,6 +113,7 @@ export function parseJsonReport(text: string): JsonRunReport | null {
           : 'failed',
       failures,
       crashDetail: asString(c.crashDetail),
+      risky: c.risky === true,
     });
   }
 
@@ -206,6 +209,16 @@ export function formatDuplicateCaseStarts(report: JsonRunReport): string | undef
   );
 }
 
+// The Test Explorer has no "risky" state, and failing the case would be as
+// misleading as a silent green, so a risky pass stays green and says why in
+// its output.
+export function formatRiskyPass(caseName: string): string {
+  return (
+    `"${caseName}" passed, but asserts nothing: it passes as long as the paragraph runs. ` +
+    'Add an EXPECT on what it writes or a VERIFY on what it calls.'
+  );
+}
+
 export function mapJsonReport(
   expectedCaseNames: string[],
   report: JsonRunReport | null,
@@ -247,7 +260,7 @@ export function mapJsonReport(
       continue;
     }
     if (found.status === 'passed') {
-      outcomes.set(name, { kind: 'passed' });
+      outcomes.set(name, found.risky ? { kind: 'passed', risky: true } : { kind: 'passed' });
       continue;
     }
     if (found.status === 'crashed') {
