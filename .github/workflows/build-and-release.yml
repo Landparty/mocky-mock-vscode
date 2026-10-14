@@ -1,7 +1,7 @@
 name: build-and-release
 
 # Manually-triggered only. Installs the mockymock CLI release from PyPI
-# (the "mocky-mock" project -- MOCKYMOCK_VERSION below, defaulting to
+# (the "mockymock" project -- MOCKYMOCK_VERSION below, defaulting to
 # src/environment/cliPackage.ts's MOCKYMOCK_CLI_VERSION) together with the
 # newest cobol-parser that release allows, builds the 4 Nuitka mockymock
 # executables from that install, packages them into the 4 platform-specific
@@ -49,17 +49,17 @@ jobs:
       # Resolve once, here, so all four matrix legs bundle the exact same
       # pair. cobol-parser is left to the resolver: the newest release
       # mocky-mock's own requirement range allows, the same thing a user's
-      # `uv tool install mocky-mock` would get.
+      # `uv tool install mockymock` would get.
       - name: Resolve the mocky-mock and cobol-parser versions on PyPI
         id: versions
         run: |
           python -m pip install --upgrade pip
-          pip install --dry-run --ignore-installed --report /tmp/report.json "mocky-mock==${MOCKYMOCK_VERSION}" \
-            || { echo "::error::mocky-mock ${MOCKYMOCK_VERSION} could not be installed from PyPI (https://pypi.org/project/mocky-mock/)"; exit 1; }
+          pip install --dry-run --ignore-installed --report /tmp/report.json "mockymock==${MOCKYMOCK_VERSION}" \
+            || { echo "::error::mockymock ${MOCKYMOCK_VERSION} could not be installed from PyPI (https://pypi.org/project/mockymock/)"; exit 1; }
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json
           versions = {i["metadata"]["name"].lower().replace("_", "-"): i["metadata"]["version"] for i in json.load(open("/tmp/report.json"))["install"]}
-          print(f"mockymock={versions['mocky-mock']}")
+          print(f"mockymock={versions['mockymock']}")
           print(f"cobolparser={versions['cobol-parser']}")
           PY
           cat "$GITHUB_OUTPUT"
@@ -96,8 +96,8 @@ jobs:
       - name: Install mockymock and cobol-parser from PyPI
         shell: bash
         run: |
-          pip install "mocky-mock==${{ needs.resolve.outputs.mockymock_version }}" "cobol-parser==${{ needs.resolve.outputs.cobolparser_version }}"
-          python -c "import importlib.metadata as m; print('mocky-mock', m.version('mocky-mock'), '/ cobol-parser', m.version('cobol-parser'))"
+          pip install "mockymock==${{ needs.resolve.outputs.mockymock_version }}" "cobol-parser==${{ needs.resolve.outputs.cobolparser_version }}"
+          python -c "import importlib.metadata as m; print('mockymock', m.version('mockymock'), '/ cobol-parser', m.version('cobol-parser'))"
       - name: Install Nuitka
         run: pip install nuitka
       - name: Build onefile executable

@@ -18,7 +18,7 @@ jobs:
   # renamed flag or reshaped JSON key in mocky-mock would land here as a
   # green build and a broken extension.
   #
-  # The CLI comes from PyPI (the "mocky-mock" project), pinned to the release
+  # The CLI comes from PyPI (the "mockymock" project), pinned to the release
   # this extension targets -- src/environment/cliPackage.ts's
   # MOCKYMOCK_CLI_VERSION, which cliPackage.test.ts keeps equal to the
   # default below. No repo checkout and no token, so forks and Dependabot PRs
@@ -44,7 +44,7 @@ jobs:
           MOCKYMOCK_VERSION: ${{ vars.MOCKYMOCK_VERSION || '0.10.0' }}
         run: |
           python -m pip install --upgrade pip
-          python -m pip install "mocky-mock==${MOCKYMOCK_VERSION}"
+          python -m pip install "mockymock==${MOCKYMOCK_VERSION}"
           mockymock --version
 
       - run: npm ci

@@ -55,10 +55,10 @@ can't be found (e.g. a dev-mode install, or a platform the build doesn't
 cover). It has one fallback:
 
 ```
-uv tool install "mocky-mock>=<MOCKYMOCK_CLI_VERSION>"
+uv tool install "mockymock>=<MOCKYMOCK_CLI_VERSION>"
 ```
 
-That installs a released CLI from PyPI (the `mocky-mock` project), so it
+That installs a released CLI from PyPI (the `mockymock` project), so it
 needs Python and `uv` but no git checkout and no GitHub credentials. The
 version floor is `MOCKYMOCK_CLI_VERSION` in `src/environment/cliPackage.ts`:
 the CLI release this extension is built and contract-tested against.
@@ -66,7 +66,7 @@ the CLI release this extension is built and contract-tested against.
 ## Which CLI release the extension uses
 
 `MOCKYMOCK_CLI_VERSION` is the one place to bump. CI's `cli-contract` job
-and `build-and-release.yml` both install `mocky-mock==<that version>` from
+and `build-and-release.yml` both install `mockymock==<that version>` from
 PyPI by default, and `cliPackage.test.ts` fails if either workflow's
 default drifts from the constant, so a bump touches all three together.
 Overrides that don't move the pin:

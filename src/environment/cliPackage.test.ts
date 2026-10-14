@@ -5,7 +5,7 @@ import { MOCKYMOCK_CLI_VERSION, MOCKYMOCK_PYPI_PACKAGE, mockymockInstallRequirem
 
 describe('mockymock CLI package pin', () => {
   it('installs a PyPI release, never a git URL', () => {
-    assert.strictEqual(mockymockInstallRequirement(), `mocky-mock>=${MOCKYMOCK_CLI_VERSION}`);
+    assert.strictEqual(mockymockInstallRequirement(), `mockymock>=${MOCKYMOCK_CLI_VERSION}`);
     assert.ok(!mockymockInstallRequirement().includes('git+'));
   });
 

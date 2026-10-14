@@ -40,9 +40,9 @@ import importlib.metadata as m
 import shutil
 import sys
 
-dist = m.distribution("mocky-mock")
+dist = m.distribution("mockymock")
 licenses = [f for f in dist.files or [] if f.name.startswith("LICENSE")]
 if not licenses:
-    sys.exit("mocky-mock's installed distribution ships no LICENSE file")
+    sys.exit("mockymock's installed distribution ships no LICENSE file")
 shutil.copyfile(licenses[0].locate(), sys.argv[1])
 PY
