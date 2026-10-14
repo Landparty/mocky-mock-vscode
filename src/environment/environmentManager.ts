@@ -10,6 +10,7 @@ import {
   permissionDeniedMessageForPath,
   resolveExecutablePath,
 } from './checks';
+import { mockymockInstallRequirement } from './cliPackage';
 import { presentStatus, SetupState, statusTooltipMarkdown } from './statusPresentation';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 
@@ -189,15 +190,10 @@ export class EnvironmentManager {
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'Installing mockymock CLI via uv…' },
       async () => {
-        const result = await runCommand('uv', [
-          'tool',
-          'install',
-          'git+https://github.com/Landparty/mocky-mock.git',
-        ]);
+        // A released version from PyPI -- no git checkout, no GitHub auth.
+        const result = await runCommand('uv', ['tool', 'install', mockymockInstallRequirement()]);
         if (result.code !== 0) {
-          vscode.window.showErrorMessage(
-            `mockymock install failed: ${result.stderr || result.stdout}. If this is a GitHub auth error, run "gh auth setup-git" and try again.`
-          );
+          vscode.window.showErrorMessage(`mockymock install failed: ${result.stderr || result.stdout}`);
           return false;
         }
         // uv installs its shim into a directory (e.g. ~/.local/bin) that may not be on

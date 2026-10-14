@@ -1,12 +1,13 @@
 name: build-and-release
 
-# Manually-triggered only. Pulls mocky-mock's source (private repo, latest
-# release tag), then force-installs cobol-parser's own latest release on top
-# (overriding mocky-mock's pinned commit -- see the "resolve" job), and this
-# repo's own source, builds the 4 Nuitka mockymock executables from scratch,
-# packages them into the 4 platform-specific vsix files, attaches them to a
-# GitHub Release on this repo, and optionally publishes to the VS Code
-# Marketplace -- all in one dispatch.
+# Manually-triggered only. Installs the mockymock CLI release from PyPI
+# (the "mocky-mock" project -- MOCKYMOCK_VERSION below, defaulting to
+# src/environment/cliPackage.ts's MOCKYMOCK_CLI_VERSION) together with the
+# newest cobol-parser that release allows, builds the 4 Nuitka mockymock
+# executables from that install, packages them into the 4 platform-specific
+# vsix files, attaches them to a GitHub Release on this repo, and optionally
+# publishes to the VS Code Marketplace -- all in one dispatch. Nothing here
+# clones the mocky-mock repo or needs a GitHub token for it.
 # Replaces the old three-piece pipeline (mocky-mock's build-executables.yml
 # + publish-public.yml relaying through the public cobol-mocky-mock repo,
 # plus this repo's old release.yml pulling a pinned version from it).
@@ -19,6 +20,14 @@ on:
         required: false
         type: boolean
         default: false
+      mockymock_version:
+        description: 'mocky-mock release to bundle from PyPI (blank = the version this extension pins)'
+        required: false
+        type: string
+        default: ''
+
+env:
+  MOCKYMOCK_VERSION: ${{ inputs.mockymock_version || '0.10.0' }}
 
 permissions:
   contents: write
@@ -31,40 +40,29 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     outputs:
-      mockymock_tag: ${{ steps.tag.outputs.tag }}
-      cobolparser_tag: ${{ steps.cobolparser_tag.outputs.tag }}
+      mockymock_version: ${{ steps.versions.outputs.mockymock }}
+      cobolparser_version: ${{ steps.versions.outputs.cobolparser }}
     steps:
-      - name: Resolve mocky-mock's latest release tag
-        id: tag
-        env:
-          # ORG_PAT is an org-level GitHub PAT with read access to
-          # both Landparty/mocky-mock and Landparty/cobol-parser.  It is
-          # separate from VSCE_PAT (the VS Code Marketplace Azure DevOps PAT)
-          # because those are incompatible token types.
-          GH_TOKEN: ${{ secrets.ORG_PAT }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Resolve once, here, so all four matrix legs bundle the exact same
+      # pair. cobol-parser is left to the resolver: the newest release
+      # mocky-mock's own requirement range allows, the same thing a user's
+      # `uv tool install mocky-mock` would get.
+      - name: Resolve the mocky-mock and cobol-parser versions on PyPI
+        id: versions
         run: |
-          [ -n "$GH_TOKEN" ] || { echo "::error::ORG_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
-          TAG="$(gh release view --repo Landparty/mocky-mock --json tagName -q .tagName)"
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::mocky-mock's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-
-      # mockymock-src/pyproject.toml pins cobolparser to a specific tested
-      # commit, not to its latest release -- deliberately, per that file's
-      # own comments (bumped only after confirming compatibility). We
-      # override that pin below with cobol-parser's latest release tag so
-      # every vsix ships the newest parser fixes; this is an untested
-      # pairing mocky-mock's own suite never ran against, chosen anyway.
-      - name: Resolve cobol-parser's latest release tag
-        id: cobolparser_tag
-        env:
-          GH_TOKEN: ${{ secrets.ORG_PAT }}
-        run: |
-          [ -n "$GH_TOKEN" ] || { echo "::error::ORG_PAT secret is not set (needs an org-level GitHub PAT with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
-          TAG="$(gh release view --repo Landparty/cobol-parser --json tagName -q .tagName)"
-          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-            || { echo "::error::cobol-parser's latest release tag '$TAG' doesn't look like vX.Y.Z"; exit 1; }
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          python -m pip install --upgrade pip
+          pip install --dry-run --ignore-installed --report /tmp/report.json "mocky-mock==${MOCKYMOCK_VERSION}" \
+            || { echo "::error::mocky-mock ${MOCKYMOCK_VERSION} could not be installed from PyPI (https://pypi.org/project/mocky-mock/)"; exit 1; }
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          versions = {i["metadata"]["name"].lower().replace("_", "-"): i["metadata"]["version"] for i in json.load(open("/tmp/report.json"))["install"]}
+          print(f"mockymock={versions['mocky-mock']}")
+          print(f"cobolparser={versions['cobol-parser']}")
+          PY
+          cat "$GITHUB_OUTPUT"
 
   build-cli:
     needs: resolve
@@ -86,63 +84,25 @@ jobs:
             artifact: mockymock-windows-amd64.exe
     runs-on: ${{ matrix.os }}
     steps:
-      - name: Check out mocky-mock at its latest release tag
-        uses: actions/checkout@v4
-        with:
-          repository: Landparty/mocky-mock
-          ref: ${{ needs.resolve.outputs.mockymock_tag }}
-          token: ${{ secrets.ORG_PAT }}
-          path: mockymock-src
-
-      # cobol-parser is a private repo; mockymock-src/pyproject.toml pins it
-      # via git+https, which pip/git can only resolve here with a token that
-      # has read access (ORG_PAT, the org-level GitHub PAT used above
-      # to check out mocky-mock). shell: bash is required on every OS --
-      # run: steps default to pwsh on windows-latest, and pwsh parses
-      # ${TOKEN} as an (unset) PowerShell variable rather than expanding the
-      # env var, silently embedding an empty token in the rewritten URL.
-      - name: Configure git credentials for the private cobol-parser dependency
-        shell: bash
-        run: |
-          [ -n "$TOKEN" ] || { echo "::error::ORG_PAT is not set (needs an org-level secret with read access to Landparty/mocky-mock and Landparty/cobol-parser)"; exit 1; }
-          git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-        env:
-          TOKEN: ${{ secrets.ORG_PAT }}
-
+      # The examples and Nuitka entry point come from this repo's own
+      # checkout; the CLI itself comes from PyPI below.
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Install patchelf (required by Nuitka onefile mode on Linux)
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y patchelf
-      - name: Install mockymock (pulls in the pinned cobolparser dependency)
-        run: pip install ./mockymock-src
-      # See the "Resolve cobol-parser's latest release tag" step in the
-      # resolve job: deliberately overrides the pin above with cobol-parser's
-      # newest release. --no-deps because cobol-parser declares no runtime
-      # dependencies of its own (a resolve here could only ever remove or
-      # duplicate what mockymock-src's install already resolved). The
-      # version print afterward is the only signal that the override
-      # actually took effect -- if a future pinned commit and the latest
-      # tag ever report the same pyproject.toml version, --force-reinstall
-      # succeeding is not proof the code changed, only this printed line is.
-      #
-      # The requirement name here MUST match cobol-parser's own declared
-      # distribution name ("cobol-parser" as of pyproject.toml's rename from
-      # "cobolparser", commit 0ba507c) -- `pip install "name @ url"` validates
-      # the requested name against the built package's own metadata name and
-      # fails on a mismatch.
-      - name: Force-install cobol-parser's latest release, overriding mocky-mock's pin
+      - name: Install mockymock and cobol-parser from PyPI
         shell: bash
         run: |
-          pip install --no-deps --force-reinstall "cobol-parser @ git+https://github.com/Landparty/cobol-parser.git@${{ needs.resolve.outputs.cobolparser_tag }}"
-          python -c "import importlib.metadata as m; print('Installed cobol-parser version:', m.version('cobol-parser'))"
+          pip install "mocky-mock==${{ needs.resolve.outputs.mockymock_version }}" "cobol-parser==${{ needs.resolve.outputs.cobolparser_version }}"
+          python -c "import importlib.metadata as m; print('mocky-mock', m.version('mocky-mock'), '/ cobol-parser', m.version('cobol-parser'))"
       - name: Install Nuitka
         run: pip install nuitka
       - name: Build onefile executable
         shell: bash
-        working-directory: mockymock-src
-        run: scripts/build_executable.sh "${{ matrix.artifact }}"
+        run: scripts/build-cli.sh "${{ matrix.artifact }}"
       # We have no Apple Developer Program cert, so this can't be a real
       # (Developer ID + notarized) signature -- but macOS requires arm64
       # binaries to carry at least an ad-hoc signature to run at all, and
@@ -156,34 +116,29 @@ jobs:
       - name: Ad-hoc code-sign the macOS executable
         if: runner.os == 'macOS'
         shell: bash
-        working-directory: mockymock-src
-        run: codesign --force --sign - --timestamp=none "build/${{ matrix.artifact }}"
+        run: codesign --force --sign - --timestamp=none "cli-build/${{ matrix.artifact }}"
       - name: Smoke-test the executable
         shell: bash
-        working-directory: mockymock-src
         run: |
-          BIN="build/${{ matrix.artifact }}"
+          BIN="cli-build/${{ matrix.artifact }}"
           chmod +x "$BIN" || true
           "$BIN" --help
       - name: Analyze subcommand bundles cobol-parser's CLI
         shell: bash
-        working-directory: mockymock-src
         run: |
-          BIN="build/${{ matrix.artifact }}"
+          BIN="cli-build/${{ matrix.artifact }}"
           "$BIN" analyze dead-code examples/custinq/CUSTINQ.cbl --compact | head -c 200
       - name: End-to-end smoke test against a real example (Docker required)
         if: runner.os == 'Linux'
         shell: bash
-        working-directory: mockymock-src
         run: |
-          BIN="build/${{ matrix.artifact }}"
+          BIN="cli-build/${{ matrix.artifact }}"
           "$BIN" setup
           "$BIN" run examples/custinq/CUSTINQ.cbl --cut examples/custinq/CUSTINQ.cut
       - name: Dashboard serves its bundled static assets
         shell: bash
-        working-directory: mockymock-src
         run: |
-          BIN="build/${{ matrix.artifact }}"
+          BIN="cli-build/${{ matrix.artifact }}"
           "$BIN" dashboard --port 8765 --no-browser &
           DASH=$!
           for _ in $(seq 1 20); do
@@ -200,8 +155,8 @@ jobs:
         with:
           name: dist-exe-${{ matrix.os }}
           path: |
-            mockymock-src/build/${{ matrix.artifact }}
-            mockymock-src/LICENSE
+            cli-build/${{ matrix.artifact }}
+            cli-build/LICENSE
 
   build-vsix:
     needs: build-cli
@@ -228,7 +183,7 @@ jobs:
       - name: Package win32-x64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/build/mockymock-windows-amd64.exe" bin/mockymock.exe
+          cp "$STAGING_DIR/mockymock-windows-amd64.exe" bin/mockymock.exe
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target win32-x64 -o dist/
           unzip -l dist/*win32-x64*.vsix | grep -q 'extension/bin/mockymock.exe' || { echo "win32-x64 package missing bundled binary" >&2; exit 1; }
@@ -239,7 +194,7 @@ jobs:
       - name: Package linux-x64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/build/mockymock-linux-x86_64" bin/mockymock
+          cp "$STAGING_DIR/mockymock-linux-x86_64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target linux-x64 -o dist/
@@ -251,7 +206,7 @@ jobs:
       - name: Package darwin-arm64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/build/mockymock-macos-arm64" bin/mockymock
+          cp "$STAGING_DIR/mockymock-macos-arm64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target darwin-arm64 -o dist/
@@ -263,7 +218,7 @@ jobs:
       - name: Package darwin-x64
         run: |
           rm -rf bin && mkdir bin
-          cp "$STAGING_DIR/build/mockymock-macos-x86_64" bin/mockymock
+          cp "$STAGING_DIR/mockymock-macos-x86_64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target darwin-x64 -o dist/
@@ -309,17 +264,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
-      - name: Record the mocky-mock CLI tag and cobol-parser release this vsix was built from
+      - name: Record the mocky-mock and cobol-parser releases this vsix was built from
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ steps.tag.outputs.tag }}"
-          MOCKYMOCK_TAG="${{ needs.resolve.outputs.mockymock_tag }}"
-          COBOLPARSER_TAG="${{ needs.resolve.outputs.cobolparser_tag }}"
+          MOCKYMOCK_VERSION="${{ needs.resolve.outputs.mockymock_version }}"
+          COBOLPARSER_VERSION="${{ needs.resolve.outputs.cobolparser_version }}"
           BODY="$(gh release view "$TAG" --json body -q .body)"
           [ "$BODY" = "null" ] && BODY=""
-          LINE1="Built from mocky-mock ${MOCKYMOCK_TAG}."
-          LINE2="Uses cobol-parser ${COBOLPARSER_TAG} (latest release, overriding mocky-mock's pin)."
+          LINE1="Built from mocky-mock ${MOCKYMOCK_VERSION} (PyPI)."
+          LINE2="Uses cobol-parser ${COBOLPARSER_VERSION} (PyPI)."
           # Strip any provenance lines a prior dispatch of this same release
           # already recorded before re-adding the current ones. mocky-mock or
           # cobol-parser can cut a new release between re-dispatches (e.g. a
