@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.12.0...v0.13.0) (2026-10-14)
+
+
+### Features
+
+* hide Execution Trace and add a Run Mutation Test menu entry ([2f8429c](https://github.com/Landparty/mocky-mock-vscode/commit/2f8429c875f958bbf9f6740343df575b532f5179))
+* hide Execution Trace and add a Run Mutation Test menu entry ([5171a29](https://github.com/Landparty/mocky-mock-vscode/commit/5171a295066d128f681a6cd72d52b8fb9a3d0044))
+* several test suites per program, kept under tests/ ([a133d26](https://github.com/Landparty/mocky-mock-vscode/commit/a133d26113c49f1cd48b60184ba3add8be6955aa))
+* several test suites per program, kept under tests/ ([7028825](https://github.com/Landparty/mocky-mock-vscode/commit/7028825c9390d251085340875ed817dbd5110daa))
+
+
+### Bug Fixes
+
+* keep a PROGRAM path relative to the suite's folder on Windows ([b9bf60e](https://github.com/Landparty/mocky-mock-vscode/commit/b9bf60e1c04024d061861cc7b2790fb71d22c56c))
+
 ## [0.12.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.11.0...v0.12.0) (2026-10-14)
 
 
