@@ -192,7 +192,7 @@ export function resolveCblPath(
   const parsed = path.parse(cutFilePath);
   const text = readText(cutFilePath);
   const declared = text === undefined ? undefined : readProgramLine(text);
-  if (declared) return path.resolve(parsed.dir, declared);
+  if (declared) return path.isAbsolute(declared) ? declared : path.join(parsed.dir, declared);
 
   for (const stem of new Set([parsed.name, suiteBaseName(cutFilePath)])) {
     for (const ext of COBOL_SOURCE_EXTENSIONS) {
