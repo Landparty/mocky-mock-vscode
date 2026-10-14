@@ -15,7 +15,6 @@ import { parseJUnitXml } from './junitParser';
 import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
 import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
-import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
@@ -24,7 +23,6 @@ import { EnvironmentManager } from '../environment/environmentManager';
 import {
   describeTooOldCli,
   resolveExecutablePath,
-  supportsTraceFlag,
   supportsDebugCommand,
   supportsMutateCommand,
 } from '../environment/checks';
@@ -740,137 +738,6 @@ export function activateTestController(
     }
   }
 
-  // "Debug (Execution Trace)": runs exactly ONE selected test case with
-  // --trace-json and renders the executed path + mock timeline into the
-  // Test Results panel. Mirrors runOneFile's plumbing (temp files, output
-  // streaming, pass/fail mapping) but scoped to a single case, because the
-  // sibling mockymock CLI itself refuses --trace unless exactly one case is
-  // selected -- the suite compiles as a single binary and the trace file
-  // carries no per-case markers, so an unscoped trace cannot be attributed.
-  async function runDebugTrace(
-    run: vscode.TestRun,
-    token: vscode.CancellationToken,
-    plans: FilePlan[]
-  ) {
-    const allSelected = plans.flatMap(selectedCaseItems);
-    if (allSelected.length !== 1) {
-      const message =
-        'mockymock: "Debug (Execution Trace)" needs exactly one selected test case -- ' +
-        'the suite runs as a single binary, so an unscoped trace cannot be attributed to ' +
-        'one case. Select a single TESTCASE and try again.';
-      for (const item of allSelected) {
-        run.started(item);
-        run.errored(item, new vscode.TestMessage(message));
-      }
-      return;
-    }
-
-    const [caseItem] = allSelected;
-    const plan = plans.find((p) => selectedCaseItems(p).includes(caseItem))!;
-    run.started(caseItem);
-
-    const ready = await environmentManager.ensureReady();
-    if (!ready.ok) {
-      run.appendOutput(toCrlf(`${ready.message}\n`), undefined, caseItem);
-      run.errored(caseItem, new vscode.TestMessage(ready.message));
-      return;
-    }
-    if (token.isCancellationRequested) {
-      run.skipped(caseItem);
-      return;
-    }
-
-    const cutUri = plan.fileItem.uri!;
-    const cutPath = cutUri.fsPath;
-    const cblPath = resolveCblPath(cutPath);
-    const { executablePath, copybookPaths } = resolveInvocationConfig(context, cutUri);
-
-    const supportsTrace = await supportsTraceFlag(runCommand, executablePath);
-    if (!supportsTrace) {
-      const message = describeTooOldCli(executablePath, context.extensionPath, 'execution tracing');
-      run.appendOutput(toCrlf(`${message}\n`), undefined, caseItem);
-      run.errored(caseItem, new vscode.TestMessage(message));
-      return;
-    }
-
-    // Same per-run temp directory + finally cleanup as runOneFile.
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockymock-'));
-    const junitXmlPath = path.join(tmpDir, 'report.xml');
-    const jsonReportPath = path.join(tmpDir, 'report.json');
-    const traceJsonPath = path.join(tmpDir, 'trace.json');
-
-    const abort = new AbortController();
-    const cancelListener = token.onCancellationRequested(() => abort.abort());
-
-    run.appendOutput(formatRunHeader(path.basename(cutPath)), undefined, caseItem);
-    const streamer = createOutputStreamer((text) => run.appendOutput(text, undefined, caseItem));
-    let result;
-    try {
-      result = await runSuite(
-        {
-          executablePath,
-          cblPath,
-          cutPath,
-          junitXmlPath,
-          copybookPaths,
-          jsonReportPath,
-          traceJsonPath,
-          caseNames: [caseItem.label],
-        },
-        runCommandIn(path.dirname(cutPath)),
-        async (p) => {
-          try {
-            return await fs.readFile(p, 'utf8');
-          } catch {
-            return null;
-          }
-        },
-        streamer,
-        abort.signal
-      );
-    } finally {
-      streamer.flush();
-      cancelListener.dispose();
-      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => undefined);
-    }
-    run.appendOutput(formatRunTrailer(result.exitCode), undefined, caseItem);
-
-    if (token.isCancellationRequested) {
-      run.skipped(caseItem);
-      return;
-    }
-
-    const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
-    const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
-    // Keyed on the PARSED suite (like runOneFile), not the raw junitXml
-    // string: a truncated/malformed report parses to null, and that case
-    // must fall back to the process's real stderr rather than the generic
-    // "did not produce results" message.
-    const junitSuite = jsonReport ? null : result.junitXml ? parseJUnitXml(result.junitXml) : null;
-    const outcomes = jsonReport
-      ? mapJsonReport([caseItem.label], jsonReport, processFailureMessage)
-      : mapResults([caseItem.label], junitSuite, junitSuite ? undefined : processFailureMessage);
-    const outcome = outcomes.get(caseItem.label);
-    if (!outcome || outcome.kind === 'passed') {
-      run.passed(caseItem);
-    } else if (outcome.kind === 'failed') {
-      run.failed(caseItem, messagesForOutcome(outcome, cutUri));
-    } else {
-      run.errored(caseItem, new vscode.TestMessage(outcome.message));
-    }
-
-    if (result.traceJson) {
-      const trace = parseTraceJson(result.traceJson);
-      if (trace) {
-        run.appendOutput(toCrlf(formatTraceOutput(trace)), undefined, caseItem);
-      } else {
-        run.appendOutput(toCrlf('mockymock: execution trace could not be parsed\n'), undefined, caseItem);
-      }
-    } else {
-      run.appendOutput(toCrlf('mockymock: no execution trace produced\n'), undefined, caseItem);
-    }
-  }
-
   // "Debug (Interactive)": starts a real DAP session (mockymock debug
   // --dap-stdio) for exactly one selected test case, handing control to
   // VS Code's own debug UI (breakpoints, step controls, Variables/Call
@@ -1128,28 +995,9 @@ export function activateTestController(
     coverageDetails.get(fileCoverage as vscode.FileCoverage) ?? [];
   context.subscriptions.push(coverageProfile);
 
-  const debugProfile = controller.createRunProfile(
-    'Debug (Execution Trace)',
-    vscode.TestRunProfileKind.Debug,
-    async (request, token) => {
-      const run = controller.createTestRun(request);
-      try {
-        await runDebugTrace(run, token, planRuns(request));
-      } finally {
-        run.end();
-      }
-    },
-    false
-  );
-  context.subscriptions.push(debugProfile);
-
-  // A second profile of the same kind: VS Code shows both in the dropdown
-  // next to the Test Explorer's bug icon. This one -- the real interactive
-  // session (breakpoints, stepping, Watch/Variables) -- is the default now
-  // that it's proven out; "Debug (Execution Trace)" (fast, read-only,
-  // always available, no live gdb session) stays one click away for when
-  // a full interactive session isn't needed. See
-  // docs/2026-07-22-dap-debugger-design.md in the sibling mocky-mock repo.
+  // The only Debug-kind profile, so the bug icon and "Debug Test" always
+  // start a real interactive session (breakpoints, stepping, Watch/Variables).
+  // See docs/2026-07-22-dap-debugger-design.md in the sibling mocky-mock repo.
   const interactiveDebugProfile = controller.createRunProfile(
     'Debug (Interactive)',
     vscode.TestRunProfileKind.Debug,
@@ -1172,8 +1020,14 @@ export function activateTestController(
   const mutationProfile = controller.createRunProfile(
     'Mutation Test',
     vscode.TestRunProfileKind.Run,
-    async (request, token) => {
+    async (request, outerToken) => {
       const run = controller.createTestRun(request);
+      // A run started from the "Run Mutation Test" menu command gets a token
+      // the Test Results cancel button doesn't reach; run.token does, so
+      // either one stops the pass.
+      const cancel = new vscode.CancellationTokenSource();
+      const cancelListeners = [outerToken, run.token].map((t) => t.onCancellationRequested(() => cancel.cancel()));
+      const token = cancel.token;
       try {
         const plans = planRuns(request);
         // Clear every selected file's survivor diagnostics before ANY of
@@ -1204,12 +1058,41 @@ export function activateTestController(
           }
         }
       } finally {
+        cancelListeners.forEach((l) => l.dispose());
+        cancel.dispose();
         run.end();
       }
     },
     false
   );
   context.subscriptions.push(mutationProfile);
+
+  // Mutation Test is otherwise reachable only from the run-button dropdown.
+  // This command puts it in the Test Explorer and gutter right-click menus
+  // (a TestItem argument) and the .cut editor title menu (a Uri argument),
+  // and always runs the whole file: mutation scores the suite, never a case.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mockymock.runMutationTest', async (target?: vscode.TestItem | vscode.Uri) => {
+      const uri =
+        target instanceof vscode.Uri ? target : target?.uri ?? vscode.window.activeTextEditor?.document.uri;
+      if (!uri || !uri.fsPath.endsWith('.cut')) {
+        void vscode.window.showWarningMessage('mockymock: open a .cut test suite to run mutation testing on it.');
+        return;
+      }
+      if (!fileItems.has(uri.toString())) await discoverAndBuild(uri);
+      const fileItem = fileItems.get(uri.toString());
+      if (!fileItem) {
+        void vscode.window.showWarningMessage(`mockymock: no test suite found in ${path.basename(uri.fsPath)}.`);
+        return;
+      }
+      const cts = new vscode.CancellationTokenSource();
+      try {
+        await mutationProfile.runHandler(new vscode.TestRunRequest([fileItem], undefined, mutationProfile), cts.token);
+      } finally {
+        cts.dispose();
+      }
+    })
+  );
 
   return controller;
 }

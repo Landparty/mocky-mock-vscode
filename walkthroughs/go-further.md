@@ -4,7 +4,7 @@ Choose **Run with Coverage** from the dropdown next to the run button. Executed 
 
 ## Mutation testing
 
-Choose **Mutation Test** from the same dropdown. mockymock re-runs your suite against many single-line variants of your program (a flipped `>` to `>=`, a deleted `MOVE`) and reports each one your tests failed to notice, as a warning on the exact `.cbl` line. Expect minutes, not seconds, on a large program.
+Right-click a suite in the Test Explorer (or the gutter icon next to `TESTSUITE`) and choose **Run Mutation Test**. It is also in the `...` menu at the top of an open `.cut` file, and as **Mutation Test** in the run-button dropdown. mockymock re-runs your suite against many single-line variants of your program (a flipped `>` to `>=`, a deleted `MOVE`) and reports each one your tests failed to notice, as a warning on the exact `.cbl` line. Expect minutes, not seconds, on a large program.
 
 ## Understanding a program
 

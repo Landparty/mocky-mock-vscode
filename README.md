@@ -65,10 +65,9 @@ interactive mock of the title-bar buttons, right-click menus and status bar.
 - **Run single tests or subsets**, including "rerun failed."
 - **Failures land on the failing line**, with an expected/actual diff.
 - **Coverage** painted on your original `.cbl` gutter.
-- **Debug (Execution Trace)** — see the executed path and mocks that fired.
-- **Debug (Interactive)** — real breakpoints, stepping, and variable
+- **Debug Test** — real breakpoints, stepping, and variable
   inspection on your original `.cbl`.
-- **Mutation Test** — surviving mutants painted as warnings on your
+- **Run Mutation Test** (right-click a suite, or the `.cut` editor `...` menu) — surviving mutants painted as warnings on your
   original `.cbl`, with a mutation score.
 - **Continuous run** — re-run a test automatically on file change.
 - **Cancellation** that actually kills the in-flight run.
@@ -108,7 +107,7 @@ other half.
 | You want to | Extension | How |
 |---|---|---|
 | Write, run, debug a COBOL unit test | **mockymock** | `.cut` suites, Test Explorer, interactive debugger |
-| Coverage, mutation score, execution trace | **mockymock** | run profiles in the Test Explorer |
+| Coverage, mutation score | **mockymock** | run profiles in the Test Explorer |
 | Mainframe-ready instrumented build | **mockymock** | **Export Mainframe-Ready COBOL** |
 | COBOL syntax highlighting, Outline, Go to Definition | **COBOL Analyzer** | the `cobol` grammar and language configuration |
 | Completion, rename, format, fixed-format column guardrails | **COBOL Analyzer** | in-process editing providers |
@@ -250,8 +249,7 @@ one setting the two extensions deliberately share.
   lint, JSON reports, and coverage mapping need a CLI new enough to have
   `collect`/`lint`/`--case`/`--json-report`/`--coverage-json`; older CLIs
   degrade gracefully (whole-file runs, JUnit results, regex discovery).
-  Debug (Execution Trace) additionally needs `--trace-json`; Debug
-  (Interactive) needs the `debug` subcommand; Export Mainframe-Ready COBOL
+  Debug Test needs the `debug` subcommand; Export Mainframe-Ready COBOL
   needs the `export` subcommand. An older CLI degrades to a clear message
   on the one feature it affects rather than failing anything else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
@@ -278,7 +276,9 @@ generate tests for a program. See the mocky-mock repo's skill docs.
 
 ## Mutation testing
 
-The **Mutation Test** run profile (Test Explorer → run-button dropdown) runs
+**Run Mutation Test** (right-click a suite or test in the Test Explorer or
+the `.cut` gutter, the `.cut` editor `...` menu, or the **Mutation Test**
+profile in the run-button dropdown) runs
 `mockymock mutate` for the selected `.cut` file: mockymock re-runs the whole
 suite against many single-line variants of your COBOL program (`IF X > 0`
 becomes `IF X >= 0`, a `MOVE` is deleted, a boundary literal shifts by one)
