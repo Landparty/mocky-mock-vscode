@@ -1,9 +1,12 @@
 // src/newTestSuite/newTestSuite.ts
 //
 // "New Test Suite for This Program": the zero-to-first-test step. Given an
-// open COBOL program, creates PROG.cut next to it and opens it -- the .cut
-// watcher in testController.ts then adds it to the Test Explorer on its
-// own, and the lint-on-open pass checks it immediately.
+// open COBOL program, creates its suite where the project keeps them --
+// tests/<folder>/PROG.cut by default, per `mockymock suites` (see
+// suiteIndexService.ts) -- and opens it. The .cut watcher in
+// testController.ts then adds it to the Test Explorer on its own, and the
+// lint-on-open pass checks it immediately. A program that already has
+// suites gets a picker: open one, or name another (PROG.<topic>.cut).
 //
 // Two ways to fill the file, best first:
 //   1. `mockymock generate` (Docker-free): one TESTCASE per paragraph with
@@ -21,7 +24,10 @@ import { supportsGenerateCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
 import { focusClickedFile, showNeedsFile } from '../environment/notify';
-import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
+import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
+import { rememberPairing } from '../discovery/suitePairing';
+import { newSuiteTarget } from '../discovery/suiteIndexService';
+import { askSuiteTopic, NEW_SUITE, pickSuite } from '../navigation/suitePicker';
 import { isCobolPath } from '../environment/cobolPaths';
 import { buildGenerateArgs, buildStarterCut, parseGeneratedCaseCount, starterCutFacts } from './cutTemplate';
 
@@ -91,14 +97,29 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       }
 
       const cblPath = activePath;
-      const cutPath = resolveCutPath(cblPath);
+      // A program that already has suites: open one, or name another.
+      // Never regenerate over one -- adding cases is an edit.
+      let topic: string | undefined;
+      const existing = suitesForProgram(cblPath);
+      if (existing.length) {
+        const picked = await pickSuite(cblPath, existing);
+        if (picked === undefined) return;
+        if (picked !== NEW_SUITE) {
+          await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(picked));
+          return;
+        }
+        topic = await askSuiteTopic(cblPath);
+        if (!topic) return;
+      }
+
+      const target = await newSuiteTarget(cblPath, topic);
+      const cutPath = target.path;
       if (await exists(cutPath)) {
         // Never overwrite a suite someone may have spent hours on -- open
-        // the existing one instead. Adding cases is an edit, not a
-        // regenerate.
+        // the existing one instead.
         await openAndOffer(
           cutPath,
-          `mockymock: "${path.basename(cblPath)}" already has a test suite -- opened ${path.basename(cutPath)}. Add more cases there (type "testcase" for a snippet).`
+          `mockymock: ${path.basename(cutPath)} already exists -- opened it. Add more cases there (type "testcase" for a snippet).`
         );
         return;
       }
@@ -115,6 +136,11 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         if (choice !== save) return;
         if (!(await editor.document.save())) return;
       }
+
+      await fs.mkdir(path.dirname(cutPath), { recursive: true });
+      // Lint and completion run the moment the file opens, before the
+      // watcher-driven pairing refresh lands.
+      rememberPairing(cutPath, cblPath);
 
       const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor.document.uri);
       const channel = getOutputChannel();
@@ -173,7 +199,11 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
 }
 
 async function writeStarter(cblPath: string, cutPath: string, sourceText: string): Promise<void> {
-  const text = buildStarterCut(starterCutFacts(cblPath, sourceText.split(/\r?\n/)));
+  // A suite away from its program (under tests/) names it explicitly, so
+  // it pairs even without a CLI to mirror the folders.
+  const besideProgram = path.resolve(path.dirname(cutPath)) === path.resolve(path.dirname(cblPath));
+  const programLine = besideProgram ? undefined : path.relative(path.dirname(cutPath), cblPath).split(path.sep).join('/');
+  const text = buildStarterCut(starterCutFacts(cblPath, sourceText.split(/\r?\n/)), programLine);
   // 'wx': create only -- the exists() check above races with nothing
   // in practice, but refusing to clobber is the whole point of this command.
   await fs.writeFile(cutPath, text, { encoding: 'utf8', flag: 'wx' });

@@ -18,6 +18,7 @@ import { resolveExecutablePath } from './environment/checks';
 import { runCommandIn } from './environment/commandRunner';
 import { formatDoctorReport, parseDoctorJson, projectProblems } from './environment/doctorReport';
 import { activateCounterpartNavigation } from './navigation/counterpart';
+import { activateSuiteIndex } from './discovery/suiteIndexService';
 
 const MOCKYMOCK_DEBUG_TYPE = 'mockymock-cobol';
 
@@ -70,6 +71,7 @@ export function activate(context: vscode.ExtensionContext) {
   activateCutCompletion(context);
   activateCutHover(context);
   activateExportMainframeCommand(context);
+  activateSuiteIndex(context);
   activateNewTestSuiteCommand(context);
   activateCounterpartNavigation(context);
 

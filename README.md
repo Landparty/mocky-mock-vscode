@@ -14,8 +14,8 @@ COBOL today — see you on the *wildside*.
    to run tests.
 2. **Open a COBOL program** (`.cbl`, `.cob` or `.cobol`) and click the
    beaker icon in the editor title bar — **New Test Suite for This Program**.
-   mockymock reads the program and writes a `.cut` suite next to it, one
-   test case per paragraph with every `CALL`, file, SQL, CICS and IMS
+   mockymock reads the program and writes a `.cut` suite under `tests/`
+   (mirroring the program's folder), one test case per paragraph with every `CALL`, file, SQL, CICS and IMS
    boundary already mocked.
 3. **Press play** in the Test Explorer (or the green arrow beside any
    `TESTCASE`). The first run checks your setup and starts Docker Desktop
@@ -50,9 +50,12 @@ Want to see the editor experience before installing? Open
 [`preview/ux-preview.html`](preview/ux-preview.html) in a browser: an
 interactive mock of the title-bar buttons, right-click menus and status bar.
 
-- **New Test Suite in one click** — scaffolds a runnable `.cut` next to any
-  COBOL program, boundaries pre-mocked; falls back to a starter template
-  when the CLI can't analyze the program, so you always get a file to edit.
+- **New Test Suite in one click** — scaffolds a runnable `.cut` for any
+  COBOL program under `tests/`, boundaries pre-mocked; falls back to a
+  starter template when the CLI can't analyze the program, so you always
+  get a file to edit.
+- **Several suites per program** — `PAY.cut`, `PAY.errors.cut`, or any
+  name with a `PROGRAM "../src/PAY.cbl"` line; see [Where suites live](#where-suites-live).
 - **One click between a program and its suite** — the beaker on a COBOL
   program becomes **Open Test Suite** once one exists, a `.cut` file's title
   bar jumps back to its program, and `Ctrl+Alt+O` (`Cmd+Alt+O`) flips
@@ -263,11 +266,36 @@ one setting the two extensions deliberately share.
 
 **New Test Suite for This Program** (beaker icon on any open COBOL file,
 also in the editor and Explorer right-click menus and the empty Test Explorer) runs
-`mockymock generate` and writes `PROG.cut` next to `PROG.cbl`: one
+`mockymock generate` and writes `PROG.cut` under `tests/` (see below): one
 `TESTCASE` per paragraph, every boundary mocked, no Docker needed. It never
-overwrites an existing suite — it opens it instead. If the CLI can't
+overwrites an existing suite. On a program that already has suites it
+lists them, plus **New Test Suite…**, which asks for a topic and writes
+`PROG.<topic>.cut`. If the CLI can't
 analyze the program (a parse error, an unresolved copybook), you still get
 a minimal starter suite plus the reason, so there's always a file to edit.
+
+### Where suites live
+
+A program can have any number of suites. New ones go under a `tests/`
+folder that mirrors your source tree, the way most languages lay out tests:
+
+```
+src/payroll/PAYROLL.cbl
+tests/payroll/PAYROLL.cut            <- default suite
+tests/payroll/PAYROLL.errors.cut     <- a second suite: PROG.<topic>.cut
+tests/regression/q3-bugs.cut         <- any name, with a PROGRAM line
+```
+
+A suite finds its program by, in order: a `PROGRAM "<path>"` line right
+after `TESTSUITE` (relative to the `.cut`); a program with the same name
+beside it (the original layout, which keeps working); the same folder under
+the source root (`src/` when you have one, else the workspace) when the
+suite is under `tests/`; or the only program with
+that name in the project. Set `test_root` and `source_root` in `cobol.yml`
+(under `mockymock:`) or `mockymock.toml` if your folders are named
+differently. A program that already has a `PROG.cut` beside it keeps
+getting new default suites there. Pairing comes from `mockymock suites`, so
+the editor and the CLI always agree.
 
 Seeded test-*data* generation (what the removed "COBOL Boundaries" view used
 to do) lives in the `mockymock` Claude Code skill instead of a sidebar

@@ -5,7 +5,7 @@ import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { describeUnsupportedFeature, supportsExportCommand } from '../environment/checks';
 import { focusClickedFile, showCliProblem, showNeedsFile } from '../environment/notify';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { resolveCblPath, resolveCutPath } from '../discovery/cutDiscovery';
+import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../environment/cobolPaths';
 import { runExport } from './exportRunner';
 
@@ -37,22 +37,35 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
         // the cobol language in package.json and accepted by analyzeCobol --
         // rejecting them here was an inconsistency, not a policy.
         cblPath = activePath;
-        cutPath = resolveCutPath(activePath);
         // A successful export opens PROG.mainframe.cbl as the new active
-        // editor -- an immediate re-run would otherwise resolve a
-        // nonexistent PROG.mainframe.cut and PROG.mainframe.mainframe.cbl
-        // and fail confusingly. Checking that the paired .cut actually
-        // exists (rather than string-matching the filename) catches that
-        // case AND the more general "this .cbl never had a suite" case.
-        try {
-          await fs.access(cutPath);
-        } catch {
+        // editor -- an immediate re-run would otherwise look for suites of
+        // an exported file. Requiring a real suite catches that case AND
+        // the more general "this .cbl never had a suite" case.
+        const suites = suitesForProgram(activePath);
+        if (!suites.length) {
           const message = activePath.endsWith('.mainframe.cbl')
             ? `mockymock: "${path.basename(activePath)}" looks like an already-exported file. Open the original .cbl or .cut to export again.`
-            : `mockymock: no ${path.basename(cutPath)} found next to "${path.basename(activePath)}". Open the program's .cut suite and try again.`;
+            : `mockymock: "${path.basename(activePath)}" has no test suite yet. Open the program's .cut suite and try again.`;
           vscode.window.showErrorMessage(message);
           return;
         }
+        // The export splices one suite's mocks into the program, so a
+        // program with several suites needs to know which.
+        const picked =
+          suites.length === 1
+            ? suites[0]
+            : (
+                await vscode.window.showQuickPick(
+                  suites.map((suite) => ({
+                    label: path.basename(suite),
+                    description: vscode.workspace.asRelativePath(path.dirname(suite)),
+                    suite,
+                  })),
+                  { title: `Export ${path.basename(activePath)} with which test suite?` }
+                )
+              )?.suite;
+        if (!picked) return;
+        cutPath = picked;
       } else {
         await showNeedsFile('Export Mainframe-Ready COBOL', 'cobol-or-cut', 'mockymock.exportMainframe');
         return;

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { pairedProgram, pairedSuites, readProgramLine, suiteBaseName } from './suitePairing';
 
 export interface CutCase {
   name: string;
@@ -161,26 +162,87 @@ export function cutSuitesFromCollectJson(text: string): CutSuite[] | null {
 // the conventional pairing).
 const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol'];
 
-// Resolves a .cut file's paired COBOL source. Previously hardwired to
-// `<stem>.cbl`, which silently broke every feature (lint, runs, export,
-// continuous mode) for a project using .cob/.cobol -- extensions the rest
-// of the extension explicitly supports. `exists` is injectable so the pure
-// mapping stays unit-testable without a real filesystem.
+function readTextOrUndefined(p: string): string | undefined {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+// Resolves a .cut file's paired COBOL source, best answer first:
+//   1. what `mockymock suites --json` said (suitePairing.ts) -- the CLI's
+//      full lookup, including suites under tests/ that mirror the source
+//      tree, which only the CLI knows how to map back;
+//   2. the suite's own `PROGRAM "<path>"` line, relative to the suite;
+//   3. a sibling named like the suite: the whole stem first (PROG.cbl for
+//      PROG.cut), then the base name (PROG.cbl for PROG.errors.cut), each
+//      as .cbl/.cob/.cobol.
+// When nothing exists the sibling `<stem>.cbl` is returned, so error
+// messages name the conventional pairing. `exists` and `readText` are
+// injectable so the mapping stays unit-testable without a real filesystem.
 export function resolveCblPath(
   cutFilePath: string,
-  exists: (p: string) => boolean = fs.existsSync
+  exists: (p: string) => boolean = fs.existsSync,
+  readText: (p: string) => string | undefined = readTextOrUndefined
 ): string {
+  const paired = pairedProgram(cutFilePath);
+  if (paired && exists(paired)) return paired;
+
   const parsed = path.parse(cutFilePath);
-  for (const ext of COBOL_SOURCE_EXTENSIONS) {
-    const candidate = path.join(parsed.dir, `${parsed.name}${ext}`);
-    if (exists(candidate)) return candidate;
+  const text = readText(cutFilePath);
+  const declared = text === undefined ? undefined : readProgramLine(text);
+  if (declared) return path.isAbsolute(declared) ? declared : path.join(parsed.dir, declared);
+
+  for (const stem of new Set([parsed.name, suiteBaseName(cutFilePath)])) {
+    for (const ext of COBOL_SOURCE_EXTENSIONS) {
+      const candidate = path.join(parsed.dir, `${stem}${ext}`);
+      if (exists(candidate)) return candidate;
+    }
   }
   return path.join(parsed.dir, `${parsed.name}.cbl`);
 }
 
-export function resolveCutPath(cblFilePath: string): string {
+// The sibling suite path a program would conventionally have. Where a NEW
+// suite goes is the CLI's call (`mockymock suites PROG --json`'s
+// newSuitePath, under tests/); this is the fallback for a CLI without it.
+export function resolveCutPath(cblFilePath: string, topic?: string): string {
   const parsed = path.parse(cblFilePath);
-  return path.join(parsed.dir, `${parsed.name}.cut`);
+  return path.join(parsed.dir, topic ? `${parsed.name}.${topic}.cut` : `${parsed.name}.cut`);
+}
+
+// Every suite known to test `cblFilePath`: the CLI's pairing, plus the
+// sibling PROG.cut / PROG.<topic>.cut files beside it (found even before
+// the CLI's first answer arrives, or with a CLI too old to give one).
+export function suitesForProgram(
+  cblFilePath: string,
+  exists: (p: string) => boolean = fs.existsSync,
+  listDir: (dir: string) => string[] = (dir) => {
+    try {
+      return fs.readdirSync(dir);
+    } catch {
+      return [];
+    }
+  }
+): string[] {
+  const found = new Map<string, string>();
+  const add = (p: string) => {
+    const k = process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+    if (!found.has(k)) found.set(k, p);
+  };
+  for (const suite of pairedSuites(cblFilePath)) {
+    if (exists(suite)) add(suite);
+  }
+  const parsed = path.parse(cblFilePath);
+  const prefix = `${parsed.name}.`.toLowerCase();
+  for (const entry of listDir(parsed.dir)) {
+    const lower = entry.toLowerCase();
+    if (!lower.endsWith('.cut') || !lower.startsWith(prefix)) continue;
+    const candidate = path.join(parsed.dir, entry);
+    // A sibling whose own PROGRAM line points elsewhere isn't this program's.
+    if (path.resolve(resolveCblPath(candidate, exists)) === path.resolve(cblFilePath)) add(candidate);
+  }
+  return Array.from(found.values()).sort();
 }
 
 // Directory names that mark a path as generated/vendored/scratch, not a real
