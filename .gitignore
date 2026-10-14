@@ -9,4 +9,5 @@ docs/
 .vscode/
 .PUBLISHING.md
 .vscodeignore
-scripts/.local/cli-build/
+scripts/.local/
+cli-build/
