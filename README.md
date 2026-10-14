@@ -248,7 +248,7 @@ one setting the two extensions deliberately share.
 - The `mockymock` CLI. Official release `.vsix` packages (see Install
   above) already bundle a matching binary — nothing to install. Otherwise
   (running from source, or on a platform with no bundled binary) it's
-  auto-installed via `uv` on first run if missing. Single-test runs, tags,
+  auto-installed from PyPI via `uv` on first run if missing. Single-test runs, tags,
   lint, JSON reports, and coverage mapping need a CLI new enough to have
   `collect`/`lint`/`--case`/`--json-report`/`--coverage-json`; older CLIs
   degrade gracefully (whole-file runs, JUnit results, regex discovery).

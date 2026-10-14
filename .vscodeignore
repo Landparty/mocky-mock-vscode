@@ -18,6 +18,11 @@ staging/**
 # ship in a packaged .vsix.
 scripts/.local/**
 dist/**
+# Build-time inputs/outputs of scripts/build-cli.sh (build-and-release.yml):
+# the compiled binary ships from bin/, never from here.
+packaging/**
+cli-build/**
+scripts/build-cli.sh
 .github/**
 # Claude Code session/worktree state (e.g. .claude/worktrees/<branch>/,
 # a full nested checkout with its own node_modules and docs) has no

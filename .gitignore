@@ -10,3 +10,4 @@ docs/
 .PUBLISHING.md
 .vscodeignore
 scripts/.local/
+cli-build/

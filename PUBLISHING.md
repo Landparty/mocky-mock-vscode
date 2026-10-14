@@ -55,14 +55,25 @@ can't be found (e.g. a dev-mode install, or a platform the build doesn't
 cover). It has one fallback:
 
 ```
-uv tool install git+https://github.com/Landparty/mocky-mock.git
+uv tool install "mockymock>=<MOCKYMOCK_CLI_VERSION>"
 ```
 
-This needs Python, `uv`, and git credentials for both `mocky-mock` and its
-`cobol-parser` dependency — the same repo-read access anyone building from
-source needs. There used to be a `gh release download` step tried first
-(fetching a prebuilt binary from mocky-mock's own private Releases); it
-was removed because the bundled-binary case above now covers everything
-that fallback was for, and the release assets it depended on no longer
-exist (`mocky-mock` stopped publishing standalone executables — see its
-own `PUBLISHING.md`).
+That installs a released CLI from PyPI (the `mockymock` project), so it
+needs Python and `uv` but no git checkout and no GitHub credentials. The
+version floor is `MOCKYMOCK_CLI_VERSION` in `src/environment/cliPackage.ts`:
+the CLI release this extension is built and contract-tested against.
+
+## Which CLI release the extension uses
+
+`MOCKYMOCK_CLI_VERSION` is the one place to bump. CI's `cli-contract` job
+and `build-and-release.yml` both install `mockymock==<that version>` from
+PyPI by default, and `cliPackage.test.ts` fails if either workflow's
+default drifts from the constant, so a bump touches all three together.
+Overrides that don't move the pin:
+
+- `cli-contract`: the `MOCKYMOCK_VERSION` repository variable.
+- `build-and-release.yml`: the `mockymock_version` dispatch input.
+
+The bundled binaries are compiled by `scripts/build-cli.sh` from that PyPI
+install (plus the newest `cobol-parser` the release allows), so neither
+workflow clones `mocky-mock` or needs `ORG_PAT`.

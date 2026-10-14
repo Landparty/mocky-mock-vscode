@@ -18,10 +18,13 @@ jobs:
   # renamed flag or reshaped JSON key in mocky-mock would land here as a
   # green build and a broken extension.
   #
-  # Needs ORG_PAT (the same org-level PAT build-and-release.yml uses) to
-  # clone the private mocky-mock repo. Forks and Dependabot PRs don't get
-  # secrets, so this degrades to an explicit notice rather than a failure --
-  # the contract still gets checked on every push/PR from the org itself.
+  # The CLI comes from PyPI (the "mockymock" project), pinned to the release
+  # this extension targets -- src/environment/cliPackage.ts's
+  # MOCKYMOCK_CLI_VERSION, which cliPackage.test.ts keeps equal to the
+  # default below. No repo checkout and no token, so forks and Dependabot PRs
+  # run the contract too. To check an extension change against a different
+  # CLI release (say, one that just shipped a new subcommand) without
+  # touching the pin, set the MOCKYMOCK_VERSION repository variable.
   cli-contract:
     runs-on: ubuntu-latest
     steps:
@@ -33,34 +36,15 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Check whether the mocky-mock checkout token is available
-        id: token
+      # cobol-parser resolves from PyPI as an ordinary dependency of
+      # mocky-mock, so this one install is the whole CLI surface the test
+      # exercises.
+      - name: Install the mockymock CLI from PyPI
         env:
-          ORG_PAT: ${{ secrets.ORG_PAT }}
+          MOCKYMOCK_VERSION: ${{ vars.MOCKYMOCK_VERSION || '0.10.1' }}
         run: |
-          if [ -n "$ORG_PAT" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ORG_PAT is not available (fork or Dependabot PR); the live mockymock CLI contract test will be skipped."
-          fi
-
-      # cobol-parser resolves from PyPI as an ordinary pinned dependency
-      # (see mocky-mock's .okf/integration.md), so installing mocky-mock
-      # itself is enough to get the whole CLI surface this test exercises.
-      # MOCKYMOCK_REF (a repository variable) picks the mocky-mock branch to
-      # install, default main -- so an extension PR that depends on a CLI
-      # change still in review can be checked against that branch instead
-      # of failing until the two merge in the right order.
-      - name: Install the mockymock CLI from source
-        if: steps.token.outputs.available == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.ORG_PAT }}
-          MOCKYMOCK_REF: ${{ vars.MOCKYMOCK_REF }}
-        run: |
-          git clone --depth 1 --branch "${MOCKYMOCK_REF:-main}" "https://x-access-token:${GH_TOKEN}@github.com/Landparty/mocky-mock.git" /tmp/mocky-mock
           python -m pip install --upgrade pip
-          python -m pip install /tmp/mocky-mock
+          python -m pip install "mockymock==${MOCKYMOCK_VERSION}"
           mockymock --version
 
       - run: npm ci
@@ -74,7 +58,6 @@ jobs:
       # turn a broken install into a green build. Running it under the JSON
       # reporter lets the next step prove it actually executed.
       - name: Run the live CLI contract test
-        if: steps.token.outputs.available == 'true'
         run: |
           set -o pipefail
           npx mocha --grep "mockymock CLI contract" --reporter json > /tmp/contract.json || {
@@ -83,7 +66,6 @@ jobs:
           }
 
       - name: Assert the contract test did not silently skip
-        if: steps.token.outputs.available == 'true'
         run: |
           PENDING=$(node -p "require('/tmp/contract.json').stats.pending")
           PASSES=$(node -p "require('/tmp/contract.json').stats.passes")

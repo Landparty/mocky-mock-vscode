@@ -149,9 +149,9 @@ function readProjectName(pyprojectDir) {
 }
 
 // Points the extension's mockymock CLI at local sibling checkouts for
-// dev/test iteration, instead of the git-commit-pinned cobolparser that
-// `uv tool install git+https://github.com/Landparty/mocky-mock.git`
-// (EnvironmentManager.installMockymock, see PUBLISHING.md) would fetch.
+// dev/test iteration, instead of the released PyPI packages that
+// `uv tool install mocky-mock` (EnvironmentManager.installMockymock, see
+// PUBLISHING.md) would fetch.
 //
 // `uv tool install --editable ../mocky-mock` alone is NOT enough: cobol-parser's
 // pyproject.toml currently declares its distribution name as "cobol-parser"
