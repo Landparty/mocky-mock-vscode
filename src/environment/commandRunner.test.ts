@@ -1,5 +1,6 @@
 import * as assert from 'assert';
-import { runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
+import * as path from 'path';
+import { anchorCommandPath, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
 
 describe('quoteArgForWindowsShell', () => {
   it('leaves a plain argument untouched', () => {
@@ -121,5 +122,23 @@ describe('runCommand cancellation', () => {
     const result = await pending;
     assert.notStrictEqual(result.code, 0);
     assert.match(result.stderr, /cancelled/);
+  });
+});
+
+describe('anchorCommandPath', () => {
+  it('pins a relative command path to the given base directory', () => {
+    assert.strictEqual(
+      anchorCommandPath('.venv/bin/mockymock', path.resolve('/ws')),
+      path.resolve('/ws', '.venv/bin/mockymock')
+    );
+  });
+
+  it('leaves a bare command name for PATH lookup', () => {
+    assert.strictEqual(anchorCommandPath('mockymock', path.resolve('/ws')), 'mockymock');
+  });
+
+  it('leaves an absolute path alone', () => {
+    const abs = path.resolve('/opt/mockymock');
+    assert.strictEqual(anchorCommandPath(abs, path.resolve('/ws')), abs);
   });
 });

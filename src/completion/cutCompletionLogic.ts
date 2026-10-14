@@ -41,8 +41,16 @@ export const MOCK_CATEGORIES = [
 // form is a static CALL, the bare form is a dynamic CALL (DYNCALL).
 export const QUOTED_CATEGORIES: ReadonlySet<string> = new Set(['CALL', 'MQ', 'SQL', 'CICS', 'DLI']);
 
+// Categories that take a `ROWS` block (mocky-mock's dsl/model.py
+// `ROWS_CATEGORIES`): one row per FETCH/READ/RETURN, or -- for CALL, MQ and
+// DLI -- one response per call, which also requires a `TERMINAL ( ... )`.
+export const ROWS_CATEGORIES: ReadonlySet<string> = new Set(['SQL', 'READ', 'RETURN', 'CALL', 'MQ', 'DLI']);
+
 export type CompletionContext =
   | { kind: 'category' }
+  // After a complete `MOCK <category> <key> ` on a ROWS-capable category;
+  // `partial` is the (possibly empty) prefix of ROWS typed so far.
+  | { kind: 'rows'; partial: string }
   // `partial` is the token already typed after the category (possibly
   // empty, possibly starting with a `"`): the span a completion item must
   // replace, since VS Code's default word boundary stops at `-` and `"`.
@@ -53,6 +61,9 @@ export type CompletionContext =
 // replace it and the list is filtered against a word no category matches.
 const AFTER_MOCK_RE = /^\s*MOCK\s+$/i;
 const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+(\S*)$/i;
+// A key is complete once it is a closed quoted string (SQL keys contain
+// spaces) or a bare word followed by whitespace.
+const AFTER_MOCK_KEY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+("[^"]*"|[^\s"]+)\s+([A-Za-z]*)$/i;
 
 // `lineTextBeforeCursor` is everything on the current line up to (not
 // including) the cursor -- exactly what VS Code's CompletionItemProvider
@@ -64,6 +75,10 @@ export function detectCompletionContext(lineTextBeforeCursor: string): Completio
   const match = AFTER_MOCK_CATEGORY_RE.exec(lineTextBeforeCursor);
   if (match) {
     return { kind: 'key', category: match[1].toUpperCase(), partial: match[2] };
+  }
+  const keyed = AFTER_MOCK_KEY_RE.exec(lineTextBeforeCursor);
+  if (keyed && ROWS_CATEGORIES.has(keyed[1].toUpperCase()) && 'ROWS'.startsWith(keyed[3].toUpperCase())) {
+    return { kind: 'rows', partial: keyed[3] };
   }
   return null;
 }

@@ -34,6 +34,11 @@
     "body": ["MOCK READ ${1:FILE-NAME} ROWS", "    ( ${2:FIELD} = ${3:value} )", "    TERMINAL ( ${4:FIELD} = ${5:value} )", "END-MOCK"],
     "description": "MOCK READ ... ROWS cursor block with a TERMINAL group for the rows-exhausted (AT END) branch"
   },
+  "Mock a CALL with one response per call": {
+    "prefix": "mock-call-rows",
+    "body": ["MOCK ${1|CALL \"PROGRAM\",MQ \"MQGET\",DLI \"GN\"|} ROWS", "    ( ${2:FIELD} = ${3:value} )", "    TERMINAL ( ${4:FIELD} = ${5:value} )", "END-MOCK"],
+    "description": "MOCK CALL/MQ/DLI ... ROWS: row N answers the Nth call of this key in the test case; TERMINAL (required here) answers every call after the last row"
+  },
   "Verify call count": {
     "prefix": "verify",
     "body": ["VERIFY \"${1:PROGRAM}\" WAS CALLED ${2|ONCE,NEVER,AT LEAST ONCE,2 TIMES|}"],

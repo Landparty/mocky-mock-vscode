@@ -1,8 +1,9 @@
 // src/linting/lintDiagnostics.ts
+import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { cutRelativeLine, parseLintOutput } from './lintOutput';
 
@@ -57,7 +58,7 @@ export function activateLintDiagnostics(
       const args = ['lint', cblPath, '--cut', cutPath];
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
-      const result = await runCommand(executablePath, args);
+      const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
       if (result.code === 0) {
         collection.delete(document.uri);
         return;
@@ -101,10 +102,21 @@ export function activateLintDiagnostics(
     }
   }
 
+  // A fixed (or newly broken) project config changes every suite's lint
+  // result without any .cut being saved.
+  const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
     vscode.workspace.onDidSaveTextDocument((document) => void lintDocument(document)),
     vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
+    configWatcher,
+    ...[configWatcher.onDidChange, configWatcher.onDidCreate, configWatcher.onDidDelete].map((event) =>
+      event(() => {
+        for (const document of vscode.workspace.textDocuments) {
+          void lintDocument(document);
+        }
+      })
+    ),
     // Re-evaluate every open .cut when the toggle flips: turning lintOnSave
     // OFF used to leave existing squiggles in the Problems panel until each
     // file was individually saved or closed (lintDocument's own disabled

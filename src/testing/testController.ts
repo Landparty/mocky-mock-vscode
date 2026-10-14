@@ -19,7 +19,7 @@ import { parseTraceJson, formatTraceOutput } from './traceReport';
 import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
-import { runCommand } from '../environment/commandRunner';
+import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
 import {
   describeTooOldCli,
@@ -105,7 +105,8 @@ export function activateTestController(
     const line = Math.max(0, m.line - 1);
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
-      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"`,
+      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"` +
+        (m.hint ? `\n${m.hint}` : ''),
       vscode.DiagnosticSeverity.Warning
     );
     diagnostic.source = 'mockymock mutation';
@@ -135,7 +136,7 @@ export function activateTestController(
   // working environment just to show the tree.
   async function discoverSuites(uri: vscode.Uri, text: string): Promise<CutSuite[]> {
     const executablePath = resolveConfiguredExecutable(uri);
-    const result = await runCommand(executablePath, ['collect', '--cut', uri.fsPath, '--json']);
+    const result = await runCommandIn(path.dirname(uri.fsPath))(executablePath, ['collect', '--cut', uri.fsPath, '--json']);
     if (result.code === 0) {
       const suites = cutSuitesFromCollectJson(result.stdout);
       if (suites) return suites;
@@ -466,7 +467,7 @@ export function activateTestController(
           // case in two suites doesn't emit the flag twice.
           caseNames: plan.caseItems ? [...new Set(plan.caseItems.map((c) => c.label))] : undefined,
         },
-        runCommand,
+        runCommandIn(path.dirname(cutPath)),
         async (p) => {
           try {
             return await fs.readFile(p, 'utf8');
@@ -667,7 +668,7 @@ export function activateTestController(
     try {
       result = await runMutate(
         { executablePath, cblPath, cutPath, jsonReportPath, copybookPaths },
-        runCommand,
+        runCommandIn(path.dirname(cutPath)),
         async (p) => {
           try {
             return await fs.readFile(p, 'utf8');
@@ -707,7 +708,8 @@ export function activateTestController(
       const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
       const messages = survivors.map((m) => {
         const message = vscode.TestMessage.diff(
-          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})`,
+          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})` +
+            (m.hint ? `\n${m.hint}` : ''),
           m.original,
           m.mutated
         );
@@ -815,7 +817,7 @@ export function activateTestController(
           traceJsonPath,
           caseNames: [caseItem.label],
         },
-        runCommand,
+        runCommandIn(path.dirname(cutPath)),
         async (p) => {
           try {
             return await fs.readFile(p, 'utf8');
@@ -927,7 +929,7 @@ export function activateTestController(
     // debug session itself will use, so a static problem surfaces as a
     // clear error here instead of a generic "debug adapter process
     // terminated unexpectedly" dialog.
-    const lintResult = await runCommand(executablePath, buildLintArgs({ program: cblPath, cut: cutPath, copybookPaths }));
+    const lintResult = await runCommandIn(path.dirname(cutPath))(executablePath, buildLintArgs({ program: cblPath, cut: cutPath, copybookPaths }));
     const lintGate = evaluateLintResult(lintResult);
     if (lintGate.blocked) {
       run.appendOutput(toCrlf(`${lintGate.message}\n`), undefined, caseItem);

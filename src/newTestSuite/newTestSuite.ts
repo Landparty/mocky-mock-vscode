@@ -16,7 +16,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { runCommand } from '../environment/commandRunner';
+import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { supportsGenerateCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
@@ -119,11 +119,14 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor.document.uri);
       const channel = getOutputChannel();
 
+      // The --help probe keeps the shared module-level runner: its positive
+      // result is cached per runner, and a fresh runCommandIn closure would
+      // never hit that cache.
       const canGenerate = await supportsGenerateCommand(runCommand, executablePath);
       if (canGenerate) {
         const result = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: `mockymock: creating ${path.basename(cutPath)}…` },
-          () => runCommand(executablePath, buildGenerateArgs(cblPath, cutPath, copybookPaths))
+          () => runCommandIn(path.dirname(cblPath))(executablePath, buildGenerateArgs(cblPath, cutPath, copybookPaths))
         );
         if (result.code === 0 && (await exists(cutPath))) {
           const count = parseGeneratedCaseCount(result.stdout);

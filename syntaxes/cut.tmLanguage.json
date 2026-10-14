@@ -33,7 +33,7 @@
           }
         },
         {
-          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
+          "match": "^\\s*(MOCK)\\s+(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|INITIATE|GENERATE|TERMINATE|PARAGRAPH|SECTION)\\b(\\s+ROWS\\b)?",
           "captures": {
             "1": { "name": "keyword.control.mock.cut" },
             "2": { "name": "storage.type.category.cut" },

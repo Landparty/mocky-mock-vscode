@@ -1,3 +1,4 @@
+import * as path from 'path';
 // src/linting/lintCodeActionProvider.ts
 //
 // A Quick Fix on an UNMOCKED_* lint diagnostic: run `mockymock generate
@@ -13,7 +14,7 @@
 // docs/2026-09-15-cut-editor-intelligence-design.md.
 import * as vscode from 'vscode';
 import { resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { hasSuggestedFix } from './lintCodeActionLogic';
 
@@ -95,7 +96,7 @@ export function activateLintCodeActions(
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'mockymock: filling in missing mocks…' },
-        () => runCommand(executablePath, args)
+        () => runCommandIn(path.dirname(cutPath))(executablePath, args)
       );
       if (result.code !== 0) {
         void vscode.window.showErrorMessage(

@@ -1,5 +1,6 @@
 import * as assert from 'assert';
 import {
+  ROWS_CATEGORIES,
   BoundaryInfo,
   boundaryKeyCandidates,
   detectCompletionContext,
@@ -40,6 +41,19 @@ describe('detectCompletionContext', () => {
 
   it('returns null once a key has already been completed with trailing text', () => {
     assert.strictEqual(detectCompletionContext('    MOCK CALL SUBPROG RETURNING'), null);
+  });
+
+  it('offers ROWS after a complete key on a ROWS-capable category', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK CALL "CBLTDLI" '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "FETCH CUR1" RO'), { kind: 'rows', partial: 'RO' });
+    assert.deepStrictEqual(detectCompletionContext('    mock read CUST-FILE '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK DLI "GN" '), { kind: 'rows', partial: '' });
+  });
+
+  it('does not offer ROWS for categories without a ROWS block, or mid-quote', () => {
+    assert.strictEqual(detectCompletionContext('    MOCK WRITE OUT-FILE '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK PARAGRAPH 1000-X '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT '), null);
   });
 
   it('returns null on an unrelated line', () => {
@@ -182,5 +196,11 @@ describe('keyFromDirective', () => {
 describe('QUOTED_CATEGORIES', () => {
   it("matches mocky-mock's dsl/parser.py _QUOTED_CATS", () => {
     assert.deepStrictEqual([...QUOTED_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'SQL']);
+  });
+});
+
+describe('ROWS_CATEGORIES', () => {
+  it("matches mocky-mock's dsl/model.py ROWS_CATEGORIES (MQ spelled as the DSL writes it)", () => {
+    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
   });
 });

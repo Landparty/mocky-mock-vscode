@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { resolveExecutablePath } from '../environment/checks';
-import { buildDebugArgs, MockymockDebugConfiguration } from './debugArgs';
+import { anchorCommandPath } from '../environment/commandRunner';
+import { buildDebugArgs, debugAdapterCwd, MockymockDebugConfiguration } from './debugArgs';
 
 // vscode.DebugConfiguration carries a `[key: string]: any` index signature, so
 // casting session.configuration to the plain (vscode-independent, unit-tested)
@@ -19,6 +20,11 @@ export class MockymockDebugAdapterDescriptorFactory implements vscode.DebugAdapt
       ? vscode.workspace.getConfiguration('mockymock', workspaceUri).get<string>('executablePath')
       : vscode.workspace.getConfiguration('mockymock').get<string>('executablePath');
     const executablePath = resolveExecutablePath(config.executablePath ?? configuredPath, this.extensionPath);
-    return new vscode.DebugAdapterExecutable(executablePath, buildDebugArgs(config));
+    const cwd = debugAdapterCwd(config);
+    // A relative executablePath keeps meaning the host-cwd binary the setup
+    // probes checked, whatever cwd the adapter itself runs in.
+    return new vscode.DebugAdapterExecutable(anchorCommandPath(executablePath, process.cwd()), buildDebugArgs(config), {
+      cwd,
+    });
   }
 }

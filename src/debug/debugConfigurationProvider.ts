@@ -1,5 +1,7 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { absolutizeDebugPaths } from './debugArgs';
 
 // This debug type is normally launched programmatically (see the "Debug
 // (Interactive)" test profile in testController.ts, which builds a complete
@@ -34,24 +36,39 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
       );
       return undefined;
     }
+    return config;
+  }
 
-    if (config.copybookPaths === undefined) {
+  // Runs after VS Code has substituted ${workspaceFolder} and friends, so a
+  // path that is still relative here really is relative -- see
+  // absolutizeDebugPaths for why the adapter needs it absolute. The
+  // copybookPaths default is filled here too, not in resolveDebugConfiguration:
+  // only now is `program` a real path to scope the settings lookup to.
+  resolveDebugConfigurationWithSubstitutedVariables(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration
+  ): vscode.ProviderResult<vscode.DebugConfiguration> {
+    if (typeof config.program !== 'string' || typeof config.cut !== 'string') {
+      return config;
+    }
+    const resolved = absolutizeDebugPaths(
+      { ...config, program: config.program, cut: config.cut, copybookPaths: config.copybookPaths as string[] | undefined },
+      folder?.uri.fsPath
+    );
+
+    if (resolved.copybookPaths === undefined) {
       // Scope the settings lookup to the program being debugged so a
       // multi-root workspace picks up that folder's own .vscode/settings.json
       // (mockymock.copybookPaths is resource-scoped). Fall back to the
-      // launching folder when `program` isn't a usable path.
-      const scopeUri =
-        typeof config.program === 'string' && config.program.length > 0
-          ? vscode.Uri.file(config.program)
-          : folder?.uri;
+      // launching folder when `program` is still relative.
+      const scopeUri = path.isAbsolute(resolved.program) ? vscode.Uri.file(resolved.program) : folder?.uri;
       if (scopeUri) {
         const { copybookPaths } = resolveInvocationConfig(this.context, scopeUri);
         if (copybookPaths.length > 0) {
-          return { ...config, copybookPaths };
+          return { ...resolved, copybookPaths };
         }
       }
     }
-
-    return config;
+    return resolved;
   }
 }

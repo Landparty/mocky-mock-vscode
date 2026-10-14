@@ -1,3 +1,4 @@
+import * as path from 'path';
 // src/completion/cutCompletionProvider.ts
 //
 // Completion for the .cut DSL: MOCK category names (static), then the
@@ -8,7 +9,7 @@
 // repo) for the design this implements.
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { runCommand } from '../environment/commandRunner';
+import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import {
   BoundaryInfo,
@@ -57,7 +58,7 @@ async function loadBoundaries(
   const args = ['collect', cblPath, '--cut', cutPath, '--json', '--boundaries'];
   for (const p of copybookPaths) args.push('--copybook-path', p);
 
-  const result = await runCommand(executablePath, args);
+  const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
   let payload: { boundaries?: BoundaryInfo[] } = {};
   if (result.code === 0) {
     try {
@@ -97,6 +98,14 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
         });
       }
 
+      if (completionContext.kind === 'rows') {
+        const item = new vscode.CompletionItem('ROWS', vscode.CompletionItemKind.Keyword);
+        item.range = new vscode.Range(position.translate(0, -completionContext.partial.length), position);
+        item.detail =
+          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI call (those also need a TERMINAL ( ... ) line)';
+        return [item];
+      }
+
       const boundaries = await loadBoundaries(context, document);
       if (!boundaries) return undefined;
       const candidates = boundaryKeyCandidates(boundaries, completionContext.category);
@@ -117,7 +126,15 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
     },
   };
 
+  // The cache is keyed on the .cut/.cbl mtimes only, but a project config
+  // change (copybook_path, say) changes what `collect --boundaries` sees.
+  const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const dropCache = (): void => boundaryCache.clear();
   context.subscriptions.push(
+    configWatcher,
+    configWatcher.onDidChange(dropCache),
+    configWatcher.onDidCreate(dropCache),
+    configWatcher.onDidDelete(dropCache),
     vscode.languages.registerCompletionItemProvider('cut', provider, ' '),
     vscode.workspace.onDidSaveTextDocument((document) => {
       if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {
