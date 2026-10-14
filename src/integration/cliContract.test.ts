@@ -8,7 +8,8 @@ import { buildMutateArgs } from '../testing/mutationRunner';
 import { buildExportArgs } from '../export/exportRunner';
 import { buildDebugArgs, buildLintArgs } from '../debug/debugArgs';
 import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
-import { parseLintOutput } from '../linting/lintOutput';
+import { parseLintOutput, parseLintWarnings } from '../linting/lintOutput';
+import { buildGenerateArgs, buildInitArgs } from '../newTestSuite/cutTemplate';
 import { BoundaryInfo, boundaryKeyCandidates } from '../completion/cutCompletionLogic';
 import { parseDoctorJson } from '../environment/doctorReport';
 
@@ -147,6 +148,13 @@ describe('mockymock CLI contract (live)', function () {
       assertFlagsAccepted(['generate'], ['generate', CBL, '--fill', CUT, '--copybook-path', '/copybooks']);
     });
 
+    it('the New Test Suite calls (init, then generate)', function () {
+      assertFlagsAccepted(['init'], buildInitArgs(CBL, '/tmp/o.cut', ['/copybooks']));
+      assertFlagsAccepted(['generate'], buildGenerateArgs(CBL, '/tmp/o.cut', ['/copybooks']));
+      if (!helpFor(['generate']).includes('--per-paragraph')) this.skip(); // CLI predates scenario-default generate
+      assertFlagsAccepted(['generate'], buildGenerateArgs(CBL, '/tmp/o.cut', ['/copybooks'], true));
+    });
+
     it('the explain --json call cutHoverProvider makes', () => {
       assertFlagsAccepted(['explain'], ['explain', 'UNRESOLVED_COPYBOOK', '--json']);
     });
@@ -159,6 +167,7 @@ describe('mockymock CLI contract (live)', function () {
       assert.ok(helpFor(['debug']).includes('--dap-stdio'), 'supportsDebugCommand would now report false');
       assert.ok(helpFor(['export']).includes('--output'), 'supportsExportCommand would now report false');
       assert.ok(helpFor(['mutate']).includes('--json-report'), 'supportsMutateCommand would now report false');
+      assert.ok(helpFor(['init']).includes('--output'), 'supportsInitCommand would now report false');
     });
   });
 
@@ -182,6 +191,29 @@ describe('mockymock CLI contract (live)', function () {
       const result = cli(['lint', CBL, '--cut', CUT]);
       assert.strictEqual(result.code, 0, `the bundled example should lint clean:\n${result.stdout}${result.stderr}`);
       assert.deepStrictEqual(parseLintOutput(result.stdout), [], 'a clean lint must produce no problems');
+    });
+
+    it('parseLintWarnings parses a real NO_ASSERTION warning, which never fails lint', function () {
+      if (!helpFor(['generate']).includes('--per-paragraph')) this.skip(); // CLI predates the warning
+      // The example suite with every EXPECT/VERIFY dropped: still valid,
+      // but every case now asserts nothing.
+      const bare = fs
+        .readFileSync(CUT, 'utf8')
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*(EXPECT|VERIFY)\b/.test(line))
+        .join('\n');
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mm-noassert-'));
+      const cut = path.join(dir, 'INVUPDT.cut');
+      fs.writeFileSync(cut, bare);
+      const result = cli(['lint', CBL, '--cut', cut]);
+      assert.strictEqual(result.code, 0, `a warning must not fail lint:\n${result.stdout}${result.stderr}`);
+      assert.deepStrictEqual(parseLintOutput(result.stdout), [], 'a warning must not parse as a problem');
+      const warnings = parseLintWarnings(result.stdout);
+      assert.ok(warnings.length > 0, `warning output no longer parses:\n${result.stdout}`);
+      for (const warning of warnings) {
+        assert.strictEqual(warning.code, 'NO_ASSERTION');
+        assert.ok(warning.line !== null && bare.split('\n')[warning.line - 1].startsWith('TESTCASE'));
+      }
     });
 
     it('parseLintOutput parses a real refusal, with its code', () => {

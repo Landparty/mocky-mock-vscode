@@ -8,19 +8,29 @@
 // lint-on-open pass checks it immediately. A program that already has
 // suites gets a picker: open one, or name another (PROG.<topic>.cut).
 //
-// Two ways to fill the file, best first:
-//   1. `mockymock generate` (Docker-free): one TESTCASE per paragraph with
-//      every CALL / file / SQL / CICS / DLI boundary already mocked.
-//   2. buildStarterCut (pure template, no CLI at all): one TESTCASE that
+// Three ways to fill the file, best first:
+//   1. `mockymock init` (needs Docker): one TESTCASE per scenario, run once,
+//      with the values the program produced written as EXPECT lines -- a
+//      characterization suite that pins today's behavior.
+//   2. `mockymock generate` (Docker-free): the same cases (or one per
+//      paragraph, with mockymock.newTestSuite.casePerParagraph) with every
+//      CALL / file / SQL / CICS / DLI boundary mocked, but no assertions.
+//      The toast says so, and why init didn't run.
+//   3. buildStarterCut (pure template, no CLI at all): one TESTCASE that
 //      PERFORMs the first paragraph, with commented MOVE/EXPECT guidance.
-// The fallback means the command never dead-ends: a missing or too-old CLI
-// still produces a valid, runnable suite, and the notification says which
-// path was taken and why.
+// The fallbacks mean the command never dead-ends: no Docker, a missing or
+// too-old CLI still produce a valid, runnable suite, and the notification
+// says which path was taken and why.
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
-import { supportsGenerateCommand } from '../environment/checks';
+import {
+  checkDocker,
+  supportsGenerateCommand,
+  supportsInitCommand,
+  supportsPerParagraphFlag,
+} from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { firstNonEmptyLine } from '../environment/textUtils';
 import { focusClickedFile, showNeedsFile } from '../environment/notify';
@@ -29,7 +39,15 @@ import { rememberPairing } from '../discovery/suitePairing';
 import { newSuiteTarget } from '../discovery/suiteIndexService';
 import { askSuiteTopic, NEW_SUITE, pickSuite } from '../navigation/suitePicker';
 import { isCobolPath } from '../environment/cobolPaths';
-import { buildGenerateArgs, buildStarterCut, parseGeneratedCaseCount, starterCutFacts } from './cutTemplate';
+import {
+  buildGenerateArgs,
+  buildInitArgs,
+  buildStarterCut,
+  describeCreatedSuite,
+  parseGeneratedCaseCount,
+  parseInitOutcome,
+  starterCutFacts,
+} from './cutTemplate';
 
 export const NEW_TEST_SUITE_COMMAND = 'mockymock.newTestSuite';
 const COMMAND_LABEL = 'New Test Suite for This Program';
@@ -150,27 +168,90 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       // never hit that cache.
       const canGenerate = await supportsGenerateCommand(runCommand, executablePath);
       if (canGenerate) {
+        const runHere = runCommandIn(path.dirname(cblPath));
+        const cblName = path.basename(cblPath);
+        const cutName = path.basename(cutPath);
+        const perParagraph =
+          vscode.workspace
+            .getConfiguration('mockymock', editor.document.uri)
+            .get<boolean>('newTestSuite.casePerParagraph') ?? false;
+        // init is scenario-only, so the per-paragraph option skips it.
+        const dockerUp = !perParagraph && (await checkDocker(runCommand)) === 'available';
+        let initTranscript = false;
+
+        if (dockerUp && (await supportsInitCommand(runCommand, executablePath))) {
+          const initArgs = buildInitArgs(cblPath, cutPath, copybookPaths);
+          const result = await vscode.window.withProgress(
+            {
+              location: vscode.ProgressLocation.Notification,
+              title: `mockymock: creating ${cutName} and recording what ${cblName} does today…`,
+            },
+            () => runHere(executablePath, initArgs)
+          );
+          if (await exists(cutPath)) {
+            const outcome = parseInitOutcome(result.stdout);
+            const caseCount = parseGeneratedCaseCount(result.stdout);
+            if (result.code === 0) {
+              await openAndOffer(
+                cutPath,
+                describeCreatedSuite({
+                  cblName,
+                  cutName,
+                  caseCount,
+                  perParagraph: false,
+                  ...(outcome.dockerSkipped ? { dockerDown: true } : { recorded: outcome.recorded }),
+                })
+              );
+              return;
+            }
+            // The suite was written but the recording run failed (a refusal,
+            // a compile error, a case that crashed): the file is still the
+            // best starting point, so open it and say what went wrong.
+            showInChannel(channel, initArgs, result);
+            await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(cutPath));
+            const showDetails = 'Show Details';
+            const choice = await vscode.window.showWarningMessage(
+              `mockymock: created ${cutName}, but recording what the program does failed, so some cases may have no EXPECT lines yet: ${reasonOf(result)}`,
+              showDetails
+            );
+            if (choice === showDetails) channel.show();
+            return;
+          }
+          // init wrote nothing (generate's own refusals, or a generator that
+          // can't handle this program): plain generate still may, below.
+          showInChannel(channel, initArgs, result);
+          initTranscript = true;
+        }
+
+        const generateArgs = buildGenerateArgs(
+          cblPath,
+          cutPath,
+          copybookPaths,
+          perParagraph && (await supportsPerParagraphFlag(runCommand, executablePath))
+        );
         const result = await vscode.window.withProgress(
-          { location: vscode.ProgressLocation.Notification, title: `mockymock: creating ${path.basename(cutPath)}…` },
-          () => runCommandIn(path.dirname(cblPath))(executablePath, buildGenerateArgs(cblPath, cutPath, copybookPaths))
+          { location: vscode.ProgressLocation.Notification, title: `mockymock: creating ${cutName}…` },
+          () => runHere(executablePath, generateArgs)
         );
         if (result.code === 0 && (await exists(cutPath))) {
-          const count = parseGeneratedCaseCount(result.stdout);
-          const what = count === null ? 'a starter test suite' : `${count} starter test case${count === 1 ? '' : 's'}`;
           await openAndOffer(
             cutPath,
-            `mockymock: created ${path.basename(cutPath)} with ${what} -- every boundary is mocked, fill in the MOVE and EXPECT lines and press play.`
+            describeCreatedSuite({
+              cblName,
+              cutName,
+              caseCount: parseGeneratedCaseCount(result.stdout),
+              // An older CLI's plain generate, or the CLI's own fallback when
+              // it can't build scenarios, is per-paragraph too.
+              perParagraph: !/data-driven from a fixture bundle/.test(result.stdout),
+              dockerDown: !perParagraph && !dockerUp,
+            })
           );
           return;
         }
         // A refusal (parse error, unresolved copybook, ...) is worth a
         // look, but it shouldn't leave the user with nothing: fall through
         // to the template and say why the richer scaffold didn't happen.
-        channel.clear();
-        channel.appendLine(`$ mockymock ${buildGenerateArgs(cblPath, cutPath, copybookPaths).join(' ')}`);
-        channel.appendLine(result.stdout);
-        channel.appendLine(result.stderr);
-        const reason = firstNonEmptyLine(result.stderr) ?? firstNonEmptyLine(result.stdout) ?? `exit code ${result.code}`;
+        showInChannel(channel, generateArgs, result, { append: initTranscript });
         // The CLI only writes its output on success, but don't bet a
         // crash on it: whatever is there now is what the user gets to edit.
         if (!(await exists(cutPath))) await writeStarter(cblPath, cutPath, editor.document.getText());
@@ -179,7 +260,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(cutPath));
         const showDetails = 'Show Details';
         const choice = await vscode.window.showWarningMessage(
-          `mockymock: created a basic ${path.basename(cutPath)}. The full scaffold (with mocks) was skipped because mockymock couldn't analyze the program: ${reason}`,
+          `mockymock: created a basic ${cutName}. The full scaffold (with mocks) was skipped because mockymock couldn't analyze the program: ${reasonOf(result)}`,
           showDetails
         );
         if (choice === showDetails) channel.show();
@@ -207,4 +288,28 @@ async function writeStarter(cblPath: string, cutPath: string, sourceText: string
   // 'wx': create only -- the exists() check above races with nothing
   // in practice, but refusing to clobber is the whole point of this command.
   await fs.writeFile(cutPath, text, { encoding: 'utf8', flag: 'wx' });
+}
+
+interface CliResult {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+function reasonOf(result: CliResult): string {
+  return firstNonEmptyLine(result.stderr) ?? firstNonEmptyLine(result.stdout) ?? `exit code ${result.code}`;
+}
+
+// The full transcript behind a "Show Details" button. `append` keeps an
+// earlier command's transcript (init, before generate was tried).
+function showInChannel(
+  channel: vscode.OutputChannel,
+  args: string[],
+  result: CliResult,
+  options: { append?: boolean } = {}
+): void {
+  if (!options.append) channel.clear();
+  channel.appendLine(`$ mockymock ${args.join(' ')}`);
+  channel.appendLine(result.stdout);
+  channel.appendLine(result.stderr);
 }

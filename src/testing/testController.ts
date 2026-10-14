@@ -13,7 +13,7 @@ import {
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts } from './jsonReport';
+import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
@@ -519,6 +519,9 @@ export function activateTestController(
         const outcome = outcomes.get(caseItem.label);
         if (!outcome || outcome.kind === 'passed') {
           run.passed(caseItem);
+          if (outcome?.risky) {
+            run.appendOutput(toCrlf(`${formatRiskyPass(caseItem.label)}\n`), undefined, caseItem);
+          }
         } else if (outcome.kind === 'failed') {
           suiteHasFailed = true;
           run.failed(caseItem, messagesForOutcome(outcome, fileItem.uri!));

@@ -5,7 +5,7 @@ import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { cutRelativeLine, parseLintOutput } from './lintOutput';
+import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
 
 // Runs `mockymock lint` (pure static analysis, zero Docker) on every open or
 // saved .cut file whose paired .cbl exists, and publishes the problems as
@@ -59,8 +59,26 @@ export function activateLintDiagnostics(
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
       const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
+      const rangeForLine = (cutLine: number | null): vscode.Range => {
+        const zeroBased = cutLine !== null ? Math.max(0, cutLine - 1) : 0;
+        const lineLength = zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
+        return new vscode.Range(zeroBased, 0, zeroBased, Math.max(lineLength, 1));
+      };
+      const warningDiagnostics = (warnings: LintWarning[]): vscode.Diagnostic[] =>
+        warnings.map((warning) => {
+          const diagnostic = new vscode.Diagnostic(
+            rangeForLine(warning.line),
+            warning.message,
+            vscode.DiagnosticSeverity.Warning
+          );
+          diagnostic.source = 'mockymock';
+          diagnostic.code = warning.code;
+          return diagnostic;
+        });
       if (result.code === 0) {
-        collection.delete(document.uri);
+        const warnings = parseLintWarnings(result.stdout);
+        if (warnings.length) collection.set(document.uri, warningDiagnostics(warnings));
+        else collection.delete(document.uri);
         return;
       }
       if (result.code === -1) {
@@ -76,23 +94,19 @@ export function activateLintDiagnostics(
         collection.delete(document.uri);
         return;
       }
-      collection.set(
-        document.uri,
-        problems.map((problem) => {
-          const cutLine = cutRelativeLine(problem);
-          const zeroBased = cutLine !== null ? Math.max(0, cutLine - 1) : 0;
-          const lineLength =
-            zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
+      collection.set(document.uri, [
+        ...problems.map((problem) => {
           const diagnostic = new vscode.Diagnostic(
-            new vscode.Range(zeroBased, 0, zeroBased, Math.max(lineLength, 1)),
+            rangeForLine(cutRelativeLine(problem)),
             problem.message,
             vscode.DiagnosticSeverity.Error
           );
           diagnostic.source = 'mockymock';
           if (problem.code) diagnostic.code = problem.code;
           return diagnostic;
-        })
-      );
+        }),
+        ...warningDiagnostics(parseLintWarnings(result.stdout)),
+      ]);
     } finally {
       inFlight.delete(cutPath);
       if (queued.delete(cutPath)) {

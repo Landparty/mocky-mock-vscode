@@ -118,6 +118,25 @@ export async function supportsGenerateCommand(run: CommandRunner, executablePath
   });
 }
 
+// `mockymock init` (generate --with-data + run --record-expectations) records
+// the program's current outputs as EXPECT lines. Absent from older CLIs.
+export async function supportsInitCommand(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'init', async () => {
+    const result = await run(executablePath, ['init', '--help']);
+    return result.code === 0 && result.stdout.includes('--output');
+  });
+}
+
+// `generate --per-paragraph` exists only on CLIs whose default became one
+// case per scenario; an older CLI's plain `generate` is per-paragraph
+// already, so a false here just means "omit the flag".
+export async function supportsPerParagraphFlag(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'generate-per-paragraph', async () => {
+    const result = await run(executablePath, ['generate', '--help']);
+    return result.code === 0 && result.stdout.includes('--per-paragraph');
+  });
+}
+
 // `mockymock suites --json` (several suites per program, suites under
 // tests/) is newer than `generate`; without it the extension pairs files
 // with its own PROGRAM-line + sibling fallback (cutDiscovery.ts).

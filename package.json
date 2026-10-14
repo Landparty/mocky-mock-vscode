@@ -322,18 +322,25 @@
           "order": 2,
           "markdownDescription": "Check `.cut` suites against their program as you open and save them, and show problems in the editor. Fast and offline — no Docker needed."
         },
+        "mockymock.newTestSuite.casePerParagraph": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "order": 3,
+          "markdownDescription": "**New Test Suite** writes one test case per paragraph that touches a boundary, instead of one per scenario through the program's entry point. Useful for isolating leaf paragraphs. These cases have no `EXPECT` lines, and the suite is never run to record them."
+        },
         "mockymock.maxParallelRuns": {
           "type": "number",
           "default": 1,
           "minimum": 1,
           "scope": "window",
-          "order": 3,
+          "order": 4,
           "markdownDescription": "How many `.cut` files may run at once. Each compiles in the shared GnuCOBOL container, so keep this at `1` unless your machine has room to spare."
         },
         "mockymock.executablePath": {
           "type": "string",
           "default": "",
-          "order": 4,
+          "order": 5,
           "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build."
         }
       }

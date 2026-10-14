@@ -33,7 +33,10 @@ export interface FailureDetail {
 }
 
 export type CaseOutcome =
-  | { kind: 'passed' }
+  // risky: passed while asserting nothing (no EXPECT/VERIFY) -- still a
+  // pass, like PHPUnit's "risky" status, but worth saying so. Only the JSON
+  // report carries it.
+  | { kind: 'passed'; risky?: boolean }
   | { kind: 'failed'; message: string; details?: FailureDetail[] }
   | { kind: 'errored'; message: string }
   | { kind: 'not-run'; message: string };
