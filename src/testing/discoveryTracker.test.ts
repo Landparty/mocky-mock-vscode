@@ -19,3 +19,29 @@ describe('DiscoveryTracker', () => {
     assert.strictEqual(tracker.isCurrent('file:///A.cut', a), true);
   });
 });
+
+describe('DiscoveryTracker.idle', () => {
+  it('waits for running discoveries, including ones started while waiting', async () => {
+    const tracker = new DiscoveryTracker();
+    const events: string[] = [];
+    let finishFirst!: () => void;
+    let finishSecond!: () => void;
+    void tracker.track(new Promise<void>((r) => (finishFirst = r)).then(() => events.push('first')));
+    const idle = tracker.idle().then(() => events.push('idle'));
+    await Promise.resolve();
+    void tracker.track(new Promise<void>((r) => (finishSecond = r)).then(() => events.push('second')));
+    finishFirst();
+    await new Promise((r) => setTimeout(r, 0));
+    assert.deepStrictEqual(events, ['first']);
+    finishSecond();
+    await idle;
+    assert.deepStrictEqual(events, ['first', 'second', 'idle']);
+  });
+
+  it('resolves at once with nothing running, and after a failed discovery', async () => {
+    const tracker = new DiscoveryTracker();
+    await tracker.idle();
+    void tracker.track(Promise.reject(new Error('collect failed'))).catch(() => undefined);
+    await tracker.idle();
+  });
+});

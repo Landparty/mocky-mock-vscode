@@ -155,7 +155,11 @@ export function activateTestController(
   // DiscoveryTracker); removeFile supersedes any still in flight too.
   const discoveries = new DiscoveryTracker();
 
-  async function discoverAndBuild(uri: vscode.Uri) {
+  function discoverAndBuild(uri: vscode.Uri): Promise<void> {
+    return discoveries.track(discoverAndBuildNow(uri));
+  }
+
+  async function discoverAndBuildNow(uri: vscode.Uri) {
     if (isExcludedCutPath(uri.fsPath)) return;
     const generation = discoveries.begin(uri.toString());
     let text: string;
@@ -933,6 +937,12 @@ export function activateTestController(
           }
           running = true;
           try {
+            // A .cut save also starts a rediscovery (the watcher above).
+            // Run against the tree it produces, not the one it replaces --
+            // or a renamed case runs under its old name and a new one not
+            // at all.
+            await discoveries.idle();
+            if (token.isCancellationRequested) return;
             const include = request.include?.length ? request.include : undefined;
             await handler(new vscode.TestRunRequest(include, request.exclude, request.profile), token);
           } finally {
