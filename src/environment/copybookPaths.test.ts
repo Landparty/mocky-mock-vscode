@@ -69,11 +69,11 @@ describe('setting path expansion', () => {
   const ctx = { folder: ws, homeDir: home, namedFolder: (n: string) => (n === 'shared' ? shared : undefined) };
 
   it('expands ~, ${userHome}, ${workspaceFolder} and ${workspaceFolder:name}', () => {
-    assert.strictEqual(expandSettingPath('~/.local/bin/mockymock', ctx), `${home}/.local/bin/mockymock`);
+    assert.strictEqual(expandSettingPath('~/.local/bin/mockymock', ctx), path.normalize(`${home}/.local/bin/mockymock`));
     assert.strictEqual(expandSettingPath('~', ctx), home);
-    assert.strictEqual(expandSettingPath('${userHome}/cpy', ctx), `${home}/cpy`);
-    assert.strictEqual(expandSettingPath('${workspaceFolder}/bin/mockymock', ctx), `${ws}/bin/mockymock`);
-    assert.strictEqual(expandSettingPath('${workspaceFolder:shared}/cpy', ctx), `${shared}/cpy`);
+    assert.strictEqual(expandSettingPath('${userHome}/cpy', ctx), path.normalize(`${home}/cpy`));
+    assert.strictEqual(expandSettingPath('${workspaceFolder}/bin/mockymock', ctx), path.normalize(`${ws}/bin/mockymock`));
+    assert.strictEqual(expandSettingPath('${workspaceFolder:shared}/cpy', ctx), path.normalize(`${shared}/cpy`));
   });
 
   it('leaves a variable with nothing to stand for, and a ~ inside a name, as written', () => {
