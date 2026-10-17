@@ -29,6 +29,7 @@ import {
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
+import { PREFLIGHTED } from '../debug/debugConfigurationProvider';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 interface FilePlan {
@@ -822,6 +823,8 @@ export function activateTestController(
       case: caseItem.label,
       executablePath,
       copybookPaths,
+      // Already through ensureReady() and the lint gate above.
+      [PREFLIGHTED]: true,
     };
 
     // Captured so a Test Results panel cancel can actually stop the session

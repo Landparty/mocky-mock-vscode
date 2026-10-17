@@ -80,7 +80,7 @@ export function activate(context: vscode.ExtensionContext) {
       MOCKYMOCK_DEBUG_TYPE,
       new MockymockDebugAdapterDescriptorFactory(context.extensionPath)
     ),
-    vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider(context))
+    vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider(context, environmentManager))
   );
 
   const setupChannel = vscode.window.createOutputChannel('mockymock: Setup');

@@ -10,7 +10,9 @@
 // slips past this preflight surfaces to the user as a generic "debug
 // adapter process terminated unexpectedly" dialog instead of a clear
 // message. Running `lint` first and gating on it here prevents that.
+import * as path from 'path';
 import { CommandResult } from '../environment/commandRunner';
+import { cutSuitesFromCollectJson } from '../discovery/cutDiscovery';
 import { cutRelativeLine, parseLintOutput } from '../linting/lintOutput';
 
 export type LintGate = { blocked: false } | { blocked: true; message: string };
@@ -37,5 +39,26 @@ export function evaluateLintResult(result: CommandResult): LintGate {
   return {
     blocked: true,
     message: `mockymock: cannot start a debug session -- "mockymock lint" found problems:\n${detail}`,
+  };
+}
+
+// `lint` is whole-file, so it can't catch a launch.json `case` naming no
+// TESTCASE -- which `mockymock debug --dap-stdio` refuses the same way, in
+// plain text before speaking DAP. Gate on `collect --json` instead. Only a
+// definite answer blocks: a collect that failed or isn't a collect document
+// (a CLI predating it, a .cut that doesn't parse -- the lint gate's job)
+// lets the session start.
+export function evaluateCaseSelection(result: CommandResult, caseName: string, cutPath: string): LintGate {
+  if (result.code !== 0) return { blocked: false };
+  const suites = cutSuitesFromCollectJson(result.stdout);
+  if (!suites) return { blocked: false };
+  const names = suites.flatMap((suite) => suite.cases.map((c) => c.name));
+  if (names.includes(caseName)) return { blocked: false };
+  const available = names.length ? names.map((name) => `"${name}"`).join(', ') : 'none';
+  return {
+    blocked: true,
+    message:
+      `mockymock: cannot start a debug session -- ${path.basename(cutPath)} has no TESTCASE named "${caseName}" ` +
+      `(available: ${available}). Set "case" in the launch configuration to one of them.`,
   };
 }
