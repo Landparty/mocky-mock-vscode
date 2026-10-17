@@ -41,6 +41,13 @@ export class EnvironmentManager {
     // Docker probe is still in flight.
     this.setStatus('checking');
     void this.activateIfCutWorkspace();
+    // Fixing the setting (e.g. from the CLI-not-found toast's Open Settings)
+    // should clear "CLI not found" right away, not at the next test run.
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('mockymock.executablePath')) void this.refreshStatus();
+      })
+    );
   }
 
   // `onLanguage:cobol` (added alongside the Outline provider) now activates
