@@ -190,8 +190,27 @@ const DOCKER_DAEMON_CONNECT_PATTERN =
 const DOCKER_PERMISSION_DENIED_PATTERN =
   /permission denied while trying to connect to the docker|connect: permission denied/i;
 
-export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
-  const result = await run('docker', ['info']);
+// How long one `docker info` may take. A wedged Docker Desktop, a frozen VM
+// or a docker context pointing at an unreachable host makes it hang
+// indefinitely, and every caller (each test run, Check Setup, the 90 s
+// start-up poll) used to hang with it.
+export const DOCKER_INFO_TIMEOUT_MS = 10_000;
+
+export async function checkDocker(
+  run: CommandRunner,
+  timeoutMs: number = DOCKER_INFO_TIMEOUT_MS
+): Promise<DockerStatus> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), Math.max(0, timeoutMs));
+  let result: CommandResult;
+  try {
+    result = await run('docker', ['info'], undefined, abort.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+  // A docker CLI that never answered was found and ran: the daemon is not
+  // responding, which is not a missing binary (the abort reads as code -1).
+  if (abort.signal.aborted) return 'daemon-down';
   if (result.code === 0) return 'available';
   if (result.code === -1) return 'not-installed';
   if (DOCKER_PERMISSION_DENIED_PATTERN.test(result.stderr)) return 'permission-denied';

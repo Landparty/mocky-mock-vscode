@@ -4,6 +4,7 @@ import { runCommand } from './commandRunner';
 import {
   checkCommandAvailable,
   checkDocker,
+  DOCKER_INFO_TIMEOUT_MS,
   describeDockerLaunchFailure,
   describeDockerStartFailure,
   DOCKER_PERMISSION_DENIED_MESSAGE,
@@ -113,13 +114,26 @@ export class EnvironmentManager {
   // its own stacked progress notification. Only the in-flight promise is
   // shared -- a later call after settle re-probes from scratch, so this is
   // deduplication, not caching.
-  async ensureReady(): Promise<ReadyResult> {
+  //
+  // `token` lets one caller stop waiting (Test Explorer's Stop) without
+  // abandoning the shared probe the other callers are still awaiting.
+  async ensureReady(token?: vscode.CancellationToken): Promise<ReadyResult> {
     if (!this.ensureReadyInFlight) {
       this.ensureReadyInFlight = this.doEnsureReady().finally(() => {
         this.ensureReadyInFlight = undefined;
       });
     }
-    return this.ensureReadyInFlight;
+    if (!token) return this.ensureReadyInFlight;
+    if (token.isCancellationRequested) return { ok: false, message: 'run cancelled' };
+    let listener: vscode.Disposable | undefined;
+    const cancelled = new Promise<ReadyResult>((resolve) => {
+      listener = token.onCancellationRequested(() => resolve({ ok: false, message: 'run cancelled' }));
+    });
+    try {
+      return await Promise.race([this.ensureReadyInFlight, cancelled]);
+    } finally {
+      listener?.dispose();
+    }
   }
 
   private async doEnsureReady(): Promise<ReadyResult> {
@@ -241,11 +255,13 @@ export class EnvironmentManager {
         }
         const deadline = Date.now() + 90_000;
         while (Date.now() < deadline) {
-          const status = await checkDocker(runCommand);
+          // Each poll is bounded by the time left, so one stalled
+          // `docker info` can't carry the wait past the deadline.
+          const status = await checkDocker(runCommand, Math.min(DOCKER_INFO_TIMEOUT_MS, deadline - Date.now()));
           if (status === 'available') {
             return { started: true };
           }
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(3000, deadline - Date.now()))));
         }
         return { started: false };
       }

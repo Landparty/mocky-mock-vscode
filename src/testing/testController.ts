@@ -421,14 +421,14 @@ export function activateTestController(
       if (wholeFile) run[kind](fileItem, new vscode.TestMessage(message));
     }
 
-    const ready = await environmentManager.ensureReady();
+    const ready = await environmentManager.ensureReady(token);
+    if (token.isCancellationRequested) {
+      for (const caseItem of selected) run.skipped(caseItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
       failEverything('errored', ready.message);
-      return;
-    }
-    if (token.isCancellationRequested) {
-      for (const caseItem of selected) run.skipped(caseItem);
       return;
     }
 
@@ -635,14 +635,14 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
 
-    const ready = await environmentManager.ensureReady();
+    const ready = await environmentManager.ensureReady(token);
+    if (token.isCancellationRequested) {
+      run.skipped(fileItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
       run.errored(fileItem, new vscode.TestMessage(ready.message));
-      return;
-    }
-    if (token.isCancellationRequested) {
-      run.skipped(fileItem);
       return;
     }
 
@@ -767,14 +767,14 @@ export function activateTestController(
     const plan = plans.find((p) => selectedCaseItems(p).includes(caseItem))!;
     run.started(caseItem);
 
-    const ready = await environmentManager.ensureReady();
+    const ready = await environmentManager.ensureReady(token);
+    if (token.isCancellationRequested) {
+      run.skipped(caseItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, caseItem);
       run.errored(caseItem, new vscode.TestMessage(ready.message));
-      return;
-    }
-    if (token.isCancellationRequested) {
-      run.skipped(caseItem);
       return;
     }
 

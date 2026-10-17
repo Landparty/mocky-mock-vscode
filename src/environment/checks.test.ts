@@ -96,6 +96,17 @@ describe('checkDocker', () => {
     }
   });
 
+  it('gives up on a docker info that never answers and reports the daemon as down', async () => {
+    let sawSignal = false;
+    const hangingRunner: CommandRunner = (_cmd, _args, _onOutput, signal) =>
+      new Promise((resolve) => {
+        sawSignal = signal !== undefined;
+        signal?.addEventListener('abort', () => resolve({ code: -1, stdout: '', stderr: 'run cancelled' }));
+      });
+    assert.strictEqual(await checkDocker(hangingRunner, 20), 'daemon-down');
+    assert.ok(sawSignal);
+  });
+
   it('returns daemon-down for the Windows named-pipe connect error', async () => {
     const status = await checkDocker(
       fakeRunner({
