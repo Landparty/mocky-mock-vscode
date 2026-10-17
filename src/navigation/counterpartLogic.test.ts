@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { counterpartOf } from './counterpartLogic';
+import { counterpartOf, isExportedProgram, originalOfExport } from './counterpartLogic';
 
 const dir = path.join(path.sep, 'w');
 const p = (name: string) => path.join(dir, name);
@@ -59,5 +59,18 @@ describe('counterpartOf', () => {
     assert.strictEqual(counterpartOf(p('PAY.mainframe.cbl'), () => true), undefined);
     assert.strictEqual(counterpartOf(p('PAY.cpy'), () => true), undefined);
     assert.strictEqual(counterpartOf(p('README.md'), () => true), undefined);
+  });
+});
+
+describe('originalOfExport', () => {
+  it('finds the program an exported PROG.mainframe.cbl came from', () => {
+    assert.strictEqual(isExportedProgram(p('PAY.mainframe.cbl')), true);
+    assert.strictEqual(isExportedProgram(p('PAY.cbl')), false);
+    assert.strictEqual(originalOfExport(p('PAY.mainframe.cbl'), (f) => f === p('PAY.cob')), p('PAY.cob'));
+  });
+
+  it('is undefined for an ordinary program or when the original is gone', () => {
+    assert.strictEqual(originalOfExport(p('PAY.cbl'), () => true), undefined);
+    assert.strictEqual(originalOfExport(p('PAY.mainframe.cbl'), () => false), undefined);
   });
 });

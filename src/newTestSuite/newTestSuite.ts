@@ -38,6 +38,7 @@ import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { rememberPairing } from '../discovery/suitePairing';
 import { newSuiteTarget } from '../discovery/suiteIndexService';
 import { askSuiteTopic, NEW_SUITE, pickSuite } from '../navigation/suitePicker';
+import { isExportedProgram, originalOfExport } from '../navigation/counterpartLogic';
 import { isCobolPath } from '../environment/cobolPaths';
 import {
   buildGenerateArgs,
@@ -111,6 +112,22 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
 
       if (!activePath || !isCobolPath(activePath) || !editor) {
         await showNeedsFile(COMMAND_LABEL, 'cobol', NEW_TEST_SUITE_COMMAND);
+        return;
+      }
+
+      // An exported PROG.mainframe.cbl is build output (the menus hide this
+      // command for it; the palette doesn't): a suite generated from it
+      // would PERFORM mockymock's own injected driver paragraphs.
+      if (isExportedProgram(activePath)) {
+        const original = originalOfExport(activePath);
+        const open = original ? `Open ${path.basename(original)}` : undefined;
+        const choice = await vscode.window.showErrorMessage(
+          `mockymock: "${path.basename(activePath)}" is an exported file (build output). Create test suites for the original program${original ? `, ${path.basename(original)}` : ''}.`,
+          ...(open ? [open] : [])
+        );
+        if (original && choice === open) {
+          await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(original));
+        }
         return;
       }
 
