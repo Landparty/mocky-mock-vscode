@@ -20,3 +20,31 @@ export interface DiagnosticLike {
 export function hasSuggestedFix(diagnostic: DiagnosticLike): boolean {
   return diagnostic.source === 'mockymock' && diagnostic.message.includes(HAS_SUGGESTED_FIX);
 }
+
+// `generate --fill` writes the blocks it can and still exits 1 when lint
+// would refuse something no MOCK block fixes (an UNKNOWN_PARAGRAPH, a
+// terminator layout, an UNMOCKED_* with no mechanical fix). A non-zero
+// exit is only a failure when nothing was added: otherwise the file
+// changed and the leftovers are the news. `leftovers` are the
+// "mockymock generate: ..." lines printed after the header, prefix
+// dropped.
+export interface FillOutcome {
+  added: number;
+  leftovers: string[];
+}
+
+export function parseFillOutcome(stdout: string): FillOutcome {
+  const added = /added (\d+) mock block/.exec(stdout);
+  const leftovers = stdout
+    .split(/\r?\n/)
+    .map((line) => /^mockymock generate: (.*)$/.exec(line.trim())?.[1])
+    .filter((line): line is string => !!line);
+  return { added: added ? Number(added[1]) : 0, leftovers };
+}
+
+// The warning for a fill that inserted blocks but left problems behind.
+export function describePartialFill(outcome: FillOutcome): string {
+  const n = outcome.added;
+  const left = outcome.leftovers.length ? outcome.leftovers.join('; ') : 'see the remaining diagnostics';
+  return `mockymock: added ${n} mock block${n === 1 ? '' : 's'}, but lint still refuses this suite for reasons no MOCK block can fix: ${left}`;
+}
