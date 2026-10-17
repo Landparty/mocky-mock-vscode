@@ -19,9 +19,10 @@
     "structure": {
       "patterns": [
         {
-          "match": "^\\s*(TESTSUITE|TESTCASE)\\b(?:(.*?)(\\bTAGS\\b))?",
+          "match": "^\\s*(TESTSUITE|TESTCASE)\\b(?:\\s+(\"[^\"]*\"))?(?:\\s+(TAGS)\\b)?",
           "captures": {
             "1": { "name": "keyword.control.structure.cut" },
+            "2": { "name": "string.quoted.double.cut" },
             "3": { "name": "keyword.other.tags.cut" }
           }
         },
@@ -32,10 +33,11 @@
           }
         },
         {
-          "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)",
+          "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)(?:\\s+(TAGS)\\b)?",
           "captures": {
             "1": { "name": "keyword.other.provider.cut" },
-            "2": { "name": "entity.name.provider.cut" }
+            "2": { "name": "entity.name.provider.cut" },
+            "3": { "name": "keyword.other.tags.cut" }
           }
         },
         {
@@ -95,11 +97,13 @@
           }
         },
         {
-          "match": "^\\s*(VERIFY)\\b(.*?)(WAS\\s+(?:CALLED|PERFORMED))\\s+(ONCE|NEVER|AT\\s+LEAST\\s+ONCE|\\d+\\s+TIMES)\\b",
+          "match": "^\\s*(VERIFY)\\s+(?:(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|INITIATE|GENERATE|TERMINATE|PARAGRAPH|SECTION)\\s+)?(.*?)\\s*(WAS\\s+(?:CALLED|PERFORMED))\\s+(ONCE|NEVER|AT\\s+LEAST\\s+ONCE|\\d+\\s+TIMES)\\b",
           "captures": {
             "1": { "name": "keyword.control.assertion.cut" },
-            "3": { "name": "keyword.operator.words.cut" },
-            "4": { "name": "constant.language.expectation.cut" }
+            "2": { "name": "storage.type.category.cut" },
+            "3": { "patterns": [{ "include": "#strings" }] },
+            "4": { "name": "keyword.operator.words.cut" },
+            "5": { "name": "constant.language.expectation.cut" }
           }
         },
         {
@@ -137,7 +141,7 @@
           }
         },
         {
-          "match": "^\\s*(FILE-STATUS)\\s+(IS)\\s+(?:(SUCCESS|END-OF-FILE|DUPLICATE-KEY|RECORD-NOT-FOUND|FILE-NOT-FOUND|ALREADY-OPEN|NOT-OPEN|NO-CURRENT-RECORD)\\b|(\"[^\"]*\")|([A-Za-z][A-Za-z-]*))\\s*$",
+          "match": "^\\s*(FILE-STATUS)\\s+(IS)\\s+(?:(?i:(SUCCESS|END-OF-FILE|DUPLICATE-KEY|RECORD-NOT-FOUND|FILE-NOT-FOUND|ALREADY-OPEN|NOT-OPEN|NO-CURRENT-RECORD))\\b|(\"[^\"]*\")|([A-Za-z][A-Za-z-]*))\\s*$",
           "captures": {
             "1": { "name": "keyword.control.filestatus.cut" },
             "2": { "name": "keyword.operator.words.cut" },

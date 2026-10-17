@@ -160,3 +160,47 @@ describe('.cut grammar: CAPTURE and subscripted or qualified names', () => {
     assert.strictEqual(scopeOf('    EXPECT WS-TAB(1) TO BE 5', 'WS-TAB(1)'), 'variable.other.cobol.cut');
   });
 });
+
+describe('.cut grammar: names, VERIFY keys and FILE-STATUS case', () => {
+  it('highlights a tagged TESTCASE name as one string, TAGS inside it included', () => {
+    const tagged = '    TESTCASE "tagged name" TAGS "fast"';
+    assert.strictEqual(scopeOf(tagged, '"tagged name"'), 'string.quoted.double.cut');
+    assert.strictEqual(scopeOf(tagged, 'TAGS'), 'keyword.other.tags.cut');
+    assert.strictEqual(scopeOf(tagged, '"fast"'), 'string.quoted.double.cut');
+    const named = 'TESTCASE "uses TAGS in name" TAGS "fast"';
+    assert.strictEqual(scopeOf(named, '"uses TAGS in name"'), 'string.quoted.double.cut');
+    assert.strictEqual(scopeOf('TESTSUITE "suite"', '"suite"'), 'string.quoted.double.cut');
+  });
+
+  it('highlights TAGS after USING PROVIDER', () => {
+    const line = 'TESTCASE "c" USING PROVIDER Rates TAGS "slow"';
+    assert.strictEqual(scopeOf(line, 'Rates'), 'entity.name.provider.cut');
+    assert.strictEqual(scopeOf(line, 'TAGS'), 'keyword.other.tags.cut');
+  });
+
+  it('highlights the VERIFY category and quoted key as on MOCK lines', () => {
+    assert.strictEqual(scopeOf('    VERIFY "PGM" WAS CALLED 2 TIMES', '"PGM"'), 'string.quoted.double.cut');
+    const sql = '    VERIFY SQL "SELECT" WAS CALLED NEVER';
+    assert.strictEqual(scopeOf(sql, 'SQL'), 'storage.type.category.cut');
+    assert.strictEqual(scopeOf(sql, '"SELECT"'), 'string.quoted.double.cut');
+    assert.strictEqual(scopeOf(sql, 'NEVER'), 'constant.language.expectation.cut');
+  });
+
+  it('accepts a FILE-STATUS mnemonic in any case, as the CLI upper-cases it', () => {
+    assert.strictEqual(scopeOf('        FILE-STATUS IS end-of-file', 'end-of-file'), 'constant.language.filestatus.cut');
+    assert.strictEqual(scopeOf('        FILE-STATUS IS NO-SUCH', 'NO-SUCH'), 'invalid.illegal.filestatus.cut');
+  });
+});
+
+describe('.cut folding', () => {
+  const { end } = JSON.parse(
+    fs.readFileSync(path.join(process.cwd(), 'language/cut-language-configuration.json'), 'utf8')
+  ).folding.markers as { end: string };
+
+  it('closes a fold on END-MOCK/END-BEFORE/END-AFTER in any case, as the CLI accepts them', () => {
+    for (const line of ['    END-MOCK', '    end-mock', '    End-Mock.', 'end-before', 'End-After.']) {
+      assert.ok(new RegExp(end).test(line), `"${line}" does not close a fold`);
+    }
+    assert.ok(!new RegExp(end).test('    END-MOCKED'));
+  });
+});
