@@ -18,8 +18,8 @@ describe('detectCompletionContext', () => {
     assert.strictEqual(detectCompletionContext('MOCK'), null);
   });
 
-  it('detects the key position after MOCK <category> <partial key>, uppercasing the category', () => {
-    assert.deepStrictEqual(detectCompletionContext('    MOCK call SUB'), {
+  it('detects the key position after MOCK <category> <partial key>', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK CALL SUB'), {
       kind: 'key',
       category: 'CALL',
       partial: 'SUB',
@@ -46,7 +46,7 @@ describe('detectCompletionContext', () => {
   it('offers ROWS after a complete key on a ROWS-capable category', () => {
     assert.deepStrictEqual(detectCompletionContext('    MOCK CALL "CBLTDLI" '), { kind: 'rows', partial: '' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "FETCH CUR1" RO'), { kind: 'rows', partial: 'RO' });
-    assert.deepStrictEqual(detectCompletionContext('    mock read CUST-FILE '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK READ CUST-FILE ro'), { kind: 'rows', partial: 'ro' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK DLI "GN" '), { kind: 'rows', partial: '' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK CICS "LINK PROGRAM" '), { kind: 'rows', partial: '' });
   });
@@ -55,6 +55,13 @@ describe('detectCompletionContext', () => {
     assert.strictEqual(detectCompletionContext('    MOCK WRITE OUT-FILE '), null);
     assert.strictEqual(detectCompletionContext('    MOCK PARAGRAPH 1000-X '), null);
     assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT '), null);
+  });
+
+  it('offers nothing after a lowercase MOCK or category, which the CLI rejects', () => {
+    assert.strictEqual(detectCompletionContext('    mock '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK call '), null);
+    assert.strictEqual(detectCompletionContext('    Mock Read IN-FILE '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK read IN-FILE '), null);
   });
 
   it('returns null on an unrelated line', () => {

@@ -61,11 +61,15 @@ export type CompletionContext =
 // The category position needs the whitespace after MOCK: at `MOCK|` the
 // editor's current word is MOCK itself, so an accepted category would
 // replace it and the list is filtered against a word no category matches.
-const AFTER_MOCK_RE = /^\s*MOCK\s+$/i;
-const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+(\S*)$/i;
+// Case-sensitive, like mocky-mock's dsl/parser.py `_MOCK_QUOTED_RE` /
+// `_MOCK_BARE_RE`: `mock` and `MOCK call` are not MOCK lines to the CLI,
+// so completing after them would only help write a line it rejects.
+const AFTER_MOCK_RE = /^\s*MOCK\s+$/;
+const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Z]+)\s+(\S*)$/;
 // A key is complete once it is a closed quoted string (SQL keys contain
-// spaces) or a bare word followed by whitespace.
-const AFTER_MOCK_KEY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+("[^"]*"|[^\s"]+)\s+([A-Za-z]*)$/i;
+// spaces) or a bare word followed by whitespace. The trailing ROWS partial
+// may be in any case: accepting the item replaces it with `ROWS`.
+const AFTER_MOCK_KEY_RE = /^\s*MOCK\s+([A-Z]+)\s+("[^"]*"|[^\s"]+)\s+([A-Za-z]*)$/;
 
 // `lineTextBeforeCursor` is everything on the current line up to (not
 // including) the cursor -- exactly what VS Code's CompletionItemProvider
@@ -76,10 +80,10 @@ export function detectCompletionContext(lineTextBeforeCursor: string): Completio
   }
   const match = AFTER_MOCK_CATEGORY_RE.exec(lineTextBeforeCursor);
   if (match) {
-    return { kind: 'key', category: match[1].toUpperCase(), partial: match[2] };
+    return { kind: 'key', category: match[1], partial: match[2] };
   }
   const keyed = AFTER_MOCK_KEY_RE.exec(lineTextBeforeCursor);
-  if (keyed && ROWS_CATEGORIES.has(keyed[1].toUpperCase()) && 'ROWS'.startsWith(keyed[3].toUpperCase())) {
+  if (keyed && ROWS_CATEGORIES.has(keyed[1]) && 'ROWS'.startsWith(keyed[3].toUpperCase())) {
     return { kind: 'rows', partial: keyed[3] };
   }
   return null;
