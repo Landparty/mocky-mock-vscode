@@ -93,6 +93,48 @@ export function parseProgramSuites(stdout: string): ProgramSuites | undefined {
 // TESTCASE, so scanning stops there.
 const PROGRAM_LINE_RE = /^PROGRAM\s+"([^"]*)"$/;
 
+// The CLI's project config files, as it looks for them in each folder.
+// A pyproject.toml only counts with a [tool.mockymock] table.
+const CONFIG_FILE_NAMES = ['cobol.yml', 'cobol.yaml', 'mockymock.toml', 'pyproject.toml'];
+const TOOL_MOCKYMOCK_RE = /^\s*\[tool\.mockymock[\].]/m;
+
+export function isProjectConfigFile(
+  filePath: string,
+  readText: (p: string) => string | undefined
+): boolean {
+  const name = path.basename(filePath);
+  if (!CONFIG_FILE_NAMES.includes(name)) return false;
+  if (name !== 'pyproject.toml') return true;
+  const text = readText(filePath);
+  return text !== undefined && TOOL_MOCKYMOCK_RE.test(text);
+}
+
+// The folder of the nearest project config at or above `fromDir`, stopping
+// at `stopDir` (the workspace folder) -- the cwd the CLI must run in to see
+// the same project layout lint and run see from the suite's own folder.
+// `stopDir` itself when there is none, which keeps the no-config behaviour.
+export function projectConfigDir(
+  fromDir: string,
+  stopDir: string,
+  exists: (p: string) => boolean,
+  readText: (p: string) => string | undefined
+): string {
+  let dir = path.resolve(fromDir);
+  const stop = path.resolve(stopDir);
+  const relative = path.relative(stop, dir);
+  if (path.isAbsolute(relative) || relative.split(path.sep)[0] === '..') return stop;
+  for (;;) {
+    if (dir === stop) return stop;
+    for (const name of CONFIG_FILE_NAMES) {
+      const candidate = path.join(dir, name);
+      if (exists(candidate) && isProjectConfigFile(candidate, readText)) return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return stop;
+    dir = parent;
+  }
+}
+
 export function readProgramLine(text: string): string | undefined {
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -159,25 +201,29 @@ let programToCuts = new Map<string, string[]>();
 let cutToError = new Map<string, string>();
 
 // Replaces everything known with the latest listings (one per workspace
-// folder). A suite the CLI couldn't pair is left out of the pairing, so
-// callers fall back -- but when the CLI said WHY (two programs share the
-// name, the PROGRAM line names a missing file), that reason is kept for
-// pairingError().
+// folder, then one per nested project config root below it). A suite
+// listed more than once takes its LAST row, so a nested project's own
+// listing wins over the workspace root's. A suite the CLI couldn't pair is
+// left out of the pairing, so callers fall back -- but when the CLI said
+// WHY (two programs share the name, the PROGRAM line names a missing
+// file), that reason is kept for pairingError().
 export function setPairings(listings: SuitesListing[]): void {
   const nextCut = new Map<string, string>();
   const nextProgram = new Map<string, string[]>();
   const nextError = new Map<string, string>();
+  const latest = new Map<string, SuitePairing>();
   for (const listing of listings) {
-    for (const row of listing.suites) {
-      if (!row.program) {
-        if (row.error) nextError.set(key(row.cut), row.error);
-        continue;
-      }
-      nextCut.set(key(row.cut), row.program);
-      const suites = nextProgram.get(key(row.program)) ?? [];
-      if (!suites.some((s) => key(s) === key(row.cut))) suites.push(row.cut);
-      nextProgram.set(key(row.program), suites);
+    for (const row of listing.suites) latest.set(key(row.cut), row);
+  }
+  for (const [cutKey, row] of latest) {
+    if (!row.program) {
+      if (row.error) nextError.set(cutKey, row.error);
+      continue;
     }
+    nextCut.set(cutKey, row.program);
+    const suites = nextProgram.get(key(row.program)) ?? [];
+    if (!suites.some((s) => key(s) === cutKey)) suites.push(row.cut);
+    nextProgram.set(key(row.program), suites);
   }
   for (const suites of nextProgram.values()) suites.sort();
   cutToProgram = nextCut;

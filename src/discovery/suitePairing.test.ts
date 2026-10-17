@@ -9,6 +9,8 @@ import {
   pairedProgram,
   pairedSuites,
   pairingError,
+  isProjectConfigFile,
+  projectConfigDir,
   readProgramLine,
   rememberPairing,
   setPairings,
@@ -124,6 +126,41 @@ describe('suitePairing', () => {
     assert.strictEqual(pairingError(at('tests', 'LOST.cut')), undefined);
     rememberPairing(at('tests', 'PAY.cut'), at('src', 'a', 'PAY.cbl'));
     assert.strictEqual(pairingError(at('tests', 'PAY.cut')), undefined);
+  });
+
+  it("lets a nested project's listing win over the workspace root's for the suites it lists", () => {
+    const cut = at('proj', 'tests', 'PAY.cut');
+    setPairings([
+      { root: at(), testsDir: at('tests'), sourceRoot: at('src'), suites: [{ cut, program: null, error: '2 programs named PAY' }] },
+      {
+        root: at('proj'),
+        testsDir: at('proj', 'tests'),
+        sourceRoot: at('proj', 'cobol'),
+        suites: [{ cut, program: at('proj', 'cobol', 'PAY.cbl'), rule: 'mirror' }],
+      },
+    ]);
+    assert.strictEqual(pairedProgram(cut), at('proj', 'cobol', 'PAY.cbl'));
+    assert.strictEqual(pairingError(cut), undefined);
+    assert.deepStrictEqual(pairedSuites(at('proj', 'cobol', 'PAY.cbl')), [cut]);
+  });
+
+  it('runs the CLI from the nearest project config between a file and its workspace folder', () => {
+    const files = new Map<string, string>([
+      [at('proj', 'mockymock.toml'), 'source_root = "cobol"\n'],
+      [at('py', 'pyproject.toml'), '[tool.black]\nline-length = 88\n'],
+      [at('py2', 'pyproject.toml'), '[tool.mockymock]\ntest_root = "tests"\n'],
+    ]);
+    const exists = (p: string) => files.has(p);
+    const read = (p: string) => files.get(p);
+    assert.strictEqual(projectConfigDir(at('proj', 'cobol'), at(), exists, read), at('proj'));
+    assert.strictEqual(projectConfigDir(at('proj'), at(), exists, read), at('proj'));
+    assert.strictEqual(projectConfigDir(at('other', 'cobol'), at(), exists, read), at());
+    assert.strictEqual(projectConfigDir(at('py', 'src'), at(), exists, read), at());
+    assert.strictEqual(projectConfigDir(at('py2', 'src'), at(), exists, read), at('py2'));
+    assert.strictEqual(projectConfigDir(path.join(path.sep, 'elsewhere'), at(), exists, read), at());
+    assert.strictEqual(isProjectConfigFile(at('py', 'pyproject.toml'), read), false);
+    assert.strictEqual(isProjectConfigFile(at('py2', 'pyproject.toml'), read), true);
+    assert.strictEqual(isProjectConfigFile(at('x', 'cobol.yml'), () => undefined), true);
   });
 
   it('remembers a just-created suite until the next refresh', () => {
