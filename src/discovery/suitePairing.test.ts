@@ -18,7 +18,8 @@ import {
   validateSuiteTopic,
 } from './suitePairing';
 
-const root = path.join(path.sep, 'repo');
+// Resolved, so on Windows it carries a drive like the paths VS Code hands out.
+const root = path.resolve(path.sep, 'repo');
 const at = (...parts: string[]) => path.join(root, ...parts);
 
 describe('suitePairing', () => {
@@ -198,7 +199,9 @@ describe('suitePairing through a symlinked workspace', () => {
   });
 
   it('pairs a suite opened through a symlink the way the CLI (which reports realpaths) does', function () {
-    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mockymock-link-')));
+    // .native: on Windows it also expands 8.3 short names (RUNNER~1), as
+    // Python's Path.resolve() does for the CLI's paths.
+    tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'mockymock-link-')));
     const real = path.join(tmp, 'real', 'proj');
     const link = path.join(tmp, 'linkproj');
     fs.mkdirSync(path.join(real, 'src', 'pay'), { recursive: true });

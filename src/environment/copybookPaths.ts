@@ -26,11 +26,13 @@ export function expandSettingPath(p: string, ctx: SettingPathContext = {}): stri
   const home = ctx.homeDir ?? os.homedir();
   let out = p.trim();
   if (out === '~' || /^~[\\/]/.test(out)) out = home + out.slice(1);
-  return out.replace(/\$\{(userHome|workspaceFolder)(?::([^}]+))?\}/g, (whole, name: string, folderName?: string) => {
+  out = out.replace(/\$\{(userHome|workspaceFolder)(?::([^}]+))?\}/g, (whole, name: string, folderName?: string) => {
     if (name === 'userHome') return folderName === undefined ? home : whole;
     const folder = folderName === undefined ? ctx.folder : ctx.namedFolder?.(folderName);
     return folder ?? whole;
   });
+  // `~/x` on Windows is now `C:\\Users\\sam/x`: give it one separator style.
+  return path.isAbsolute(out) ? path.normalize(out) : out;
 }
 
 // mockymock.executablePath: variables expanded, then a relative path (one
