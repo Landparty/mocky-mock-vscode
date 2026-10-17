@@ -12,7 +12,14 @@ import {
   CUT_DISCOVERY_EXCLUDE_GLOB,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
-import { mapResultsForCases, unattributedFailures, CaseOutcome, ExpectedCase, UnattributedFailure } from './resultMapper';
+import {
+  mapResultsForCases,
+  unattributedFailures,
+  unexplainedExitProblem,
+  CaseOutcome,
+  ExpectedCase,
+  UnattributedFailure,
+} from './resultMapper';
 import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
@@ -575,6 +582,16 @@ export function activateTestController(
     const duplicates = jsonReport ? formatDuplicateCaseStarts(jsonReport) : undefined;
     if (duplicates) {
       gatingProblems.push(duplicates);
+    }
+    // Orphans and duplicate starts already explain a nonzero exit.
+    const unexplainedExit = unexplainedExitProblem(
+      result.exitCode,
+      fileHasFailed || fileHasErrored || gatingProblems.length > 0,
+      result.stderr,
+      result.stdout
+    );
+    if (unexplainedExit) {
+      gatingProblems.push(unexplainedExit);
     }
 
     if (gatingProblems.length) {

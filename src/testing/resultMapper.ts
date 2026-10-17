@@ -116,3 +116,22 @@ export function mapResultsForCases(
     return { kind: found.status, message: found.messages.join('\n') || found.status };
   });
 }
+
+// `mockymock run` fails the run whenever the test binary exits nonzero, even
+// after every case printed its END marker (an AFTER-ALL that hangs into the
+// timeout or abends, libcob dying after the SUMMARY line). The report then
+// holds nothing but passes, so this is the only trace of the failure -- the
+// caller must not show the file green. Returns undefined when the exit code
+// already agrees with the case verdicts.
+export function unexplainedExitProblem(
+  exitCode: number,
+  anyCaseFailedOrErrored: boolean,
+  stderr: string,
+  stdout: string
+): string | undefined {
+  if (exitCode === 0 || anyCaseFailedOrErrored) return undefined;
+  // stdout is already in the run output in full; its tail is where the CLI
+  // explains itself when stderr is empty.
+  const detail = stderr.trim() || stdout.trimEnd().split(/\r?\n/).slice(-20).join('\n');
+  return `mockymock run exited ${exitCode} although every case passed` + (detail ? `:\n${detail}` : '');
+}
