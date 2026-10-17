@@ -29,6 +29,9 @@ export function activateLintDiagnostics(
   const inFlight = new Set<string>();
   const queued = new Set<string>();
 
+  const isOpen = (uri: vscode.Uri): boolean =>
+    vscode.workspace.textDocuments.some((d) => d.uri.toString() === uri.toString());
+
   async function lintDocument(document: vscode.TextDocument): Promise<void> {
     if (!document.uri.fsPath.endsWith('.cut') || document.uri.scheme !== 'file') return;
     if (isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) return;
@@ -59,6 +62,13 @@ export function activateLintDiagnostics(
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
       const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
+      // The document may have closed while the CLI ran; its close handler
+      // already cleared the diagnostics, so a late result is discarded
+      // rather than left in the Problems panel for a file nobody has open.
+      if (!isOpen(document.uri)) {
+        collection.delete(document.uri);
+        return;
+      }
       const rangeForLine = (cutLine: number | null): vscode.Range => {
         const zeroBased = cutLine !== null ? Math.max(0, cutLine - 1) : 0;
         const lineLength = zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
