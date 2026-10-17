@@ -2,7 +2,7 @@
 // This is the preferred results channel (it carries .cut line numbers and
 // expected/actual per failure); the JUnit XML path in resultMapper.ts stays
 // as the fallback for a mockymock CLI that predates --json-report.
-import { CaseOutcome, ExpectedCase, FailureDetail, pairResultEntries } from './resultMapper';
+import { CaseOutcome, ExpectedCase, FailureDetail, UnattributedFailure, pairResultEntries } from './resultMapper';
 
 export interface JsonReportFailure {
   message: string;
@@ -246,7 +246,22 @@ export function mapJsonReportCases(
     return expected.map(() => ({ kind: 'errored', message }));
   }
 
-  return pairResultEntries(expected, report.cases).map((found): CaseOutcome => {
+  const paired = pairResultEntries(expected, report.cases);
+  // A refusal or compile failure writes the report with one synthetic entry
+  // ("mockymock run", no .cut line) carrying the reason, and at most not_run
+  // entries for the real cases. When no expected case got a verdict of its
+  // own, that entry's reason is the answer for every one of them -- not "an
+  // earlier crash, or a name mismatch".
+  const unattributed = unattributedEntries(paired, report, (c) => c.line === null);
+  if (unattributed.length && paired.every((found) => !found || found.status === 'not_run')) {
+    const message =
+      unattributed.map((u) => u.message).filter(Boolean).join('\n') ||
+      processFailureMessage ||
+      unattributed.map((u) => u.caseId).join('\n');
+    return expected.map(() => ({ kind: 'errored', message }));
+  }
+
+  return paired.map((found): CaseOutcome => {
     if (!found) {
       // Absent from the report entirely. Unlike an explicit not_run entry
       // (below), the report makes NO claim about why -- most plausibly a
@@ -287,4 +302,29 @@ export function mapJsonReportCases(
       details,
     };
   });
+}
+
+function unattributedEntries(
+  paired: (JsonReportCase | undefined)[],
+  report: JsonRunReport,
+  include: (c: JsonReportCase) => boolean = () => true
+): UnattributedFailure[] {
+  const used = new Set(paired);
+  return report.cases
+    .filter((c) => !used.has(c) && c.status !== 'passed' && c.status !== 'not_run' && include(c))
+    .map((c) => ({
+      caseId: c.name,
+      message: c.failures.map((f) => f.message).join('\n') || c.crashDetail || c.status,
+    }));
+}
+
+// Report entries that belong to none of the expected cases yet did not pass
+// -- the synthetic "mockymock run" entry of a refusal or compile failure, or
+// a case whose name drifted from discovery. They belong to no TestItem, so
+// the caller surfaces them on the file, like orphanFailures.
+export function unattributedReportFailures(
+  expected: ExpectedCase[],
+  report: JsonRunReport
+): UnattributedFailure[] {
+  return unattributedEntries(pairResultEntries(expected, report.cases), report);
 }

@@ -13,7 +13,7 @@ import {
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import { mapResultsForCases, unattributedFailures, CaseOutcome, ExpectedCase, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReportCases, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
+import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
@@ -512,7 +512,7 @@ export function activateTestController(
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
     if (jsonReport) {
       caseOutcomes = mapJsonReportCases(expectedCases, jsonReport, processFailureMessage);
-      orphans = jsonReport.orphanFailures;
+      orphans = [...jsonReport.orphanFailures, ...unattributedReportFailures(expectedCases, jsonReport)];
     } else {
       const junitSuite = result.junitXml ? parseJUnitXml(result.junitXml) : null;
       caseOutcomes = mapResultsForCases(expectedCases, junitSuite, junitSuite ? undefined : processFailureMessage);

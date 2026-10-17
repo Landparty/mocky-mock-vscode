@@ -3,6 +3,7 @@ import {
   parseJsonReport,
   mapJsonReport,
   mapJsonReportCases,
+  unattributedReportFailures,
   formatAdvisorySignals,
   formatDuplicateCaseStarts,
   formatRiskyPass,
@@ -286,4 +287,60 @@ describe('run-report integrity signals', () => {
     assert.deepStrictEqual(report.orphanEnds, ['ok']);
     assert.deepStrictEqual(report.orphanRecords, [{ caseId: '?', dataName: '?', value: '' }]);
   });
+});
+
+// What `mockymock run` writes for a static refusal or a compile failure: one
+// synthetic "mockymock run" entry carrying the reason (and, when the CLI had
+// parsed the .cut, a not_run entry per real case).
+describe('refusal and compile-failure reports', () => {
+  const reason = 'refused (UNRESOLVED_COPYBOOK): unresolved COPY statement at line 26';
+  const refusal = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: '', line: null },
+      cases: [{ name: 'mockymock run', line: null, status: 'failed', failures: [{ message: reason, kind: 'unknown', line: null }] }],
+    })
+  );
+  const compileFailure = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: 's', line: 1 },
+      cases: [
+        { name: 'mockymock run', line: null, status: 'failed', failures: [{ message: 'cobc: error: x', kind: 'unknown', line: null }] },
+        { name: 'one', line: 3, status: 'not_run', failures: [], crashDetail: null },
+        { name: 'two', line: 9, status: 'not_run', failures: [], crashDetail: null },
+      ],
+    })
+  );
+  const expected = [
+    { name: 'one', line: 3 },
+    { name: 'two', line: 9 },
+  ];
+
+  it('errors every case with the refusal reason', () => {
+    assert.deepStrictEqual(mapJsonReportCases(expected, refusal, 'PROCESS FAILURE MSG'), [
+      { kind: 'errored', message: reason },
+      { kind: 'errored', message: reason },
+    ]);
+  });
+
+  it('errors every case with the compile error, not "an earlier case crashed"', () => {
+    assert.deepStrictEqual(mapJsonReportCases(expected, compileFailure), [
+      { kind: 'errored', message: 'cobc: error: x' },
+      { kind: 'errored', message: 'cobc: error: x' },
+    ]);
+  });
+
+  it('surfaces the synthetic entry as an unattributed failure for the file', () => {
+    assert.deepStrictEqual(unattributedReportFailures(expected, refusal!), [{ caseId: 'mockymock run', message: reason }]);
+  });
+
+  it('leaves a real crash report alone', () => {
+    const outcomes = mapJsonReport(['never ran'], report());
+    assert.strictEqual(outcomes.get('never ran')?.kind, 'not-run');
+  });
+
+  function report() {
+    return parseJsonReport(SAMPLE_REPORT);
+  }
 });
