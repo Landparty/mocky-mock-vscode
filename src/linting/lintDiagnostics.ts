@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
+import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
@@ -28,6 +29,11 @@ export function activateLintDiagnostics(
   // re-lint rather than stacking processes.
   const inFlight = new Set<string>();
   const queued = new Set<string>();
+  // The program each open .cut was last linted against (whether or not it
+  // existed), so a pairing that changes later -- the CLI's answer arriving
+  // after activation, a program created or deleted -- can re-lint exactly
+  // the suites it affects.
+  const lintedAgainst = new Map<string, string>();
 
   const isOpen = (uri: vscode.Uri): boolean =>
     vscode.workspace.textDocuments.some((d) => d.uri.toString() === uri.toString());
@@ -49,6 +55,7 @@ export function activateLintDiagnostics(
     inFlight.add(cutPath);
     try {
       const cblPath = resolveCblPath(cutPath);
+      lintedAgainst.set(cutPath, cblPath);
       try {
         await fs.access(cblPath);
       } catch {
@@ -132,7 +139,20 @@ export function activateLintDiagnostics(
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
     vscode.workspace.onDidSaveTextDocument((document) => void lintDocument(document)),
-    vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      collection.delete(document.uri);
+      lintedAgainst.delete(document.uri.fsPath);
+    }),
+    // At activation the CLI's pairing isn't known yet, so a suite under
+    // tests/ resolves to a sibling that doesn't exist and lints to nothing;
+    // once `mockymock suites --json` answers, re-lint every open suite
+    // whose program changed.
+    onDidChangeSuitePairing(() => {
+      for (const document of vscode.workspace.textDocuments) {
+        const previous = lintedAgainst.get(document.uri.fsPath);
+        if (previous !== undefined && previous !== resolveCblPath(document.uri.fsPath)) void lintDocument(document);
+      }
+    }),
     configWatcher,
     ...[configWatcher.onDidChange, configWatcher.onDidCreate, configWatcher.onDidDelete].map((event) =>
       event(() => {
