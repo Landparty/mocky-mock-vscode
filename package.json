@@ -313,7 +313,7 @@
           "default": [],
           "scope": "resource",
           "order": 1,
-          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
+          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
         },
         "mockymock.lintOnSave": {
           "type": "boolean",
@@ -341,7 +341,7 @@
           "type": "string",
           "default": "",
           "order": 5,
-          "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build."
+          "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build.\n\nA relative path (e.g. `.venv/bin/mockymock`) resolves against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded. A bare name (`mockymock`) is looked up on `PATH`."
         }
       }
     },

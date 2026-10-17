@@ -15,6 +15,7 @@ import { activateCutCompletion } from './completion/cutCompletionProvider';
 import { activateCutHover } from './hover/cutHoverProvider';
 import { activateLintCodeActions } from './linting/lintCodeActionProvider';
 import { resolveExecutablePath } from './environment/checks';
+import { configuredExecutablePath } from './environment/invocationConfig';
 import { runCommandIn } from './environment/commandRunner';
 import { formatDoctorReport, parseDoctorJson, projectProblems } from './environment/doctorReport';
 import { activateCounterpartNavigation } from './navigation/counterpart';
@@ -42,7 +43,7 @@ async function runDoctor(context: vscode.ExtensionContext, channel: vscode.Outpu
   // Resolved exactly as EnvironmentManager.ensureReady resolves it, so doctor
   // reports on the same CLI the readiness check just probed.
   const executablePath = resolveExecutablePath(
-    vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+    configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
     context.extensionPath
   );
   const result = await runCommandIn(cwd ?? process.cwd())(executablePath, ['doctor', '--json']);

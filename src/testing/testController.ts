@@ -26,7 +26,7 @@ import {
   supportsDebugCommand,
   supportsMutateCommand,
 } from '../environment/checks';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { configuredExecutablePath, resolveInvocationConfig } from '../environment/invocationConfig';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
@@ -122,7 +122,7 @@ export function activateTestController(
 
   function resolveConfiguredExecutable(uri: vscode.Uri): string {
     return resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock', uri).get<string>('executablePath'),
+      configuredExecutablePath(vscode.workspace.getWorkspaceFolder(uri)),
       context.extensionPath
     );
   }

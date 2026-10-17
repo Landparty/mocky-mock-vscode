@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { resolveExecutablePath } from '../environment/checks';
 import { anchorCommandPath } from '../environment/commandRunner';
+import { resolveExecutablePathSetting } from '../environment/copybookPaths';
+import { configuredExecutablePath, settingPathContext } from '../environment/invocationConfig';
 import { buildDebugArgs, debugAdapterCwd, MockymockDebugConfiguration } from './debugArgs';
 
 // vscode.DebugConfiguration carries a `[key: string]: any` index signature, so
@@ -15,14 +17,14 @@ export class MockymockDebugAdapterDescriptorFactory implements vscode.DebugAdapt
     _executable: vscode.DebugAdapterExecutable | undefined
   ): vscode.ProviderResult<vscode.DebugAdapterDescriptor> {
     const config = session.configuration as unknown as MockymockDebugConfiguration;
-    const workspaceUri = session.workspaceFolder?.uri;
-    const configuredPath = workspaceUri
-      ? vscode.workspace.getConfiguration('mockymock', workspaceUri).get<string>('executablePath')
-      : vscode.workspace.getConfiguration('mockymock').get<string>('executablePath');
-    const executablePath = resolveExecutablePath(config.executablePath ?? configuredPath, this.extensionPath);
+    const configuredPath =
+      resolveExecutablePathSetting(config.executablePath, settingPathContext(session.workspaceFolder)) ??
+      configuredExecutablePath(session.workspaceFolder);
+    const executablePath = resolveExecutablePath(configuredPath, this.extensionPath);
     const cwd = debugAdapterCwd(config);
-    // A relative executablePath keeps meaning the host-cwd binary the setup
-    // probes checked, whatever cwd the adapter itself runs in.
+    // A relative path left over here (no workspace folder to resolve it
+    // against) keeps meaning the host-cwd binary, whatever cwd the adapter
+    // itself runs in.
     return new vscode.DebugAdapterExecutable(anchorCommandPath(executablePath, process.cwd()), buildDebugArgs(config), {
       cwd,
     });

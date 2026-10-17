@@ -13,6 +13,7 @@ import {
   resolveExecutablePath,
 } from './checks';
 import { mockymockInstallRequirement } from './cliPackage';
+import { configuredExecutablePath } from './invocationConfig';
 import { presentStatus, SetupState, statusTooltipMarkdown } from './statusPresentation';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 
@@ -93,7 +94,7 @@ export class EnvironmentManager {
   // click command invokes.
   async refreshStatus(): Promise<void> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
       this.context.extensionPath
     );
     const mockymockProbe = await runCommand(executablePath, ['--version']);
@@ -149,7 +150,7 @@ export class EnvironmentManager {
   private async doEnsureReady(): Promise<ReadyResult> {
     this.statusBarItem.show();
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
       this.context.extensionPath
     );
 
