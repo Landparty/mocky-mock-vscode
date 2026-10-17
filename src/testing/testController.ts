@@ -6,6 +6,7 @@ import * as path from 'path';
 import {
   parseCutFile,
   resolveCblPath,
+  suitesForProgram,
   isExcludedCutPath,
   cutSuitesFromCollectJson,
   CutSuite,
@@ -939,13 +940,14 @@ export function activateTestController(
         }
         const rerun = (uri: vscode.Uri) => {
           if (isExcludedCutPath(uri.fsPath)) return;
-          const cutFsPath = uri.fsPath.endsWith('.cut')
-            ? uri.fsPath
-            : uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');
-          const cutUri = vscode.Uri.file(cutFsPath).toString();
-          if (!fileItems.has(cutUri)) return;
-          const relevant =
-            !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          // A program change reruns every suite paired with it -- under
+          // tests/, PROG.<topic>.cut siblings, not just a sibling PROG.cut.
+          const cutFsPaths = uri.fsPath.endsWith('.cut') ? [uri.fsPath] : suitesForProgram(uri.fsPath);
+          const relevant = cutFsPaths.some((cutFsPath) => {
+            const cutUri = vscode.Uri.file(cutFsPath).toString();
+            if (!fileItems.has(cutUri)) return false;
+            return !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          });
           if (!relevant) return;
           scheduleRerun();
         };
