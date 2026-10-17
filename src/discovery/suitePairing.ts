@@ -125,15 +125,23 @@ function key(p: string): string {
 
 let cutToProgram = new Map<string, string>();
 let programToCuts = new Map<string, string[]>();
+let cutToError = new Map<string, string>();
 
 // Replaces everything known with the latest listings (one per workspace
-// folder). A suite the CLI couldn't pair is left out, so callers fall back.
+// folder). A suite the CLI couldn't pair is left out of the pairing, so
+// callers fall back -- but when the CLI said WHY (two programs share the
+// name, the PROGRAM line names a missing file), that reason is kept for
+// pairingError().
 export function setPairings(listings: SuitesListing[]): void {
   const nextCut = new Map<string, string>();
   const nextProgram = new Map<string, string[]>();
+  const nextError = new Map<string, string>();
   for (const listing of listings) {
     for (const row of listing.suites) {
-      if (!row.program) continue;
+      if (!row.program) {
+        if (row.error) nextError.set(key(row.cut), row.error);
+        continue;
+      }
       nextCut.set(key(row.cut), row.program);
       const suites = nextProgram.get(key(row.program)) ?? [];
       if (!suites.some((s) => key(s) === key(row.cut))) suites.push(row.cut);
@@ -143,6 +151,7 @@ export function setPairings(listings: SuitesListing[]): void {
   for (const suites of nextProgram.values()) suites.sort();
   cutToProgram = nextCut;
   programToCuts = nextProgram;
+  cutToError = nextError;
 }
 
 // Records one pairing ahead of the next CLI refresh -- a suite New Test
@@ -150,6 +159,7 @@ export function setPairings(listings: SuitesListing[]): void {
 // moment it opens, before the watcher-triggered refresh lands.
 export function rememberPairing(cutPath: string, programPath: string): void {
   cutToProgram.set(key(cutPath), programPath);
+  cutToError.delete(key(cutPath));
   const suites = programToCuts.get(key(programPath)) ?? [];
   if (!suites.some((s) => key(s) === key(cutPath))) {
     suites.push(cutPath);
@@ -160,6 +170,13 @@ export function rememberPairing(cutPath: string, programPath: string): void {
 
 export function pairedProgram(cutPath: string): string | undefined {
   return cutToProgram.get(key(cutPath));
+}
+
+// The CLI's own reason it could not pair this suite with a program, when
+// it gave one. Lint, Run, Debug and Mutation report it instead of
+// substituting the sibling guess resolveCblPath falls back to.
+export function pairingError(cutPath: string): string | undefined {
+  return cutToError.get(key(cutPath));
 }
 
 export function pairedSuites(programPath: string): string[] {

@@ -6,6 +6,7 @@ import {
   parseSuitesListing,
   pairedProgram,
   pairedSuites,
+  pairingError,
   readProgramLine,
   rememberPairing,
   setPairings,
@@ -100,6 +101,27 @@ describe('suitePairing', () => {
       at('tests', 'pay', 'PAY.cut'),
       at('tests', 'pay', 'PAY.errors.cut'),
     ]);
+  });
+
+  it("keeps the CLI's reason for a suite it could not pair, until the suite is paired", () => {
+    const ambiguous = '2 programs named PAY under src (src/a/PAY.cbl, src/b/PAY.cbl); add a PROGRAM line';
+    setPairings([
+      {
+        root: at(),
+        testsDir: at('tests'),
+        sourceRoot: at('src'),
+        suites: [
+          { cut: at('tests', 'PAY.cut'), program: null, error: ambiguous },
+          { cut: at('tests', 'OK.cut'), program: at('src', 'OK.cbl') },
+          { cut: at('tests', 'LOST.cut'), program: null },
+        ],
+      },
+    ]);
+    assert.strictEqual(pairingError(at('tests', 'PAY.cut')), ambiguous);
+    assert.strictEqual(pairingError(at('tests', 'OK.cut')), undefined);
+    assert.strictEqual(pairingError(at('tests', 'LOST.cut')), undefined);
+    rememberPairing(at('tests', 'PAY.cut'), at('src', 'a', 'PAY.cbl'));
+    assert.strictEqual(pairingError(at('tests', 'PAY.cut')), undefined);
   });
 
   it('remembers a just-created suite until the next refresh', () => {

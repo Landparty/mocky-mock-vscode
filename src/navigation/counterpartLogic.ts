@@ -5,11 +5,13 @@
 // it -- counterpart.ts wires it to commands and context keys.
 import * as fs from 'fs';
 import { resolveCblPath, resolveCutPath, suitesForProgram } from '../discovery/cutDiscovery';
+import { pairingError } from '../discovery/suitePairing';
 import { isCobolPath } from '../environment/cobolPaths';
 
 export type Counterpart =
   | { kind: 'suite'; path: string; exists: boolean; all: string[] }
-  | { kind: 'program'; path: string; exists: boolean };
+  // `error`: the CLI's reason it could not pair the suite, when it gave one.
+  | { kind: 'program'; path: string; exists: boolean; error?: string };
 
 export function counterpartOf(
   fsPath: string,
@@ -17,7 +19,9 @@ export function counterpartOf(
   listDir?: (dir: string) => string[]
 ): Counterpart | undefined {
   if (fsPath.toLowerCase().endsWith('.cut')) {
+    const error = pairingError(fsPath);
     const program = resolveCblPath(fsPath, exists);
+    if (error !== undefined) return { kind: 'program', path: program, exists: false, error };
     return { kind: 'program', path: program, exists: exists(program) };
   }
   // An exported PROG.mainframe.cbl is build output, not a program with a

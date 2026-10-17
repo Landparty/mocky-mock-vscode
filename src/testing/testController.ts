@@ -19,6 +19,7 @@ import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
+import { pairingError } from '../discovery/suitePairing';
 import { EnvironmentManager } from '../environment/environmentManager';
 import {
   describeTooOldCli,
@@ -433,6 +434,14 @@ export function activateTestController(
     }
 
     const cutPath = fileItem.uri!.fsPath;
+    // The CLI said why it can't pair this suite: report that, not a
+    // "no such file" for a sibling program the user never named.
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      failEverything('errored', unpaired);
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     // mkdtemp, not predictable names in the shared tmpdir: an unguessable
     // per-run directory closes the classic pre-creation/symlink surface, and
@@ -635,6 +644,13 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
 
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      run.errored(fileItem, new vscode.TestMessage(unpaired));
+      return;
+    }
+
     const ready = await environmentManager.ensureReady();
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
@@ -780,6 +796,12 @@ export function activateTestController(
 
     const cutUri = plan.fileItem.uri!;
     const cutPath = cutUri.fsPath;
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(unpaired));
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     const { executablePath, copybookPaths } = resolveInvocationConfig(context, cutUri);
 

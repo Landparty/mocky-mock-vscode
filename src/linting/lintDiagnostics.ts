@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
+import { pairingError } from '../discovery/suitePairing';
 import { isCobolPath, isCopybookPath } from '../environment/cobolPaths';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
@@ -36,6 +37,13 @@ export function activateLintDiagnostics(
   // after activation, a program created or deleted -- can re-lint exactly
   // the suites it affects.
   const lintedAgainst = new Map<string, string>();
+  // What a suite lints against: its program, or -- when the CLI said why it
+  // could not pair the suite -- that reason, behind a NUL so it can never
+  // equal a real path.
+  const lintTarget = (cutPath: string): string => {
+    const error = pairingError(cutPath);
+    return error !== undefined ? `\0${error}` : resolveCblPath(cutPath);
+  };
 
   const isOpen = (uri: vscode.Uri): boolean =>
     vscode.workspace.textDocuments.some((d) => d.uri.toString() === uri.toString());
@@ -56,6 +64,22 @@ export function activateLintDiagnostics(
     }
     inFlight.add(cutPath);
     try {
+      const unpaired = pairingError(cutPath);
+      if (unpaired !== undefined) {
+        // The CLI could not pair this suite (two programs share its name,
+        // its PROGRAM line names a missing file): say so on the suite,
+        // exactly as `mockymock lint --cut` would, rather than linting a
+        // guessed sibling or staying silent.
+        lintedAgainst.set(cutPath, lintTarget(cutPath));
+        const diagnostic = new vscode.Diagnostic(
+          new vscode.Range(0, 0, 0, Math.max(document.lineCount ? document.lineAt(0).text.length : 0, 1)),
+          unpaired,
+          vscode.DiagnosticSeverity.Error
+        );
+        diagnostic.source = 'mockymock';
+        collection.set(document.uri, [diagnostic]);
+        return;
+      }
       const cblPath = resolveCblPath(cutPath);
       lintedAgainst.set(cutPath, cblPath);
       try {
@@ -194,7 +218,7 @@ export function activateLintDiagnostics(
     onDidChangeSuitePairing(() => {
       for (const document of vscode.workspace.textDocuments) {
         const previous = lintedAgainst.get(document.uri.fsPath);
-        if (previous !== undefined && previous !== resolveCblPath(document.uri.fsPath)) void lintDocument(document);
+        if (previous !== undefined && previous !== lintTarget(document.uri.fsPath)) void lintDocument(document);
       }
     }),
     configWatcher,
