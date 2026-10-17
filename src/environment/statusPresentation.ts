@@ -17,6 +17,7 @@ export type SetupState =
   | 'installing'
   | 'docker-stopped'
   | 'docker-failed'
+  | 'docker-denied'
   | 'docker-missing';
 
 export interface StatusPresentation {
@@ -76,6 +77,13 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
         background: 'statusBarItem.errorBackground',
         summary: detail ?? 'Docker Desktop did not start in time.',
         clickHint: 'Click to try again.',
+      };
+    case 'docker-denied':
+      return {
+        text: '$(error) mockymock: Docker access denied',
+        background: 'statusBarItem.errorBackground',
+        summary: detail ?? "Docker is running, but your user can't access it.",
+        clickHint: 'Click to re-check once you have access.',
       };
     case 'docker-missing':
       return {

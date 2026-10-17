@@ -6,6 +6,7 @@ import {
   checkDocker,
   describeDockerLaunchFailure,
   describeDockerStartFailure,
+  DOCKER_PERMISSION_DENIED_MESSAGE,
   getDockerDesktopLaunchCommand,
   permissionDeniedMessageForPath,
   resolveExecutablePath,
@@ -98,6 +99,8 @@ export class EnvironmentManager {
       this.setStatus('ready');
     } else if (dockerStatus === 'daemon-down') {
       this.setStatus('docker-stopped');
+    } else if (dockerStatus === 'permission-denied') {
+      this.setStatus('docker-denied', DOCKER_PERMISSION_DENIED_MESSAGE);
     } else {
       this.setStatus('docker-missing');
     }
@@ -155,6 +158,13 @@ export class EnvironmentManager {
     if (dockerStatus === 'available') {
       this.setStatus('ready');
       return { ok: true, message: 'ready' };
+    }
+
+    // The daemon is already up; only the user's access to its socket is
+    // missing, which starting Docker and polling for 90 s can never fix.
+    if (dockerStatus === 'permission-denied') {
+      this.setStatus('docker-denied', DOCKER_PERMISSION_DENIED_MESSAGE);
+      return { ok: false, message: DOCKER_PERMISSION_DENIED_MESSAGE };
     }
 
     if (dockerStatus === 'daemon-down') {

@@ -86,6 +86,16 @@ describe('checkDocker', () => {
     assert.strictEqual(status, 'daemon-down');
   });
 
+  it('returns permission-denied when the daemon runs but the user cannot reach its socket', async () => {
+    for (const stderr of [
+      'permission denied while trying to connect to the docker API at unix:///var/run/docker.sock',
+      'Got permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: ' +
+        'Get "http://%2Fvar%2Frun%2Fdocker.sock/v1.24/info": dial unix /var/run/docker.sock: connect: permission denied',
+    ]) {
+      assert.strictEqual(await checkDocker(fakeRunner({ code: 1, stdout: '', stderr })), 'permission-denied', stderr);
+    }
+  });
+
   it('returns daemon-down for the Windows named-pipe connect error', async () => {
     const status = await checkDocker(
       fakeRunner({

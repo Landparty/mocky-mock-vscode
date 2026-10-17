@@ -147,7 +147,7 @@ export async function supportsSuitesCommand(run: CommandRunner, executablePath: 
   });
 }
 
-export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
+export type DockerStatus = 'available' | 'daemon-down' | 'permission-denied' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" (or
 // mockymock) executable (as opposed to the binary being found but failing for
@@ -180,14 +180,28 @@ const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not 
 const DOCKER_DAEMON_CONNECT_PATTERN =
   /error during connect|cannot connect to the docker daemon|docker daemon is not running|dial unix|docker_engine/i;
 
+// The daemon IS running but this user can't reach its socket (Linux, user
+// not in the docker group). Current CLIs say "permission denied while trying
+// to connect to the docker API at unix:///var/run/docker.sock"; older ones
+// "dial unix /var/run/docker.sock: connect: permission denied". Checked
+// before DOCKER_DAEMON_CONNECT_PATTERN, whose `dial unix` alternative also
+// matches the older wording -- starting a daemon that is already up, then
+// polling it for 90 s, can never fix a socket permission.
+const DOCKER_PERMISSION_DENIED_PATTERN =
+  /permission denied while trying to connect to the docker|connect: permission denied/i;
+
 export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
   const result = await run('docker', ['info']);
   if (result.code === 0) return 'available';
   if (result.code === -1) return 'not-installed';
+  if (DOCKER_PERMISSION_DENIED_PATTERN.test(result.stderr)) return 'permission-denied';
   if (DOCKER_DAEMON_CONNECT_PATTERN.test(result.stderr)) return 'daemon-down';
   if (COMMAND_NOT_FOUND_PATTERN.test(result.stderr)) return 'not-installed';
   return 'daemon-down';
 }
+
+export const DOCKER_PERMISSION_DENIED_MESSAGE =
+  "Docker is running, but your user can't access it. Add yourself to the docker group (sudo usermod -aG docker $USER, then log out and back in) or use rootless Docker.";
 
 export const CLI_NOT_FOUND_MESSAGE =
   "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Setup'.";
