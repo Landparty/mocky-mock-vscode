@@ -6,6 +6,8 @@
 // See docs/2026-09-15-cut-editor-intelligence-design.md (sibling
 // mocky-mock repo) for the design this implements.
 
+import { OutlineNode, buildOutline } from '../outline/outlineModel';
+
 // Every MockCategory the sibling mocky-mock repo's dsl/model.py defines,
 // in the same declaration order. Static -- no CLI round-trip needed for
 // this half of completion. (DYNCALL is deliberately absent: a .cut author
@@ -179,4 +181,40 @@ export function keyFromDirective(directive: string | null | undefined): string |
   if (!directive) return null;
   const match = /^MOCK\s+[A-Za-z]+\s+(.+?)(?:\s+ROWS)?$/i.exec(directive.trim());
   return match ? match[1] : null;
+}
+
+// MOCK PARAGRAPH / MOCK SECTION key on a PROCEDURE DIVISION flow target,
+// which `collect --boundaries` never lists (it reports external
+// boundaries only), so their keys come from the program text itself, via
+// the same outline scan the starter template uses.
+export interface FlowTarget {
+  name: string;
+  line: number;
+}
+
+export interface FlowTargets {
+  paragraphs: FlowTarget[];
+  // Section names without their ` SECTION` suffix, as `MOCK SECTION` keys them.
+  sections: FlowTarget[];
+}
+
+export function flowTargetsFromSource(sourceLines: string[]): FlowTargets {
+  const targets: FlowTargets = { paragraphs: [], sections: [] };
+  const seen = { paragraphs: new Set<string>(), sections: new Set<string>() };
+  const add = (kind: keyof FlowTargets, name: string, line: number): void => {
+    if (seen[kind].has(name.toUpperCase())) return;
+    seen[kind].add(name.toUpperCase());
+    targets[kind].push({ name, line });
+  };
+  const walk = (nodes: OutlineNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === 'section') add('sections', node.name.replace(/\s+SECTION$/i, ''), node.startLine);
+      else if (node.kind === 'paragraph') add('paragraphs', node.name, node.startLine);
+      walk(node.children);
+    }
+  };
+  for (const division of buildOutline(sourceLines)) {
+    if (division.name === 'PROCEDURE DIVISION') walk(division.children);
+  }
+  return targets;
 }

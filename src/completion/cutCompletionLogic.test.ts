@@ -4,6 +4,7 @@ import {
   BoundaryInfo,
   boundaryKeyCandidates,
   detectCompletionContext,
+  flowTargetsFromSource,
   keyFromDirective,
   keyReplaceLengthAfterCursor,
   MOCK_CATEGORIES,
@@ -258,5 +259,40 @@ describe('ROWS_CATEGORIES', () => {
   // DYNCALL is spelled `MOCK CALL <bare-word>` and MQ is CALL at parse time.
   it("matches mocky-mock's dsl/model.py ROWS_CATEGORIES (MQ spelled as the DSL writes it)", () => {
     assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
+  });
+});
+
+describe('flowTargetsFromSource', () => {
+  // Shaped like mocky-mock's examples/flowmock/FLOWMOCK.cbl, whose `collect
+  // --boundaries` lists only its CALL.
+  const source = [
+    '       IDENTIFICATION DIVISION.',
+    '       PROGRAM-ID. FLOWMOCK.',
+    '       DATA DIVISION.',
+    '       WORKING-STORAGE SECTION.',
+    '       01  WS-TOTAL PIC 9(5) VALUE 0.',
+    '       PROCEDURE DIVISION.',
+    '       MAIN-PROCESS.',
+    '           PERFORM CALC-TOTALS',
+    '           PERFORM RPT-BLOCK',
+    '           GOBACK.',
+    '       CALC-TOTALS.',
+    '           CALL "RATECALC" USING WS-TOTAL.',
+    '       RPT-BLOCK SECTION.',
+    '       RPT-HEADER.',
+    '           DISPLAY "HEADER".',
+    '       RPT-BODY.',
+    '           DISPLAY "BODY".',
+  ];
+
+  it('lists every PROCEDURE DIVISION paragraph, including those inside a section', () => {
+    assert.deepStrictEqual(
+      flowTargetsFromSource(source).paragraphs.map((t) => t.name),
+      ['MAIN-PROCESS', 'CALC-TOTALS', 'RPT-HEADER', 'RPT-BODY']
+    );
+  });
+
+  it('lists PROCEDURE DIVISION sections without the SECTION suffix, and no DATA DIVISION ones', () => {
+    assert.deepStrictEqual(flowTargetsFromSource(source).sections, [{ name: 'RPT-BLOCK', line: 13 }]);
   });
 });
