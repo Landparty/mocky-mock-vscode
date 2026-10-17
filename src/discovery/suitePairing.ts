@@ -11,6 +11,7 @@
 // paired (an older bundled CLI, or a file created since the last refresh).
 //
 // Pure (no `vscode` import) so mocha can test it.
+import * as fs from 'fs';
 import * as path from 'path';
 
 export interface SuitePairing {
@@ -118,9 +119,39 @@ export function validateSuiteTopic(topic: string): string | undefined {
   return undefined;
 }
 
+function realpathOrResolve(p: string): string {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+// The CLI reports every path through Python's Path.resolve(), which follows
+// symlinks (and, on Windows, maps a subst or mapped drive to its target),
+// while VS Code hands out paths spelled the way the workspace was opened.
+// Keying both on the realpath lets a workspace opened through a symlink
+// (a linked ~/code, macOS's /tmp -> /private/tmp) or a mapped drive pair
+// its suites the way the CLI does.
 function key(p: string): string {
-  const resolved = path.resolve(p);
+  const resolved = realpathOrResolve(p);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+// `target` as the CLI reported it (a realpath), re-spelled under the
+// deepest ancestor of `near` (a path in the workspace's own spelling)
+// whose realpath contains it -- so the program or suite opens as the same
+// document the workspace already knows, not a second copy under its
+// realpath. Unchanged when no ancestor contains it.
+function inSpellingOf(near: string, target: string): string {
+  let dir = path.dirname(path.resolve(near));
+  for (;;) {
+    const relative = path.relative(realpathOrResolve(dir), target);
+    if (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..') return path.join(dir, relative);
+    const parent = path.dirname(dir);
+    if (parent === dir) return target;
+    dir = parent;
+  }
 }
 
 let cutToProgram = new Map<string, string>();
@@ -169,7 +200,8 @@ export function rememberPairing(cutPath: string, programPath: string): void {
 }
 
 export function pairedProgram(cutPath: string): string | undefined {
-  return cutToProgram.get(key(cutPath));
+  const program = cutToProgram.get(key(cutPath));
+  return program === undefined ? undefined : inSpellingOf(cutPath, program);
 }
 
 // The CLI's own reason it could not pair this suite with a program, when
@@ -180,5 +212,5 @@ export function pairingError(cutPath: string): string | undefined {
 }
 
 export function pairedSuites(programPath: string): string[] {
-  return programToCuts.get(key(programPath)) ?? [];
+  return (programToCuts.get(key(programPath)) ?? []).map((cut) => inSpellingOf(programPath, cut));
 }

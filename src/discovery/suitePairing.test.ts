@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { resolveCblPath, resolveCutPath, suitesForProgram } from './cutDiscovery';
 import {
@@ -148,5 +150,48 @@ describe('suitePairing', () => {
   it('names the sibling path for a new suite, with an optional topic', () => {
     assert.strictEqual(resolveCutPath(at('PAY.cbl')), at('PAY.cut'));
     assert.strictEqual(resolveCutPath(at('PAY.cbl'), 'errors'), at('PAY.errors.cut'));
+  });
+});
+
+describe('suitePairing through a symlinked workspace', () => {
+  let tmp: string;
+  afterEach(() => {
+    setPairings([]);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it('pairs a suite opened through a symlink the way the CLI (which reports realpaths) does', function () {
+    tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'mockymock-link-')));
+    const real = path.join(tmp, 'real', 'proj');
+    const link = path.join(tmp, 'linkproj');
+    fs.mkdirSync(path.join(real, 'src', 'pay'), { recursive: true });
+    fs.mkdirSync(path.join(real, 'tests', 'pay'), { recursive: true });
+    fs.writeFileSync(path.join(real, 'src', 'pay', 'PAYCALC.cbl'), '');
+    fs.writeFileSync(path.join(real, 'tests', 'pay', 'PAYCALC.cut'), 'TESTSUITE "s"\n');
+    try {
+      fs.symlinkSync(real, link, 'dir');
+    } catch {
+      this.skip(); // no symlink permission (Windows without developer mode)
+    }
+    setPairings([
+      {
+        root: real,
+        testsDir: path.join(real, 'tests'),
+        sourceRoot: path.join(real, 'src'),
+        suites: [
+          {
+            cut: path.join(real, 'tests', 'pay', 'PAYCALC.cut'),
+            program: path.join(real, 'src', 'pay', 'PAYCALC.cbl'),
+            rule: 'mirror',
+          },
+        ],
+      },
+    ]);
+    const linkedCut = path.join(link, 'tests', 'pay', 'PAYCALC.cut');
+    const linkedProgram = path.join(link, 'src', 'pay', 'PAYCALC.cbl');
+    // Answered in the workspace's own (symlinked) spelling, both ways.
+    assert.strictEqual(resolveCblPath(linkedCut), linkedProgram);
+    assert.deepStrictEqual(pairedSuites(linkedProgram), [linkedCut]);
+    assert.deepStrictEqual(suitesForProgram(linkedProgram), [linkedCut]);
   });
 });
