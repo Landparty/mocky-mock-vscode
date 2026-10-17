@@ -1,10 +1,54 @@
 // src/environment/copybookPaths.ts
+import * as os from 'os';
 import * as path from 'path';
+import { anchorCommandPath } from './commandRunner';
 
 // Kept free of any `vscode` import so both stay unit-testable outside the
 // extension host.
 export function resolveAgainstWorkspaceRoot(p: string, root: string): string {
   return path.isAbsolute(p) ? p : path.join(root, p);
+}
+
+export interface SettingPathContext {
+  // The workspace folder the setting applies to, if any.
+  folder?: string;
+  // Resolves `${workspaceFolder:name}` to that folder's path.
+  namedFolder?: (name: string) => string | undefined;
+  homeDir?: string;
+}
+
+// VS Code substitutes no variables in extension settings, so a path setting
+// written the way launch.json and tasks.json allow -- `~/...`,
+// `${userHome}/...`, `${workspaceFolder}/...`, `${workspaceFolder:name}/...`
+// -- reached the CLI literally. A variable with nothing to stand for (no
+// folder open) is left as written.
+export function expandSettingPath(p: string, ctx: SettingPathContext = {}): string {
+  const home = ctx.homeDir ?? os.homedir();
+  let out = p.trim();
+  if (out === '~' || /^~[\\/]/.test(out)) out = home + out.slice(1);
+  return out.replace(/\$\{(userHome|workspaceFolder)(?::([^}]+))?\}/g, (whole, name: string, folderName?: string) => {
+    if (name === 'userHome') return folderName === undefined ? home : whole;
+    const folder = folderName === undefined ? ctx.folder : ctx.namedFolder?.(folderName);
+    return folder ?? whole;
+  });
+}
+
+// mockymock.executablePath: variables expanded, then a relative path (one
+// with a separator, like `.venv/bin/mockymock`) resolved against the
+// workspace folder rather than the extension host's cwd -- which, for a
+// VS Code launched from the Dock or Start menu, is `/` or the install
+// directory. A bare name (`mockymock`) is still looked up on PATH.
+export function resolveExecutablePathSetting(p: string | undefined, ctx: SettingPathContext = {}): string | undefined {
+  if (!p || p.trim().length === 0) return p;
+  const expanded = expandSettingPath(p, ctx);
+  return ctx.folder ? anchorCommandPath(expanded, ctx.folder) : expanded;
+}
+
+// mockymock.copybookPaths entries: variables expanded, then every relative
+// entry resolved against the workspace folder.
+export function resolveCopybookPathSetting(p: string, ctx: SettingPathContext = {}): string {
+  const expanded = expandSettingPath(p, ctx);
+  return ctx.folder ? resolveAgainstWorkspaceRoot(expanded, ctx.folder) : expanded;
 }
 
 // Dedup key that treats case (Windows' filesystem is case-insensitive), a

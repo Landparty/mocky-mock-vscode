@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { anchorCommandPath, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
+import { anchorCommandPath, launchDetached, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
 
 describe('quoteArgForWindowsShell', () => {
   it('leaves a plain argument untouched', () => {
@@ -34,6 +34,66 @@ describe('quoteArgForWindowsShell', () => {
 
   it('quotes an empty argument so it does not vanish from the joined command line', () => {
     assert.strictEqual(quoteArgForWindowsShell(''), '""');
+  });
+
+  // The MSVC CRT (2008+) argv rules the bundled CPython splits its command
+  // line with: 2n backslashes + `"` -> n backslashes and a quote toggle,
+  // 2n+1 -> n and a literal `"`, `""` inside a quoted span -> literal `"`.
+  function splitCrtArgs(line: string): string[] {
+    const args: string[] = [];
+    let cur = '';
+    let inArg = false;
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '\\') {
+        let n = 0;
+        while (line[i] === '\\') { n++; i++; }
+        if (line[i] === '"') {
+          cur += '\\'.repeat(Math.floor(n / 2));
+          if (n % 2 === 1) cur += '"';
+          else i--;
+          if (n % 2 === 1) { inArg = true; continue; }
+        } else {
+          cur += '\\'.repeat(n);
+          i--;
+        }
+        inArg = true;
+        continue;
+      }
+      if (c === '"') {
+        inArg = true;
+        if (quoted && line[i + 1] === '"') { cur += '"'; i++; }
+        else quoted = !quoted;
+        continue;
+      }
+      if (!quoted && (c === ' ' || c === '\t')) {
+        if (inArg) args.push(cur);
+        cur = '';
+        inArg = false;
+        continue;
+      }
+      cur += c;
+      inArg = true;
+    }
+    if (inArg) args.push(cur);
+    return args;
+  }
+
+  it('round-trips arguments with trailing and quote-adjacent backslashes through the CRT argv rules', () => {
+    const args = [
+      '--copybook-path', 'C:\\a b\\',
+      '--copybook-path', 'D:\\Common Cpy\\\\',
+      'C:\\plain\\dir\\',
+      'say \\"hi\\" & bye',
+      'C:\\R&D\\x',
+      '',
+    ];
+    assert.deepStrictEqual(splitCrtArgs(args.map(quoteArgForWindowsShell).join(' ')), args);
+  });
+
+  it('doubles a trailing backslash inside the quotes so it cannot escape the closing quote', () => {
+    assert.strictEqual(quoteArgForWindowsShell('C:\\a b\\'), '"C:\\a b\\\\"');
   });
 });
 
@@ -140,5 +200,21 @@ describe('anchorCommandPath', () => {
   it('leaves an absolute path alone', () => {
     const abs = path.resolve('/opt/mockymock');
     assert.strictEqual(anchorCommandPath(abs, path.resolve('/ws')), abs);
+  });
+});
+
+describe('launchDetached', () => {
+  it('returns as soon as a long-running app has spawned, without waiting for it to exit', async function () {
+    if (process.platform === 'win32') this.skip();
+    const started = Date.now();
+    const result = await launchDetached('sleep', ['3']);
+    assert.strictEqual(result.code, 0);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+  });
+
+  it('reports a launch that cannot spawn as a failure', async () => {
+    const result = await launchDetached(path.join(__dirname, 'no-such-launcher-binary'), []);
+    assert.strictEqual(result.code, -1);
+    assert.strictEqual(result.stderr, 'command not found');
   });
 });

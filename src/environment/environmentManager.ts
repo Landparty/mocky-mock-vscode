@@ -1,22 +1,30 @@
 // src/environment/environmentManager.ts
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { runCommand } from './commandRunner';
+import { launchDetached, runCommand } from './commandRunner';
 import {
+  bundledBinaryName,
   checkCommandAvailable,
   checkDocker,
+  DOCKER_INFO_TIMEOUT_MS,
   describeDockerLaunchFailure,
   describeDockerStartFailure,
+  DOCKER_PERMISSION_DENIED_MESSAGE,
   getDockerDesktopLaunchCommand,
   permissionDeniedMessageForPath,
   resolveExecutablePath,
 } from './checks';
 import { mockymockInstallRequirement } from './cliPackage';
+import { configuredExecutablePath } from './invocationConfig';
 import { presentStatus, SetupState, statusTooltipMarkdown } from './statusPresentation';
 import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 
 export interface ReadyResult {
   ok: boolean;
   message: string;
+  // True when ensureReady() already showed the user a prompt for this
+  // failure, so an explicit Check Setup doesn't report it a second time.
+  reported?: boolean;
 }
 
 export class EnvironmentManager {
@@ -39,6 +47,13 @@ export class EnvironmentManager {
     // Docker probe is still in flight.
     this.setStatus('checking');
     void this.activateIfCutWorkspace();
+    // Fixing the setting (e.g. from the CLI-not-found toast's Open Settings)
+    // should clear "CLI not found" right away, not at the next test run.
+    context.subscriptions.push(
+      vscode.workspace.onDidChangeConfiguration((e) => {
+        if (e.affectsConfiguration('mockymock.executablePath')) void this.refreshStatus();
+      })
+    );
   }
 
   // `onLanguage:cobol` (added alongside the Outline provider) now activates
@@ -81,7 +96,7 @@ export class EnvironmentManager {
   // click command invokes.
   async refreshStatus(): Promise<void> {
     const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+      configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
       this.context.extensionPath
     );
     const mockymockProbe = await runCommand(executablePath, ['--version']);
@@ -98,6 +113,8 @@ export class EnvironmentManager {
       this.setStatus('ready');
     } else if (dockerStatus === 'daemon-down') {
       this.setStatus('docker-stopped');
+    } else if (dockerStatus === 'permission-denied') {
+      this.setStatus('docker-denied', DOCKER_PERMISSION_DENIED_MESSAGE);
     } else {
       this.setStatus('docker-missing');
     }
@@ -110,21 +127,33 @@ export class EnvironmentManager {
   // its own stacked progress notification. Only the in-flight promise is
   // shared -- a later call after settle re-probes from scratch, so this is
   // deduplication, not caching.
-  async ensureReady(): Promise<ReadyResult> {
+  //
+  // `token` lets one caller stop waiting (Test Explorer's Stop) without
+  // abandoning the shared probe the other callers are still awaiting.
+  async ensureReady(token?: vscode.CancellationToken): Promise<ReadyResult> {
     if (!this.ensureReadyInFlight) {
       this.ensureReadyInFlight = this.doEnsureReady().finally(() => {
         this.ensureReadyInFlight = undefined;
       });
     }
-    return this.ensureReadyInFlight;
+    if (!token) return this.ensureReadyInFlight;
+    if (token.isCancellationRequested) return { ok: false, message: 'run cancelled' };
+    let listener: vscode.Disposable | undefined;
+    const cancelled = new Promise<ReadyResult>((resolve) => {
+      listener = token.onCancellationRequested(() => resolve({ ok: false, message: 'run cancelled' }));
+    });
+    try {
+      return await Promise.race([this.ensureReadyInFlight, cancelled]);
+    } finally {
+      listener?.dispose();
+    }
   }
 
   private async doEnsureReady(): Promise<ReadyResult> {
     this.statusBarItem.show();
-    const executablePath = resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
-      this.context.extensionPath
-    );
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const configured = configuredExecutablePath(folder);
+    const executablePath = resolveExecutablePath(configured, this.context.extensionPath);
 
     const mockymockProbe = await runCommand(executablePath, ['--version']);
     if (mockymockProbe.code !== 0) {
@@ -139,14 +168,25 @@ export class EnvironmentManager {
         const message = permissionDeniedMessageForPath(executablePath);
         this.setStatus('cli-blocked', message);
         vscode.window.showErrorMessage(message);
-        return { ok: false, message };
+        return { ok: false, message, reported: true };
       }
-      const installed = await this.installMockymock(executablePath);
+      // An explicit mockymock.executablePath that won't run is a setting to
+      // fix, not a CLI to install: a uv install lands somewhere else, which
+      // the setting still overrides, so it could never help.
+      if (configured && configured.trim().length > 0) {
+        const detail = mockymockProbe.stderr.trim().split(/\r?\n/)[0] || `exit code ${mockymockProbe.code}`;
+        const message = `The mockymock CLI set in mockymock.executablePath ("${executablePath}") could not be run (${detail}). Correct or clear the setting.`;
+        this.setStatus('cli-missing', message);
+        this.promptFixExecutablePath(message, folder);
+        return { ok: false, message, reported: true };
+      }
+      const installed = await this.installMockymock();
       if (!installed) {
         this.setStatus('cli-missing');
         return {
           ok: false,
           message: 'mockymock CLI is not installed and automatic install failed. See the mocky-mock README for manual install steps.',
+          reported: true,
         };
       }
     }
@@ -155,6 +195,13 @@ export class EnvironmentManager {
     if (dockerStatus === 'available') {
       this.setStatus('ready');
       return { ok: true, message: 'ready' };
+    }
+
+    // The daemon is already up; only the user's access to its socket is
+    // missing, which starting Docker and polling for 90 s can never fix.
+    if (dockerStatus === 'permission-denied') {
+      this.setStatus('docker-denied', DOCKER_PERMISSION_DENIED_MESSAGE);
+      return { ok: false, message: DOCKER_PERMISSION_DENIED_MESSAGE };
     }
 
     if (dockerStatus === 'daemon-down') {
@@ -170,10 +217,10 @@ export class EnvironmentManager {
 
     this.setStatus('docker-missing');
     this.promptInstallDocker();
-    return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.' };
+    return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.', reported: true };
   }
 
-  private async installMockymock(executablePath: string): Promise<boolean> {
+  private async installMockymock(): Promise<boolean> {
     this.setStatus('installing');
 
     const uvOk = await checkCommandAvailable(runCommand, 'uv', ['--version']);
@@ -196,18 +243,37 @@ export class EnvironmentManager {
           vscode.window.showErrorMessage(`mockymock install failed: ${result.stderr || result.stdout}`);
           return false;
         }
-        // uv installs its shim into a directory (e.g. ~/.local/bin) that may not be on
-        // this already-running VS Code process's in-memory PATH yet. Re-verify the CLI is
-        // actually invocable before declaring success, so we don't silently proceed to the
-        // Docker check and fail later with a confusing raw spawn error.
-        const nowAvailable = await checkCommandAvailable(runCommand, executablePath, ['--version']);
-        if (!nowAvailable) {
-          vscode.window.showWarningMessage(
-            "mockymock was installed, but this VS Code window can't see it yet. Reload the window (Developer: Reload Window) and try again."
-          );
-          return false;
+        // uv installs its shim into a directory (e.g. ~/.local/bin) that is often not on
+        // this VS Code process's PATH -- and a window reload doesn't change that. Re-resolve
+        // (resolveExecutablePath also looks in uv's default tool directory) and re-verify the
+        // CLI is actually invocable before declaring success, so we don't silently proceed to
+        // the Docker check and fail later with a confusing raw spawn error.
+        const resolved = resolveExecutablePath(undefined, this.context.extensionPath);
+        if (await checkCommandAvailable(runCommand, resolved, ['--version'])) {
+          return true;
         }
-        return true;
+        // uv's config can move the directory; ask uv where it put the CLI.
+        const binDir = await runCommand('uv', ['tool', 'dir', '--bin']);
+        const dir = binDir.code === 0 ? binDir.stdout.trim() : '';
+        const installedPath = dir ? path.join(dir, bundledBinaryName(process.platform)) : '';
+        if (installedPath && (await checkCommandAvailable(runCommand, installedPath, ['--version']))) {
+          const useIt = 'Use This CLI';
+          const choice = await vscode.window.showWarningMessage(
+            `mockymock was installed to ${dir}, which isn't on VS Code's PATH. Use it from there (sets mockymock.executablePath), or add ${dir} to PATH and restart VS Code.`,
+            useIt
+          );
+          if (choice !== useIt) return false;
+          await vscode.workspace
+            .getConfiguration('mockymock')
+            .update('executablePath', installedPath, vscode.ConfigurationTarget.Global);
+          return true;
+        }
+        vscode.window.showWarningMessage(
+          dir
+            ? `mockymock was installed, but VS Code can't run it from ${dir}. Add that directory to PATH and restart VS Code, or set mockymock.executablePath to the installed mockymock.`
+            : "mockymock was installed, but VS Code can't find it. Run `uv tool dir --bin` to see where uv put it, then add that directory to PATH or set mockymock.executablePath."
+        );
+        return false;
       }
     );
   }
@@ -224,22 +290,51 @@ export class EnvironmentManager {
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'Starting Docker Desktop…' },
       async () => {
-        const launchResult = await runCommand(launch.command, launch.args);
+        const launchResult = launch.detached
+          ? await launchDetached(launch.command, launch.args)
+          : await runCommand(launch.command, launch.args);
         const launchError = describeDockerLaunchFailure(launchResult);
         if (launchError) {
           return { started: false, launchError };
         }
         const deadline = Date.now() + 90_000;
         while (Date.now() < deadline) {
-          const status = await checkDocker(runCommand);
+          // Each poll is bounded by the time left, so one stalled
+          // `docker info` can't carry the wait past the deadline.
+          const status = await checkDocker(runCommand, Math.min(DOCKER_INFO_TIMEOUT_MS, deadline - Date.now()));
           if (status === 'available') {
             return { started: true };
           }
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await new Promise((resolve) => setTimeout(resolve, Math.max(0, Math.min(3000, deadline - Date.now()))));
         }
         return { started: false };
       }
     );
+  }
+
+  private promptFixExecutablePath(message: string, folder: vscode.WorkspaceFolder | undefined) {
+    const openSettings = 'Open Settings';
+    const clearSetting = 'Clear Setting';
+    vscode.window
+      .showErrorMessage(message, openSettings, clearSetting)
+      .then(async (choice) => {
+        if (choice === openSettings) {
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'mockymock.executablePath');
+        } else if (choice === clearSetting) {
+          // Cleared wherever it is set, so the bundled/PATH CLI takes over.
+          const config = vscode.workspace.getConfiguration('mockymock', folder?.uri);
+          const set = config.inspect<string>('executablePath');
+          const targets: [string | undefined, vscode.ConfigurationTarget][] = [
+            [set?.workspaceFolderValue, vscode.ConfigurationTarget.WorkspaceFolder],
+            [set?.workspaceValue, vscode.ConfigurationTarget.Workspace],
+            [set?.globalValue, vscode.ConfigurationTarget.Global],
+          ];
+          for (const [value, target] of targets) {
+            if (value !== undefined) await config.update('executablePath', undefined, target);
+          }
+        }
+      })
+      .then(undefined, () => undefined);
   }
 
   private promptInstallDocker() {

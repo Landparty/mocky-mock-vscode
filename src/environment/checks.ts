@@ -147,7 +147,7 @@ export async function supportsSuitesCommand(run: CommandRunner, executablePath: 
   });
 }
 
-export type DockerStatus = 'available' | 'daemon-down' | 'not-installed';
+export type DockerStatus = 'available' | 'daemon-down' | 'permission-denied' | 'not-installed';
 
 // Matches stderr produced when the shell itself couldn't find the "docker" (or
 // mockymock) executable (as opposed to the binary being found but failing for
@@ -180,14 +180,47 @@ const COMMAND_NOT_FOUND_PATTERN = /not recognized|is not recognized|command not 
 const DOCKER_DAEMON_CONNECT_PATTERN =
   /error during connect|cannot connect to the docker daemon|docker daemon is not running|dial unix|docker_engine/i;
 
-export async function checkDocker(run: CommandRunner): Promise<DockerStatus> {
-  const result = await run('docker', ['info']);
+// The daemon IS running but this user can't reach its socket (Linux, user
+// not in the docker group). Current CLIs say "permission denied while trying
+// to connect to the docker API at unix:///var/run/docker.sock"; older ones
+// "dial unix /var/run/docker.sock: connect: permission denied". Checked
+// before DOCKER_DAEMON_CONNECT_PATTERN, whose `dial unix` alternative also
+// matches the older wording -- starting a daemon that is already up, then
+// polling it for 90 s, can never fix a socket permission.
+const DOCKER_PERMISSION_DENIED_PATTERN =
+  /permission denied while trying to connect to the docker|connect: permission denied/i;
+
+// How long one `docker info` may take. A wedged Docker Desktop, a frozen VM
+// or a docker context pointing at an unreachable host makes it hang
+// indefinitely, and every caller (each test run, Check Setup, the 90 s
+// start-up poll) used to hang with it.
+export const DOCKER_INFO_TIMEOUT_MS = 10_000;
+
+export async function checkDocker(
+  run: CommandRunner,
+  timeoutMs: number = DOCKER_INFO_TIMEOUT_MS
+): Promise<DockerStatus> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), Math.max(0, timeoutMs));
+  let result: CommandResult;
+  try {
+    result = await run('docker', ['info'], undefined, abort.signal);
+  } finally {
+    clearTimeout(timer);
+  }
+  // A docker CLI that never answered was found and ran: the daemon is not
+  // responding, which is not a missing binary (the abort reads as code -1).
+  if (abort.signal.aborted) return 'daemon-down';
   if (result.code === 0) return 'available';
   if (result.code === -1) return 'not-installed';
+  if (DOCKER_PERMISSION_DENIED_PATTERN.test(result.stderr)) return 'permission-denied';
   if (DOCKER_DAEMON_CONNECT_PATTERN.test(result.stderr)) return 'daemon-down';
   if (COMMAND_NOT_FOUND_PATTERN.test(result.stderr)) return 'not-installed';
   return 'daemon-down';
 }
+
+export const DOCKER_PERMISSION_DENIED_MESSAGE =
+  "Docker is running, but your user can't access it. Add yourself to the docker group (sudo usermod -aG docker $USER, then log out and back in) or use rootless Docker.";
 
 export const CLI_NOT_FOUND_MESSAGE =
   "mockymock CLI not found — set mockymock.executablePath or run 'mockymock: Check Setup'.";
@@ -299,12 +332,46 @@ export function darwinPathFallbackCandidates(homeDir: string): string[] {
 // Production callers keep the fs.existsSync default; only tests pass a fake.
 export type FileExistsProbe = (candidatePath: string) => boolean;
 
+// Where `uv tool install` (installMockymock's fallback) puts its executables
+// when uv's own config doesn't move them, in uv's order of precedence --
+// the same on every platform: UV_TOOL_BIN_DIR, $XDG_BIN_HOME,
+// $XDG_DATA_HOME/../bin, then ~/.local/bin. That directory is often not on
+// PATH (uv warns about it), and a window reload never changes the
+// extension host's PATH.
+export function uvToolBinDirs(
+  platform: NodeJS.Platform,
+  homeDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const dirs: string[] = [];
+  if (env.UV_TOOL_BIN_DIR) dirs.push(env.UV_TOOL_BIN_DIR);
+  if (env.XDG_BIN_HOME) dirs.push(env.XDG_BIN_HOME);
+  if (env.XDG_DATA_HOME) dirs.push(p.join(env.XDG_DATA_HOME, '..', 'bin'));
+  dirs.push(p.join(homeDir, '.local', 'bin'));
+  return dirs;
+}
+
+// Whether a bare `name` would be found on PATH -- so a CLI already reachable
+// there keeps winning over the uv tool directory, as it always has on
+// linux/win32.
+function isOnPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv, fileExists: FileExistsProbe): boolean {
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const pathValue = (platform === 'win32' ? env.Path ?? env.PATH : env.PATH) ?? '';
+  const exts = platform === 'win32' ? ['', ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)] : [''];
+  return pathValue
+    .split(p.delimiter)
+    .filter(Boolean)
+    .some((dir) => exts.some((ext) => fileExists(p.join(dir, name + ext))));
+}
+
 export function resolveExecutablePath(
   configuredPath: string | undefined,
   extensionPath: string,
   platform: NodeJS.Platform = process.platform,
   homeDir: string = os.homedir(),
-  fileExists: FileExistsProbe = fs.existsSync
+  fileExists: FileExistsProbe = fs.existsSync,
+  env: NodeJS.ProcessEnv = process.env
 ): string {
   if (configuredPath && configuredPath.trim().length > 0) {
     return configuredPath.trim();
@@ -317,12 +384,23 @@ export function resolveExecutablePath(
   // so process.env.PATH here can lack directories a login shell would have
   // -- notably ~/.local/bin, where the uv-install fallback below puts its
   // shim. Probing known install locations directly, before giving up to the
-  // bare command name, catches a CLI a plain PATH lookup would miss.
-  // Windows and Linux desktop sessions don't have this gap (PATH is set
-  // system-wide, or sourced by the display manager), so this only runs on
-  // darwin -- no behavior change for other platforms.
+  // bare command name, catches a CLI a plain PATH lookup would miss, so on
+  // darwin they come before PATH.
+  const joinPath = (platform === 'win32' ? path.win32 : path.posix).join;
+  const uvCandidates = uvToolBinDirs(platform, homeDir, env).map((dir) => joinPath(dir, bundledBinaryName(platform)));
   if (platform === 'darwin') {
-    const fallback = darwinPathFallbackCandidates(homeDir).find((candidate) => fileExists(candidate));
+    const fallback = [...uvCandidates, ...darwinPathFallbackCandidates(homeDir)].find((candidate) => fileExists(candidate));
+    if (fallback) {
+      return fallback;
+    }
+    return 'mockymock';
+  }
+  // Elsewhere PATH is complete, so a CLI on it still wins; the uv tool
+  // directory is only the fallback for one installed where PATH doesn't
+  // reach (otherwise every run re-installed it and asked for a reload that
+  // could never help).
+  if (!isOnPath('mockymock', platform, env, fileExists)) {
+    const fallback = uvCandidates.find((candidate) => fileExists(candidate));
     if (fallback) {
       return fallback;
     }
@@ -333,6 +411,10 @@ export function resolveExecutablePath(
 export interface LaunchCommand {
   command: string;
   args: string[];
+  // The command IS the long-running app (not a launcher that hands off and
+  // exits), so it must be started detached -- see commandRunner's
+  // launchDetached -- rather than awaited.
+  detached?: boolean;
 }
 
 // Surfaces a non-zero exit from the OS-level Docker Desktop launch command
@@ -371,7 +453,11 @@ export function getDockerDesktopLaunchCommand(platform: NodeJS.Platform): Launch
     // before handing it to cmd.exe. Pre-quoting here would make that helper
     // match on the embedded quote characters too and double-quote the
     // string, which cmd.exe then rejects outright.
-    return { command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', args: [] };
+    //
+    // Detached: Docker Desktop.exe is the GUI app itself, never exiting, so
+    // runCommand (which settles on 'close', after every holder of the piped
+    // stdout/stderr has let go) would wait for as long as Docker runs.
+    return { command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', args: [], detached: true };
   }
   if (platform === 'darwin') {
     return { command: 'open', args: ['-a', 'Docker'] };
