@@ -1,6 +1,6 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { anchorCommandPath, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
+import { anchorCommandPath, launchDetached, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
 
 describe('quoteArgForWindowsShell', () => {
   it('leaves a plain argument untouched', () => {
@@ -200,5 +200,21 @@ describe('anchorCommandPath', () => {
   it('leaves an absolute path alone', () => {
     const abs = path.resolve('/opt/mockymock');
     assert.strictEqual(anchorCommandPath(abs, path.resolve('/ws')), abs);
+  });
+});
+
+describe('launchDetached', () => {
+  it('returns as soon as a long-running app has spawned, without waiting for it to exit', async function () {
+    if (process.platform === 'win32') this.skip();
+    const started = Date.now();
+    const result = await launchDetached('sleep', ['3']);
+    assert.strictEqual(result.code, 0);
+    assert.ok(Date.now() - started < 2000, `took ${Date.now() - started} ms`);
+  });
+
+  it('reports a launch that cannot spawn as a failure', async () => {
+    const result = await launchDetached(path.join(__dirname, 'no-such-launcher-binary'), []);
+    assert.strictEqual(result.code, -1);
+    assert.strictEqual(result.stderr, 'command not found');
   });
 });

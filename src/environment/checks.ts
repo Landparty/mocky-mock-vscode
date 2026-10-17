@@ -366,6 +366,10 @@ export function resolveExecutablePath(
 export interface LaunchCommand {
   command: string;
   args: string[];
+  // The command IS the long-running app (not a launcher that hands off and
+  // exits), so it must be started detached -- see commandRunner's
+  // launchDetached -- rather than awaited.
+  detached?: boolean;
 }
 
 // Surfaces a non-zero exit from the OS-level Docker Desktop launch command
@@ -404,7 +408,11 @@ export function getDockerDesktopLaunchCommand(platform: NodeJS.Platform): Launch
     // before handing it to cmd.exe. Pre-quoting here would make that helper
     // match on the embedded quote characters too and double-quote the
     // string, which cmd.exe then rejects outright.
-    return { command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', args: [] };
+    //
+    // Detached: Docker Desktop.exe is the GUI app itself, never exiting, so
+    // runCommand (which settles on 'close', after every holder of the piped
+    // stdout/stderr has let go) would wait for as long as Docker runs.
+    return { command: 'C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe', args: [], detached: true };
   }
   if (platform === 'darwin') {
     return { command: 'open', args: ['-a', 'Docker'] };

@@ -1,6 +1,6 @@
 // src/environment/environmentManager.ts
 import * as vscode from 'vscode';
-import { runCommand } from './commandRunner';
+import { launchDetached, runCommand } from './commandRunner';
 import {
   checkCommandAvailable,
   checkDocker,
@@ -248,7 +248,9 @@ export class EnvironmentManager {
     return vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'Starting Docker Desktop…' },
       async () => {
-        const launchResult = await runCommand(launch.command, launch.args);
+        const launchResult = launch.detached
+          ? await launchDetached(launch.command, launch.args)
+          : await runCommand(launch.command, launch.args);
         const launchError = describeDockerLaunchFailure(launchResult);
         if (launchError) {
           return { started: false, launchError };

@@ -461,6 +461,10 @@ describe('getDockerDesktopLaunchCommand', () => {
     assert.ok(!launch!.command.includes('"'), `expected an unquoted path, got ${launch!.command}`);
   });
 
+  it('starts the win32 Docker Desktop.exe detached, since it is the long-running app itself', () => {
+    assert.strictEqual(getDockerDesktopLaunchCommand('win32')!.detached, true);
+  });
+
   it('returns a darwin launch command', () => {
     assert.deepStrictEqual(getDockerDesktopLaunchCommand('darwin'), { command: 'open', args: ['-a', 'Docker'] });
   });

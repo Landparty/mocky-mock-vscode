@@ -99,6 +99,31 @@ export function describeSpawnError(err: NodeJS.ErrnoException): string {
   return err.code === 'EACCES' ? 'permission denied' : 'command not found';
 }
 
+// Starts a long-running GUI app (Docker Desktop.exe on Windows) and returns as
+// soon as it has spawned. runCommand can't be used for one: it settles on
+// 'close', which waits for every holder of the child's piped stdout/stderr
+// -- the app itself, for as long as it runs. Detached with ignored stdio and
+// no shell (the path is spawned as-is, so it needs no quoting), unref'd so
+// it never holds the extension host open; only a spawn error is a failure.
+export function launchDetached(command: string, args: string[]): Promise<CommandResult> {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { detached: true, stdio: 'ignore', shell: false });
+    } catch (err) {
+      resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
+      return;
+    }
+    child.on('error', (err) =>
+      resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) })
+    );
+    child.on('spawn', () => {
+      child.unref();
+      resolve({ code: 0, stdout: '', stderr: '' });
+    });
+  });
+}
+
 export const runCommand: CommandRunner = (command, args, onOutput, signal, cwd) => {
   return new Promise((resolve) => {
     let stdout = '';
