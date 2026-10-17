@@ -53,6 +53,12 @@ import {
 export const NEW_TEST_SUITE_COMMAND = 'mockymock.newTestSuite';
 const COMMAND_LABEL = 'New Test Suite for This Program';
 
+// `skipPicker`: the caller (Open Test Suite's picker) already listed the
+// existing suites and the user chose "New Test Suite…" there.
+interface NewTestSuiteOptions {
+  skipPicker?: boolean;
+}
+
 let outputChannel: vscode.OutputChannel | undefined;
 
 function getOutputChannel(): vscode.OutputChannel {
@@ -90,7 +96,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
   });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('mockymock.newTestSuite', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('mockymock.newTestSuite', async (uri?: vscode.Uri, options?: NewTestSuiteOptions) => {
       await focusClickedFile(uri);
       const editor = vscode.window.activeTextEditor;
       const activePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
@@ -137,7 +143,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       let topic: string | undefined;
       const existing = suitesForProgram(cblPath);
       if (existing.length) {
-        const picked = await pickSuite(cblPath, existing);
+        const picked = options?.skipPicker ? NEW_SUITE : await pickSuite(cblPath, existing);
         if (picked === undefined) return;
         if (picked !== NEW_SUITE) {
           await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(picked));

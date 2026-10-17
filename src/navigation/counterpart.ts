@@ -62,7 +62,8 @@ async function openCounterpart(uri: unknown, wanted: 'suite' | 'program'): Promi
       if (vscode.window.activeTextEditor?.document.uri.fsPath !== target.fsPath) {
         await vscode.window.showTextDocument(target);
       }
-      await vscode.commands.executeCommand('mockymock.newTestSuite');
+      // The user just chose "New Test Suite…" from this same list.
+      await vscode.commands.executeCommand('mockymock.newTestSuite', undefined, { skipPicker: true });
     } else if (picked) {
       await vscode.window.showTextDocument(vscode.Uri.file(picked));
     }
