@@ -110,4 +110,17 @@ describe('package.json command contribution', () => {
       }
     }
   });
+
+  // README's "Right-click anywhere" promises Export in both context menus,
+  // for a program as well as its suite.
+  it('offers Export Mainframe-Ready COBOL in the editor and Explorer context menus for a .cut and a program', () => {
+    for (const menuId of ['editor/context', 'explorer/context']) {
+      const entry = (manifest.contributes.menus?.[menuId] ?? []).find(
+        (e) => e.command === 'mockymock.exportMainframe'
+      );
+      assert.ok(entry, `menus.${menuId} has no mockymock.exportMainframe entry`);
+      assert.match(entry.when ?? '', /resourceLangId == cut/, `menus.${menuId}`);
+      assert.match(entry.when ?? '', /resourceLangId == cobol/, `menus.${menuId}`);
+    }
+  });
 });
