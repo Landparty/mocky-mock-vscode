@@ -117,6 +117,12 @@ describe('suitePairing', () => {
     assert.strictEqual(resolveCblPath(named, (f) => f === at('src', 'PAY.cbl'), () => undefined), at('src', 'PAY.cbl'));
   });
 
+  it('finds the sibling suite of an uppercase PROG.CBL without the CLI pairing', () => {
+    const program = at('UPPROG.CBL');
+    const exists = (f: string) => f === program || f === at('UPPROG.cut');
+    assert.deepStrictEqual(suitesForProgram(program, exists, () => ['UPPROG.CBL', 'UPPROG.cut']), [at('UPPROG.cut')]);
+  });
+
   it('names the sibling path for a new suite, with an optional topic', () => {
     assert.strictEqual(resolveCutPath(at('PAY.cbl')), at('PAY.cut'));
     assert.strictEqual(resolveCutPath(at('PAY.cbl'), 'errors'), at('PAY.errors.cut'));

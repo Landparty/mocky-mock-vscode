@@ -157,10 +157,13 @@ export function cutSuitesFromCollectJson(text: string): CutSuite[] | null {
 }
 
 // The three extensions package.json registers for the `cobol` language --
-// keep in sync with environment/cobolPaths.ts's isCobolPath. Probed in this
-// order; .cbl stays the default when none exists (error messages then name
-// the conventional pairing).
-const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol'];
+// keep in sync with environment/cobolPaths.ts's isCobolPath -- plus their
+// uppercase spellings, the same six in the same order as the CLI's sibling
+// rule (mocky-mock's mockymock/cli/discovery.py COBOL_SOURCE_EXTENSIONS), so
+// PROG.cut pairs with PROG.CBL on a case-sensitive file system. .cbl stays
+// the default when none exists (error messages then name the conventional
+// pairing).
+const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol', '.CBL', '.COB', '.COBOL'];
 
 function readTextOrUndefined(p: string): string | undefined {
   try {
@@ -226,8 +229,9 @@ export function suitesForProgram(
   }
 ): string[] {
   const found = new Map<string, string>();
+  const fileKey = (p: string) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
   const add = (p: string) => {
-    const k = process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+    const k = fileKey(p);
     if (!found.has(k)) found.set(k, p);
   };
   for (const suite of pairedSuites(cblFilePath)) {
@@ -240,7 +244,7 @@ export function suitesForProgram(
     if (!lower.endsWith('.cut') || !lower.startsWith(prefix)) continue;
     const candidate = path.join(parsed.dir, entry);
     // A sibling whose own PROGRAM line points elsewhere isn't this program's.
-    if (path.resolve(resolveCblPath(candidate, exists)) === path.resolve(cblFilePath)) add(candidate);
+    if (fileKey(resolveCblPath(candidate, exists)) === fileKey(cblFilePath)) add(candidate);
   }
   return Array.from(found.values()).sort();
 }

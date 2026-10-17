@@ -71,6 +71,14 @@ describe('resolveCblPath', () => {
     assert.strictEqual(resolveCblPath(cutPath, (p) => p === cobol), cobol);
   });
 
+  it('resolves an uppercase sibling PROG.CBL / .COB / .COBOL, as the CLI does', () => {
+    const cutPath = path.join('/repo', 'UPPROG.cut');
+    for (const ext of ['.CBL', '.COB', '.COBOL']) {
+      const upper = path.join('/repo', `UPPROG${ext}`);
+      assert.strictEqual(resolveCblPath(cutPath, (p) => p === upper, () => undefined), upper);
+    }
+  });
+
   it('prefers .cbl when more than one candidate exists, and defaults to .cbl when none does', () => {
     const cutPath = path.join('/repo', 'PROG.cut');
     const cbl = path.join('/repo', 'PROG.cbl');
