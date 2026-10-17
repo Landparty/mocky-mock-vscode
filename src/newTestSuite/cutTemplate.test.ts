@@ -3,9 +3,15 @@ import {
   buildGenerateArgs,
   buildInitArgs,
   buildStarterCut,
+  countAssertions,
   describeCreatedSuite,
+  describeEmptyScaffold,
+  failureReason,
+  initRecordingFailure,
+  lintRefusalOf,
   parseGeneratedCaseCount,
   parseInitOutcome,
+  shellArg,
   starterCutFacts,
 } from './cutTemplate';
 
@@ -101,6 +107,113 @@ describe('describeCreatedSuite', () => {
     const text = describeCreatedSuite({ ...base, caseCount: 1, perParagraph: true });
     assert.match(text, /with 1 test case \(one per paragraph\)\. Every boundary is mocked, but nothing is asserted yet\./);
     assert.doesNotMatch(text, /Docker/);
+  });
+});
+
+describe('describeCreatedSuite with paths and assertions', () => {
+  const base = { cblName: 'PAY.cbl', cutName: 'PAY.cut', caseCount: 1, perParagraph: false };
+
+  it('suggests a run command with workspace-relative paths for a suite under tests/', () => {
+    const text = describeCreatedSuite({ ...base, dockerDown: true, cblArg: 'src/pay/PAY.cbl', cutArg: 'tests/pay/PAY.cut' });
+    assert.match(text, /"mockymock run src\/pay\/PAY\.cbl --cut tests\/pay\/PAY\.cut --record-expectations"/);
+  });
+
+  it('says call counts are asserted when the scaffold has VERIFY lines', () => {
+    const text = describeCreatedSuite({ ...base, dockerDown: true, assertions: { verify: 1, expect: 0 } });
+    assert.match(text, /call counts \(1 VERIFY line\) are asserted, but no field values are asserted yet\./);
+    assert.doesNotMatch(text, /nothing is asserted/);
+    assert.doesNotMatch(text, /pass as long as the program runs/);
+  });
+
+  it('counts folded EXPECTs too', () => {
+    const text = describeCreatedSuite({ ...base, assertions: { verify: 3, expect: 2 } });
+    assert.match(text, /call counts \(3 VERIFY lines\) and 2 field values \(EXPECT\) are asserted\./);
+  });
+
+  it('keeps "nothing is asserted" for a file with no assertions', () => {
+    assert.match(describeCreatedSuite({ ...base, assertions: { verify: 0, expect: 0 } }), /nothing is asserted yet/);
+  });
+});
+
+describe('shellArg', () => {
+  it('quotes only a path with whitespace', () => {
+    assert.equal(shellArg('tests/pay/PAY.cut'), 'tests/pay/PAY.cut');
+    assert.equal(shellArg('my src/PAY.cbl'), '"my src/PAY.cbl"');
+  });
+});
+
+describe('countAssertions', () => {
+  it('counts VERIFY and EXPECT lines but not STUB EXPECT comments', () => {
+    const cut = [
+      'TESTSUITE "ORDRPROC"',
+      'TESTCASE "happy path"',
+      '    *> STUB EXPECT UT-CAP-DISCRATE-1 -- the value the program actually passed to this CALL',
+      '    VERIFY CALL "DISCRATE" WAS CALLED 1 TIMES',
+      '    EXPECT WS-TOTAL TO BE 622',
+    ].join('\n');
+    assert.deepEqual(countAssertions(cut), { verify: 1, expect: 1 });
+  });
+});
+
+describe('describeEmptyScaffold', () => {
+  it('explains the starter fallback instead of promising mocks', () => {
+    const text = describeEmptyScaffold('CALC.cbl', 'CALC.cut');
+    assert.match(text, /created a basic CALC\.cut/);
+    assert.match(text, /no CALL, file, SQL, CICS or IMS boundary/);
+    assert.doesNotMatch(text, /Every boundary is mocked/);
+  });
+});
+
+describe('lintRefusalOf / failureReason', () => {
+  // generate's output when it wrote the scaffold and lint refuses it (mocky-mock #231).
+  const refused = {
+    code: 1,
+    stdout:
+      'mockymock generate: wrote 1 test case(s) -> VSAMKSDS.cut\n' +
+      'mockymock generate: .cut line 3: TESTCASE "happy path" refused (UNSUPPORTED_NESTED_MOCK_TARGET): nested\n',
+    stderr: 'mockymock generate: VSAMKSDS.cut was written, but `lint` refuses it for the reason(s) above -- no MOCK block can fix them\n',
+  };
+
+  it('names the refusal from stdout', () => {
+    assert.equal(lintRefusalOf(refused), '.cut line 3: TESTCASE "happy path" refused (UNSUPPORTED_NESTED_MOCK_TARGET): nested');
+    assert.match(failureReason(refused), /^\.cut line 3: .*UNSUPPORTED_NESTED_MOCK_TARGET/);
+  });
+
+  it('is undefined for any other failure, whose reason is stderr first', () => {
+    const other = { code: 1, stdout: 'progress\n', stderr: 'mockymock generate: no such file: X.cbl\n' };
+    assert.equal(lintRefusalOf(other), undefined);
+    assert.equal(failureReason(other), 'mockymock generate: no such file: X.cbl');
+  });
+});
+
+describe('initRecordingFailure', () => {
+  const head =
+    'mockymock init: scaffolding INVUPDT.cut from INVUPDT.cbl (--with-data)\n' +
+    'mockymock generate: wrote 1 test case(s) -> INVUPDT.cut\n' +
+    'mockymock init: running INVUPDT.cut to record expected values\n';
+  const tail = 'mockymock init: INVUPDT.cut was written, but recording its expected values failed (see above)\n';
+
+  it("picks run's own error, not init's progress line", () => {
+    const result = {
+      code: 1,
+      stdout: head + 'mockymock run: Docker is required: ...\nfailed to connect\n' + tail,
+      stderr: '',
+    };
+    assert.equal(initRecordingFailure(result), 'mockymock run: Docker is required: ...');
+  });
+
+  it('prefers a compile failure over other run lines', () => {
+    const result = {
+      code: 1,
+      stdout: head + 'mockymock run: building\nmockymock run: compile failed: INVUPDT.cbl:12: error\n' + tail,
+      stderr: '',
+    };
+    assert.equal(initRecordingFailure(result), 'mockymock run: compile failed: INVUPDT.cbl:12: error');
+  });
+
+  it('falls back to the line after "running ..." and then to nothing', () => {
+    assert.equal(initRecordingFailure({ code: 1, stdout: head + 'FAIL happy path\n' + tail, stderr: '' }), 'FAIL happy path');
+    assert.equal(initRecordingFailure({ code: 1, stdout: head + tail, stderr: '' }), undefined);
   });
 });
 

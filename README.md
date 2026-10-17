@@ -271,8 +271,9 @@ under `tests/` (see below). When Docker is running it uses `mockymock init`: one
 mocked, run once so the values the program produced today become real
 `EXPECT` lines. That's a characterization suite: a change that alters what
 the program does turns it red. Without Docker it falls back to
-`mockymock generate`, which writes the same cases with no assertions yet,
-and the notification says so. Set `mockymock.newTestSuite.casePerParagraph`
+`mockymock generate`, which writes the same cases with only what it can
+work out without running them (usually `VERIFY ... WAS CALLED n TIMES` call
+counts, no recorded field values), and the notification says which. Set `mockymock.newTestSuite.casePerParagraph`
 for one case per paragraph instead. It never overwrites an existing suite.
 On a program that already has suites it lists them, plus **New Test
 Suite…**, which asks for a topic and writes `PROG.<topic>.cut`. If the CLI

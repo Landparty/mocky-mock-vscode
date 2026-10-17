@@ -55,8 +55,14 @@ export function parseInitOutcome(stdout: string): InitOutcome {
 }
 
 // The toast after the beaker wrote a suite. `recorded` set means init ran
-// the suite and wrote EXPECT lines; otherwise the suite asserts nothing yet
-// and the message says why (`dockerDown`) and what to do next.
+// the suite and wrote EXPECT lines; otherwise the message says what the
+// generated file does assert (`assertions`, counted from the file: current
+// CLIs write VERIFY ... WAS CALLED lines, and EXPECTs for values they can
+// fold), why nothing was recorded (`dockerDown`) and what to do next.
+// `cblArg` / `cutArg`: the paths for the suggested command, as they resolve
+// from the integrated terminal (workspace-relative, quoted) -- a suite
+// under tests/ sits in another folder than its program, so bare names
+// never both resolve. Default to the names.
 export interface CreatedSuite {
   cblName: string;
   cutName: string;
@@ -64,6 +70,9 @@ export interface CreatedSuite {
   perParagraph: boolean;
   recorded?: number | null;
   dockerDown?: boolean;
+  assertions?: AssertionCount;
+  cblArg?: string;
+  cutArg?: string;
 }
 
 export function describeCreatedSuite(suite: CreatedSuite): string {
@@ -78,17 +87,125 @@ export function describeCreatedSuite(suite: CreatedSuite): string {
     );
   }
   const shape = suite.perParagraph ? ' (one per paragraph)' : '';
+  const verify = suite.assertions?.verify ?? 0;
+  const expect = suite.assertions?.expect ?? 0;
+  let asserted: string;
+  let passes = '';
+  if (verify + expect === 0) {
+    asserted = 'Every boundary is mocked, but nothing is asserted yet.';
+    passes = ' The cases pass as long as the program runs.';
+  } else {
+    const checks = [
+      verify ? `call counts (${verify} VERIFY line${verify === 1 ? '' : 's'})` : '',
+      expect ? `${expect} field value${expect === 1 ? '' : 's'} (EXPECT)` : '',
+    ]
+      .filter(Boolean)
+      .join(' and ');
+    asserted =
+      `Every boundary is mocked and ${checks} ${verify === 0 && expect === 1 ? 'is' : 'are'} asserted` +
+      (expect ? '.' : ', but no field values are asserted yet.');
+  }
   const why = suite.dockerDown
     ? " Docker isn't running, so mockymock couldn't record what the program does today."
     : '';
   const next = suite.dockerDown
-    ? ` Once Docker is up, run "mockymock run ${suite.cblName} --cut ${suite.cutName} --record-expectations" ` +
-      'to fill in its STUB EXPECT lines.'
+    ? ` Once Docker is up, run "mockymock run ${suite.cblArg ?? suite.cblName} --cut ${suite.cutArg ?? suite.cutName} ` +
+      '--record-expectations" to fill in its STUB EXPECT lines.'
     : ' Fill in the MOVE and EXPECT lines, then press play.';
+  return `mockymock: created ${suite.cutName} with ${cases}${shape}. ${asserted}${why}${passes}${next}`;
+}
+
+// A path as one argument of a command pasted into a terminal: quoted when
+// it holds whitespace (double quotes work in sh, PowerShell and cmd alike).
+export function shellArg(p: string): string {
+  return /\s/.test(p) ? `"${p}"` : p;
+}
+
+export interface AssertionCount {
+  verify: number;
+  expect: number;
+}
+
+// The live VERIFY / EXPECT lines in a generated .cut -- `*> STUB EXPECT`
+// comments are hints, not assertions.
+export function countAssertions(cutText: string): AssertionCount {
+  let verify = 0;
+  let expect = 0;
+  for (const line of cutText.split(/\r?\n/)) {
+    if (/^\s*VERIFY\b/i.test(line)) verify++;
+    else if (/^\s*EXPECT\b/i.test(line)) expect++;
+  }
+  return { verify, expect };
+}
+
+// The toast when the CLI's scaffold had no test cases (a program with no
+// boundary to mock) and the starter template took its place.
+export function describeEmptyScaffold(cblName: string, cutName: string): string {
   return (
-    `mockymock: created ${suite.cutName} with ${cases}${shape}. Every boundary is mocked, but nothing is asserted yet.` +
-    `${why} The cases pass as long as the program runs.${next}`
+    `mockymock: created a basic ${cutName}. ${cblName} has no CALL, file, SQL, CICS or IMS boundary to mock, ` +
+    'so mockymock generate wrote no test cases; the starter case runs its first paragraph instead. ' +
+    'Fill in the MOVE and EXPECT lines, then press play.'
   );
+}
+
+// The toast when the CLI wrote the full scaffold but lint refuses it.
+export function describeLintRefusedSuite(cutName: string, refusal: string): string {
+  return (
+    `mockymock: created ${cutName} with every boundary mocked, but lint refuses it for a reason no MOCK block ` +
+    `can fix, so it won't run until that's resolved: ${refusal}`
+  );
+}
+
+interface CliOutput {
+  code: number;
+  stdout: string;
+  stderr: string;
+}
+
+// `generate` (and `init`, which runs it first) wrote the full scaffold but
+// exits 1 because lint refuses it for a reason no MOCK block can fix; the
+// refusals are on stdout, stderr only points back at them.
+export function lintRefusalOf(result: CliOutput): string | undefined {
+  if (!/was written, but `lint` refuses it/.test(result.stdout + result.stderr)) return undefined;
+  return refusalLine(result.stdout) ?? firstLine(result.stderr) ?? 'see Show Details';
+}
+
+function lines(text: string): string[] {
+  return text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function firstLine(text: string): string | undefined {
+  return lines(text)[0];
+}
+
+// The first `refused (CODE): ...` line, without its "mockymock <cmd>: " prefix.
+function refusalLine(stdout: string): string | undefined {
+  return lines(stdout)
+    .find((line) => /\brefused \([A-Z_]+\)/.test(line))
+    ?.replace(/^mockymock [a-z-]+: /, '');
+}
+
+// Why a CLI step failed, for a toast: a lint refusal on stdout beats
+// stderr's first line, which beats stdout's.
+export function failureReason(result: CliOutput): string {
+  return refusalLine(result.stdout) ?? firstLine(result.stderr) ?? firstLine(result.stdout) ?? `exit code ${result.code}`;
+}
+
+// Why init's recording run failed. init prints everything on stdout,
+// starting with its own progress lines, so neither stream's first line
+// says anything: prefer run's own error (a compile failure or refusal
+// first), then whatever followed "running ... to record expected values".
+export function initRecordingFailure(result: CliOutput): string | undefined {
+  const out = lines(result.stdout);
+  const runLines = out.filter((line) => line.startsWith('mockymock run:'));
+  const preferred = runLines.find((line) => /compile failed|refused \(/.test(line)) ?? runLines[0];
+  if (preferred) return preferred;
+  const running = out.findIndex((line) => /^mockymock init: running .* to record expected values/.test(line));
+  const after = running >= 0 ? out.slice(running + 1).find((line) => !line.startsWith('mockymock init:')) : undefined;
+  return after ?? firstLine(result.stderr);
 }
 
 // The CLI prints "mockymock generate: wrote N test case(s) -> path" on
