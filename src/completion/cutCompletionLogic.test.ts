@@ -4,7 +4,9 @@ import {
   BoundaryInfo,
   boundaryKeyCandidates,
   detectCompletionContext,
+  flowTargetsFromSource,
   keyFromDirective,
+  keyReplaceLengthAfterCursor,
   MOCK_CATEGORIES,
   QUOTED_CATEGORIES,
 } from './cutCompletionLogic';
@@ -18,8 +20,26 @@ describe('detectCompletionContext', () => {
     assert.strictEqual(detectCompletionContext('MOCK'), null);
   });
 
-  it('detects the key position after MOCK <category> <partial key>, uppercasing the category', () => {
-    assert.deepStrictEqual(detectCompletionContext('    MOCK call SUB'), {
+  it('still offers categories once a category is partly typed', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK R'), { kind: 'category' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK REA'), { kind: 'category' });
+  });
+
+  it('keeps the key position inside an unclosed quoted key that contains a space', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "UPDATE '), {
+      kind: 'key',
+      category: 'SQL',
+      partial: '"UPDATE ',
+    });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "UPDATE O'), {
+      kind: 'key',
+      category: 'SQL',
+      partial: '"UPDATE O',
+    });
+  });
+
+  it('detects the key position after MOCK <category> <partial key>', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK CALL SUB'), {
       kind: 'key',
       category: 'CALL',
       partial: 'SUB',
@@ -46,14 +66,22 @@ describe('detectCompletionContext', () => {
   it('offers ROWS after a complete key on a ROWS-capable category', () => {
     assert.deepStrictEqual(detectCompletionContext('    MOCK CALL "CBLTDLI" '), { kind: 'rows', partial: '' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "FETCH CUR1" RO'), { kind: 'rows', partial: 'RO' });
-    assert.deepStrictEqual(detectCompletionContext('    mock read CUST-FILE '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK READ CUST-FILE ro'), { kind: 'rows', partial: 'ro' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK DLI "GN" '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK CICS "LINK PROGRAM" '), { kind: 'rows', partial: '' });
   });
 
   it('does not offer ROWS for categories without a ROWS block, or mid-quote', () => {
     assert.strictEqual(detectCompletionContext('    MOCK WRITE OUT-FILE '), null);
     assert.strictEqual(detectCompletionContext('    MOCK PARAGRAPH 1000-X '), null);
-    assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT ')?.kind, 'key');
+  });
+
+  it('offers nothing after a lowercase MOCK or category, which the CLI rejects', () => {
+    assert.strictEqual(detectCompletionContext('    mock '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK call '), null);
+    assert.strictEqual(detectCompletionContext('    Mock Read IN-FILE '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK read IN-FILE '), null);
   });
 
   it('returns null on an unrelated line', () => {
@@ -154,8 +182,8 @@ describe('boundaryKeyCandidates', () => {
     assert.ok(texts('CALL').includes('WS-PGM'));
   });
 
-  it('treats MQ as an alias for CALL (quoted)', () => {
-    assert.deepStrictEqual(texts('MQ'), ['"SUBPROG"', 'WS-PGM']);
+  it('treats MQ as an alias for CALL (quoted), without the bare dynamic-CALL identifiers', () => {
+    assert.deepStrictEqual(texts('MQ'), ['"SUBPROG"']);
   });
 
   it('offers every key of a multi-key site', () => {
@@ -193,6 +221,32 @@ describe('keyFromDirective', () => {
   });
 });
 
+describe('keyReplaceLengthAfterCursor', () => {
+  // Apply a key completion the way the provider does: replace `partial`
+  // before the cursor plus the returned length after it.
+  const accept = (line: string, cursor: number, insertText: string): string => {
+    const context = detectCompletionContext(line.slice(0, cursor));
+    assert.ok(context && context.kind === 'key');
+    const end = cursor + keyReplaceLengthAfterCursor(context.partial, line.slice(cursor));
+    return line.slice(0, cursor - context.partial.length) + insertText + line.slice(end);
+  };
+
+  it('replaces the auto-closed quote after the cursor', () => {
+    assert.strictEqual(accept('    MOCK CALL ""', 15, '"DISCRATE"'), '    MOCK CALL "DISCRATE"');
+    assert.strictEqual(accept('    MOCK CALL "DIS"', 18, '"DISCRATE"'), '    MOCK CALL "DISCRATE"');
+    assert.strictEqual(
+      accept('    MOCK SQL "UPDATE "', 21, '"UPDATE ORDERS"'),
+      '    MOCK SQL "UPDATE ORDERS"'
+    );
+  });
+
+  it('replaces nothing after the cursor without an opening and a following quote', () => {
+    assert.strictEqual(keyReplaceLengthAfterCursor('"DIS', ''), 0);
+    assert.strictEqual(keyReplaceLengthAfterCursor('"DIS', ' ROWS'), 0);
+    assert.strictEqual(keyReplaceLengthAfterCursor('INV-F', '"'), 0);
+  });
+});
+
 describe('QUOTED_CATEGORIES', () => {
   it("matches mocky-mock's dsl/parser.py _QUOTED_CATS", () => {
     assert.deepStrictEqual([...QUOTED_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'SQL']);
@@ -200,7 +254,45 @@ describe('QUOTED_CATEGORIES', () => {
 });
 
 describe('ROWS_CATEGORIES', () => {
+  // mocky-mock 0.10.1's dsl/model.py: ROWS_CATEGORIES = {SQL, READ, RETURN}
+  // | SEQUENCED_CALL_CATEGORIES, the latter {CALL, DYNCALL, DLI, CICS}.
+  // DYNCALL is spelled `MOCK CALL <bare-word>` and MQ is CALL at parse time.
   it("matches mocky-mock's dsl/model.py ROWS_CATEGORIES (MQ spelled as the DSL writes it)", () => {
-    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
+    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
+  });
+});
+
+describe('flowTargetsFromSource', () => {
+  // Shaped like mocky-mock's examples/flowmock/FLOWMOCK.cbl, whose `collect
+  // --boundaries` lists only its CALL.
+  const source = [
+    '       IDENTIFICATION DIVISION.',
+    '       PROGRAM-ID. FLOWMOCK.',
+    '       DATA DIVISION.',
+    '       WORKING-STORAGE SECTION.',
+    '       01  WS-TOTAL PIC 9(5) VALUE 0.',
+    '       PROCEDURE DIVISION.',
+    '       MAIN-PROCESS.',
+    '           PERFORM CALC-TOTALS',
+    '           PERFORM RPT-BLOCK',
+    '           GOBACK.',
+    '       CALC-TOTALS.',
+    '           CALL "RATECALC" USING WS-TOTAL.',
+    '       RPT-BLOCK SECTION.',
+    '       RPT-HEADER.',
+    '           DISPLAY "HEADER".',
+    '       RPT-BODY.',
+    '           DISPLAY "BODY".',
+  ];
+
+  it('lists every PROCEDURE DIVISION paragraph, including those inside a section', () => {
+    assert.deepStrictEqual(
+      flowTargetsFromSource(source).paragraphs.map((t) => t.name),
+      ['MAIN-PROCESS', 'CALC-TOTALS', 'RPT-HEADER', 'RPT-BODY']
+    );
+  });
+
+  it('lists PROCEDURE DIVISION sections without the SECTION suffix, and no DATA DIVISION ones', () => {
+    assert.deepStrictEqual(flowTargetsFromSource(source).sections, [{ name: 'RPT-BLOCK', line: 13 }]);
   });
 });

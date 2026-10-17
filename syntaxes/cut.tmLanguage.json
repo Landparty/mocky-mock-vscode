@@ -13,15 +13,16 @@
   ],
   "repository": {
     "comment": {
-      "match": "\\*>.*$",
+      "match": "^\\s*\\*>.*$",
       "name": "comment.line.cut"
     },
     "structure": {
       "patterns": [
         {
-          "match": "^\\s*(TESTSUITE|TESTCASE)\\b(?:(.*?)(\\bTAGS\\b))?",
+          "match": "^\\s*(TESTSUITE|TESTCASE)\\b(?:\\s+(\"[^\"]*\"))?(?:\\s+(TAGS)\\b)?",
           "captures": {
             "1": { "name": "keyword.control.structure.cut" },
+            "2": { "name": "string.quoted.double.cut" },
             "3": { "name": "keyword.other.tags.cut" }
           }
         },
@@ -32,10 +33,11 @@
           }
         },
         {
-          "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)",
+          "match": "\\b(USING\\s+PROVIDER)\\s+([A-Za-z0-9][A-Za-z0-9-]*)(?:\\s+(TAGS)\\b)?",
           "captures": {
             "1": { "name": "keyword.other.provider.cut" },
-            "2": { "name": "entity.name.provider.cut" }
+            "2": { "name": "entity.name.provider.cut" },
+            "3": { "name": "keyword.other.tags.cut" }
           }
         },
         {
@@ -85,7 +87,7 @@
     "directives": {
       "patterns": [
         {
-          "match": "^\\s*(EXPECT)\\s+(\\S+)\\s+(?:(NOT)\\s+)?(TO\\s+BE)\\b(?:\\s+(GREATER\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?|LESS\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?))?",
+          "match": "^\\s*(EXPECT)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s+(?:(NOT)\\s+)?(TO\\s+BE)\\b(?:\\s+(GREATER\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?|LESS\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?))?",
           "captures": {
             "1": { "name": "keyword.control.assertion.cut" },
             "2": { "name": "variable.other.cobol.cut" },
@@ -95,11 +97,13 @@
           }
         },
         {
-          "match": "^\\s*(VERIFY)\\b(.*?)(WAS\\s+(?:CALLED|PERFORMED))\\s+(ONCE|NEVER|AT\\s+LEAST\\s+ONCE|\\d+\\s+TIMES)\\b",
+          "match": "^\\s*(VERIFY)\\s+(?:(CALL|MQ|SQL|CICS|DLI|OPEN|CLOSE|READ|WRITE|REWRITE|DELETE|START|UNLOCK|SORT|MERGE|RELEASE|RETURN|ACCEPT|INITIATE|GENERATE|TERMINATE|PARAGRAPH|SECTION)\\s+)?(.*?)\\s*(WAS\\s+(?:CALLED|PERFORMED))\\s+(ONCE|NEVER|AT\\s+LEAST\\s+ONCE|\\d+\\s+TIMES)\\b",
           "captures": {
             "1": { "name": "keyword.control.assertion.cut" },
-            "3": { "name": "keyword.operator.words.cut" },
-            "4": { "name": "constant.language.expectation.cut" }
+            "2": { "name": "storage.type.category.cut" },
+            "3": { "patterns": [{ "include": "#strings" }] },
+            "4": { "name": "keyword.operator.words.cut" },
+            "5": { "name": "constant.language.expectation.cut" }
           }
         },
         {
@@ -112,7 +116,7 @@
           }
         },
         {
-          "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+(\\S+)\\s*$",
+          "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s*$",
           "captures": {
             "1": { "name": "keyword.other.move.cut" },
             "2": {
@@ -127,7 +131,17 @@
           }
         },
         {
-          "match": "^\\s*(FILE-STATUS)\\s+(IS)\\s+(?:(SUCCESS|END-OF-FILE|DUPLICATE-KEY|RECORD-NOT-FOUND|FILE-NOT-FOUND|ALREADY-OPEN|NOT-OPEN|NO-CURRENT-RECORD)\\b|(\"[^\"]*\")|([A-Za-z][A-Za-z-]*))\\s*$",
+          "match": "^\\s*(CAPTURE)\\s+(ARG)\\s+(\\S+)\\s+(INTO)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s*$",
+          "captures": {
+            "1": { "name": "keyword.other.capture.cut" },
+            "2": { "name": "keyword.other.capture.cut" },
+            "3": { "patterns": [{ "include": "#numbers" }] },
+            "4": { "name": "keyword.other.capture.cut" },
+            "5": { "name": "variable.other.cobol.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(FILE-STATUS)\\s+(IS)\\s+(?:(?i:(SUCCESS|END-OF-FILE|DUPLICATE-KEY|RECORD-NOT-FOUND|FILE-NOT-FOUND|ALREADY-OPEN|NOT-OPEN|NO-CURRENT-RECORD))\\b|(\"[^\"]*\")|([A-Za-z][A-Za-z-]*))\\s*$",
           "captures": {
             "1": { "name": "keyword.control.filestatus.cut" },
             "2": { "name": "keyword.operator.words.cut" },
@@ -139,8 +153,16 @@
       ]
     },
     "strings": {
-      "match": "\"[^\"]*\"",
-      "name": "string.quoted.double.cut"
+      "patterns": [
+        {
+          "match": "\"[^\"]*\"",
+          "name": "string.quoted.double.cut"
+        },
+        {
+          "match": "'[^']*'",
+          "name": "string.quoted.single.cut"
+        }
+      ]
     },
     "placeholder": {
       "match": "\\{[A-Za-z][A-Za-z0-9-]*\\}",

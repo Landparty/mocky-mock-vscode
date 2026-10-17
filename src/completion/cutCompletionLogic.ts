@@ -6,6 +6,8 @@
 // See docs/2026-09-15-cut-editor-intelligence-design.md (sibling
 // mocky-mock repo) for the design this implements.
 
+import { OutlineNode, buildOutline } from '../outline/outlineModel';
+
 // Every MockCategory the sibling mocky-mock repo's dsl/model.py defines,
 // in the same declaration order. Static -- no CLI round-trip needed for
 // this half of completion. (DYNCALL is deliberately absent: a .cut author
@@ -42,9 +44,11 @@ export const MOCK_CATEGORIES = [
 export const QUOTED_CATEGORIES: ReadonlySet<string> = new Set(['CALL', 'MQ', 'SQL', 'CICS', 'DLI']);
 
 // Categories that take a `ROWS` block (mocky-mock's dsl/model.py
-// `ROWS_CATEGORIES`): one row per FETCH/READ/RETURN, or -- for CALL, MQ and
-// DLI -- one response per call, which also requires a `TERMINAL ( ... )`.
-export const ROWS_CATEGORIES: ReadonlySet<string> = new Set(['SQL', 'READ', 'RETURN', 'CALL', 'MQ', 'DLI']);
+// `ROWS_CATEGORIES`, i.e. SQL/READ/RETURN plus its
+// `SEQUENCED_CALL_CATEGORIES`): one row per FETCH/READ/RETURN, or -- for
+// CALL, MQ, DLI and CICS -- one response per call, which also requires a
+// `TERMINAL ( ... )`.
+export const ROWS_CATEGORIES: ReadonlySet<string> = new Set(['SQL', 'READ', 'RETURN', 'CALL', 'MQ', 'DLI', 'CICS']);
 
 export type CompletionContext =
   | { kind: 'category' }
@@ -59,11 +63,20 @@ export type CompletionContext =
 // The category position needs the whitespace after MOCK: at `MOCK|` the
 // editor's current word is MOCK itself, so an accepted category would
 // replace it and the list is filtered against a word no category matches.
-const AFTER_MOCK_RE = /^\s*MOCK\s+$/i;
-const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+(\S*)$/i;
+// Case-sensitive, like mocky-mock's dsl/parser.py `_MOCK_QUOTED_RE` /
+// `_MOCK_BARE_RE`: `mock` and `MOCK call` are not MOCK lines to the CLI,
+// so completing after them would only help write a line it rejects.
+// A partly typed category (`MOCK RE`) is still the category position: the
+// provider sets no range, so the editor's word range replaces the partial
+// (in either case) with the accepted, uppercase category.
+const AFTER_MOCK_RE = /^\s*MOCK\s+[A-Za-z]*$/;
+// The key partial is a bare token, or an unclosed quoted key, which may
+// already contain spaces (`MOCK SQL "UPDATE ` before `ORDERS"`).
+const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Z]+)\s+("[^"]*|\S*)$/;
 // A key is complete once it is a closed quoted string (SQL keys contain
-// spaces) or a bare word followed by whitespace.
-const AFTER_MOCK_KEY_RE = /^\s*MOCK\s+([A-Za-z]+)\s+("[^"]*"|[^\s"]+)\s+([A-Za-z]*)$/i;
+// spaces) or a bare word followed by whitespace. The trailing ROWS partial
+// may be in any case: accepting the item replaces it with `ROWS`.
+const AFTER_MOCK_KEY_RE = /^\s*MOCK\s+([A-Z]+)\s+("[^"]*"|[^\s"]+)\s+([A-Za-z]*)$/;
 
 // `lineTextBeforeCursor` is everything on the current line up to (not
 // including) the cursor -- exactly what VS Code's CompletionItemProvider
@@ -74,13 +87,22 @@ export function detectCompletionContext(lineTextBeforeCursor: string): Completio
   }
   const match = AFTER_MOCK_CATEGORY_RE.exec(lineTextBeforeCursor);
   if (match) {
-    return { kind: 'key', category: match[1].toUpperCase(), partial: match[2] };
+    return { kind: 'key', category: match[1], partial: match[2] };
   }
   const keyed = AFTER_MOCK_KEY_RE.exec(lineTextBeforeCursor);
-  if (keyed && ROWS_CATEGORIES.has(keyed[1].toUpperCase()) && 'ROWS'.startsWith(keyed[3].toUpperCase())) {
+  if (keyed && ROWS_CATEGORIES.has(keyed[1]) && 'ROWS'.startsWith(keyed[3].toUpperCase())) {
     return { kind: 'rows', partial: keyed[3] };
   }
   return null;
+}
+
+// How many characters *after* the cursor a key completion must replace as
+// well: the closing quote the editor auto-inserted when the opening `"`
+// was typed (`MOCK CALL "|"`). Every quoted insert text carries both
+// quotes, so leaving that one behind would write `MOCK CALL "X""`, which
+// the CLI rejects as a malformed MOCK directive.
+export function keyReplaceLengthAfterCursor(partial: string, lineTextAfterCursor: string): number {
+  return partial.startsWith('"') && lineTextAfterCursor.startsWith('"') ? 1 : 0;
 }
 
 export interface BoundaryInfo {
@@ -116,8 +138,9 @@ function quoted(key: string): string {
 //
 // - `MQ` is not a real mock_surface category (an MQ call is CALL with
 //   `is_mq=true` under the hood), so `MQ` and `CALL` share the CALL pool.
-// - `MOCK CALL <bare-word>` is a *dynamic* CALL, so CALL also offers every
-//   DYNCALL site's identifier, unquoted.
+// - `MOCK CALL <bare-word>` is a *dynamic* CALL, so CALL (and only CALL:
+//   MQ takes a quoted key alone) also offers every DYNCALL site's
+//   identifier, unquoted.
 // - A multi-key site (`OPEN INV-FILE RPT-FILE`) is one site with several
 //   valid keys; every one of them is offered.
 // - SQL/CICS/DLI sites have no key of their own -- the DSL keys them on a
@@ -135,7 +158,7 @@ export function boundaryKeyCandidates(boundaries: BoundaryInfo[], category: stri
     result.push({ insertText, boundary });
   };
   for (const boundary of boundaries) {
-    if (boundary.category === 'DYNCALL' && target === 'CALL') {
+    if (boundary.category === 'DYNCALL' && normalized === 'CALL') {
       for (const key of boundary.keys) push(key, boundary);
       continue;
     }
@@ -158,4 +181,40 @@ export function keyFromDirective(directive: string | null | undefined): string |
   if (!directive) return null;
   const match = /^MOCK\s+[A-Za-z]+\s+(.+?)(?:\s+ROWS)?$/i.exec(directive.trim());
   return match ? match[1] : null;
+}
+
+// MOCK PARAGRAPH / MOCK SECTION key on a PROCEDURE DIVISION flow target,
+// which `collect --boundaries` never lists (it reports external
+// boundaries only), so their keys come from the program text itself, via
+// the same outline scan the starter template uses.
+export interface FlowTarget {
+  name: string;
+  line: number;
+}
+
+export interface FlowTargets {
+  paragraphs: FlowTarget[];
+  // Section names without their ` SECTION` suffix, as `MOCK SECTION` keys them.
+  sections: FlowTarget[];
+}
+
+export function flowTargetsFromSource(sourceLines: string[]): FlowTargets {
+  const targets: FlowTargets = { paragraphs: [], sections: [] };
+  const seen = { paragraphs: new Set<string>(), sections: new Set<string>() };
+  const add = (kind: keyof FlowTargets, name: string, line: number): void => {
+    if (seen[kind].has(name.toUpperCase())) return;
+    seen[kind].add(name.toUpperCase());
+    targets[kind].push({ name, line });
+  };
+  const walk = (nodes: OutlineNode[]): void => {
+    for (const node of nodes) {
+      if (node.kind === 'section') add('sections', node.name.replace(/\s+SECTION$/i, ''), node.startLine);
+      else if (node.kind === 'paragraph') add('paragraphs', node.name, node.startLine);
+      walk(node.children);
+    }
+  };
+  for (const division of buildOutline(sourceLines)) {
+    if (division.name === 'PROCEDURE DIVISION') walk(division.children);
+  }
+  return targets;
 }
