@@ -47,3 +47,23 @@ export function parseCoverageJson(text: string): CoverageData | null {
         : lines.filter((l) => l.covered).length,
   };
 }
+
+// Union of two coverage reports for the same program: a line is covered
+// when any suite covered it. Several suites can test one program, and a
+// coverage run must show what all of them reached together, not whichever
+// suite finished last.
+export function mergeCoverage(a: CoverageData, b: CoverageData): CoverageData {
+  const covered = new Map<number, boolean>();
+  for (const l of [...a.lines, ...b.lines]) {
+    covered.set(l.line, (covered.get(l.line) ?? false) || l.covered);
+  }
+  const lines = [...covered.entries()]
+    .sort(([x], [y]) => x - y)
+    .map(([line, isCovered]) => ({ line, covered: isCovered }));
+  return {
+    programFile: a.programFile || b.programFile,
+    lines,
+    totalExecutable: lines.length,
+    totalCovered: lines.filter((l) => l.covered).length,
+  };
+}

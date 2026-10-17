@@ -22,7 +22,7 @@ import {
   UnattributedFailure,
 } from './resultMapper';
 import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
-import { parseCoverageJson } from './coverageReport';
+import { parseCoverageJson, mergeCoverage, CoverageData } from './coverageReport';
 import { runSuite } from './mockymockRunner';
 import { DiscoveryTracker } from './discoveryTracker';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
@@ -422,7 +422,10 @@ export function activateTestController(
     plan: FilePlan,
     run: vscode.TestRun,
     token: vscode.CancellationToken,
-    withCoverage: boolean
+    withCoverage: boolean,
+    // Collects this file's coverage for the handler, which merges every
+    // suite of a program and adds one FileCoverage per program at the end.
+    collectCoverage: (cblPath: string, coverage: CoverageData) => void
   ) {
     const { fileItem } = plan;
     const selected = new Set(selectedCaseItems(plan));
@@ -628,22 +631,27 @@ export function activateTestController(
 
     if (withCoverage && result.coverageJson) {
       const coverage = parseCoverageJson(result.coverageJson);
-      if (coverage) {
-        const fileCoverage = new vscode.FileCoverage(
-          vscode.Uri.file(cblPath),
-          new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
-        );
-        coverageDetails.set(
-          fileCoverage,
-          coverage.lines.map(
-            // Clamped for the same reason as messagesForOutcome's location:
-            // a "line": 0 in the coverage JSON must not throw out of runOneFile.
-            (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
-          )
-        );
-        run.addCoverage(fileCoverage);
-      }
+      if (coverage) collectCoverage(cblPath, coverage);
     }
+  }
+
+  // One FileCoverage per program. VS Code keys file coverage by URI and a
+  // second addCoverage for the same .cbl replaces the first, so several
+  // suites of one program must be merged before they are added.
+  function addProgramCoverage(run: vscode.TestRun, cblPath: string, coverage: CoverageData) {
+    const fileCoverage = new vscode.FileCoverage(
+      vscode.Uri.file(cblPath),
+      new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
+    );
+    coverageDetails.set(
+      fileCoverage,
+      coverage.lines.map(
+        // Clamped for the same reason as messagesForOutcome's location:
+        // a "line": 0 in the coverage JSON must not throw out of the handler.
+        (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
+      )
+    );
+    run.addCoverage(fileCoverage);
   }
 
   // "Mutation Test": run `mockymock mutate` for a .cut file -- every mutant
@@ -996,6 +1004,17 @@ export function activateTestController(
       const cancel = new vscode.CancellationTokenSource();
       const cancelListeners = [outerToken, run.token].map((t) => t.onCancellationRequested(() => cancel.cancel()));
       const token = cancel.token;
+      // Keyed like suitesForProgram (case-insensitive on Windows): suites in
+      // different folders can name one program by differently-spelled paths.
+      const coverageByProgram = new Map<string, { cblPath: string; coverage: CoverageData }>();
+      const collectCoverage = (cblPath: string, coverage: CoverageData) => {
+        const key = process.platform === 'win32' ? path.resolve(cblPath).toLowerCase() : path.resolve(cblPath);
+        const earlier = coverageByProgram.get(key);
+        coverageByProgram.set(key, {
+          cblPath,
+          coverage: earlier ? mergeCoverage(earlier.coverage, coverage) : coverage,
+        });
+      };
       try {
         const plans = planRuns(request);
         const configured =
@@ -1007,7 +1026,7 @@ export function activateTestController(
           while (next < plans.length && !token.isCancellationRequested) {
             const plan = plans[next++];
             try {
-              await runOneFile(plan, run, token, withCoverage);
+              await runOneFile(plan, run, token, withCoverage, collectCoverage);
             } catch (err) {
               // Never leave a "started" item without a terminal state: if
               // runOneFile threw after marking items started, error out the
@@ -1026,6 +1045,7 @@ export function activateTestController(
         await Promise.all(
           Array.from({ length: Math.min(parallelism, Math.max(plans.length, 1)) }, () => worker())
         );
+        for (const { cblPath, coverage } of coverageByProgram.values()) addProgramCoverage(run, cblPath, coverage);
       } finally {
         cancelListeners.forEach((l) => l.dispose());
         cancel.dispose();
