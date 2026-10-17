@@ -11,6 +11,7 @@
 // paired (an older bundled CLI, or a file created since the last refresh).
 //
 // Pure (no `vscode` import) so mocha can test it.
+import * as fs from 'fs';
 import * as path from 'path';
 
 export interface SuitePairing {
@@ -92,6 +93,48 @@ export function parseProgramSuites(stdout: string): ProgramSuites | undefined {
 // TESTCASE, so scanning stops there.
 const PROGRAM_LINE_RE = /^PROGRAM\s+"([^"]*)"$/;
 
+// The CLI's project config files, as it looks for them in each folder.
+// A pyproject.toml only counts with a [tool.mockymock] table.
+const CONFIG_FILE_NAMES = ['cobol.yml', 'cobol.yaml', 'mockymock.toml', 'pyproject.toml'];
+const TOOL_MOCKYMOCK_RE = /^\s*\[tool\.mockymock[\].]/m;
+
+export function isProjectConfigFile(
+  filePath: string,
+  readText: (p: string) => string | undefined
+): boolean {
+  const name = path.basename(filePath);
+  if (!CONFIG_FILE_NAMES.includes(name)) return false;
+  if (name !== 'pyproject.toml') return true;
+  const text = readText(filePath);
+  return text !== undefined && TOOL_MOCKYMOCK_RE.test(text);
+}
+
+// The folder of the nearest project config at or above `fromDir`, stopping
+// at `stopDir` (the workspace folder) -- the cwd the CLI must run in to see
+// the same project layout lint and run see from the suite's own folder.
+// `stopDir` itself when there is none, which keeps the no-config behaviour.
+export function projectConfigDir(
+  fromDir: string,
+  stopDir: string,
+  exists: (p: string) => boolean,
+  readText: (p: string) => string | undefined
+): string {
+  let dir = path.resolve(fromDir);
+  const stop = path.resolve(stopDir);
+  const relative = path.relative(stop, dir);
+  if (path.isAbsolute(relative) || relative.split(path.sep)[0] === '..') return stop;
+  for (;;) {
+    if (dir === stop) return stop;
+    for (const name of CONFIG_FILE_NAMES) {
+      const candidate = path.join(dir, name);
+      if (exists(candidate) && isProjectConfigFile(candidate, readText)) return dir;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return stop;
+    dir = parent;
+  }
+}
+
 export function readProgramLine(text: string): string | undefined {
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -118,31 +161,74 @@ export function validateSuiteTopic(topic: string): string | undefined {
   return undefined;
 }
 
+function realpathOrResolve(p: string): string {
+  try {
+    return fs.realpathSync.native(p);
+  } catch {
+    return path.resolve(p);
+  }
+}
+
+// The CLI reports every path through Python's Path.resolve(), which follows
+// symlinks (and, on Windows, maps a subst or mapped drive to its target),
+// while VS Code hands out paths spelled the way the workspace was opened.
+// Keying both on the realpath lets a workspace opened through a symlink
+// (a linked ~/code, macOS's /tmp -> /private/tmp) or a mapped drive pair
+// its suites the way the CLI does.
 function key(p: string): string {
-  const resolved = path.resolve(p);
+  const resolved = realpathOrResolve(p);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
+// `target` as the CLI reported it (a realpath), re-spelled under the
+// deepest ancestor of `near` (a path in the workspace's own spelling)
+// whose realpath contains it -- so the program or suite opens as the same
+// document the workspace already knows, not a second copy under its
+// realpath. Unchanged when no ancestor contains it.
+function inSpellingOf(near: string, target: string): string {
+  let dir = path.dirname(path.resolve(near));
+  for (;;) {
+    const relative = path.relative(realpathOrResolve(dir), target);
+    if (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..') return path.join(dir, relative);
+    const parent = path.dirname(dir);
+    if (parent === dir) return target;
+    dir = parent;
+  }
 }
 
 let cutToProgram = new Map<string, string>();
 let programToCuts = new Map<string, string[]>();
+let cutToError = new Map<string, string>();
 
 // Replaces everything known with the latest listings (one per workspace
-// folder). A suite the CLI couldn't pair is left out, so callers fall back.
+// folder, then one per nested project config root below it). A suite
+// listed more than once takes its LAST row, so a nested project's own
+// listing wins over the workspace root's. A suite the CLI couldn't pair is
+// left out of the pairing, so callers fall back -- but when the CLI said
+// WHY (two programs share the name, the PROGRAM line names a missing
+// file), that reason is kept for pairingError().
 export function setPairings(listings: SuitesListing[]): void {
   const nextCut = new Map<string, string>();
   const nextProgram = new Map<string, string[]>();
+  const nextError = new Map<string, string>();
+  const latest = new Map<string, SuitePairing>();
   for (const listing of listings) {
-    for (const row of listing.suites) {
-      if (!row.program) continue;
-      nextCut.set(key(row.cut), row.program);
-      const suites = nextProgram.get(key(row.program)) ?? [];
-      if (!suites.some((s) => key(s) === key(row.cut))) suites.push(row.cut);
-      nextProgram.set(key(row.program), suites);
+    for (const row of listing.suites) latest.set(key(row.cut), row);
+  }
+  for (const [cutKey, row] of latest) {
+    if (!row.program) {
+      if (row.error) nextError.set(cutKey, row.error);
+      continue;
     }
+    nextCut.set(cutKey, row.program);
+    const suites = nextProgram.get(key(row.program)) ?? [];
+    if (!suites.some((s) => key(s) === cutKey)) suites.push(row.cut);
+    nextProgram.set(key(row.program), suites);
   }
   for (const suites of nextProgram.values()) suites.sort();
   cutToProgram = nextCut;
   programToCuts = nextProgram;
+  cutToError = nextError;
 }
 
 // Records one pairing ahead of the next CLI refresh -- a suite New Test
@@ -150,6 +236,7 @@ export function setPairings(listings: SuitesListing[]): void {
 // moment it opens, before the watcher-triggered refresh lands.
 export function rememberPairing(cutPath: string, programPath: string): void {
   cutToProgram.set(key(cutPath), programPath);
+  cutToError.delete(key(cutPath));
   const suites = programToCuts.get(key(programPath)) ?? [];
   if (!suites.some((s) => key(s) === key(cutPath))) {
     suites.push(cutPath);
@@ -159,9 +246,17 @@ export function rememberPairing(cutPath: string, programPath: string): void {
 }
 
 export function pairedProgram(cutPath: string): string | undefined {
-  return cutToProgram.get(key(cutPath));
+  const program = cutToProgram.get(key(cutPath));
+  return program === undefined ? undefined : inSpellingOf(cutPath, program);
+}
+
+// The CLI's own reason it could not pair this suite with a program, when
+// it gave one. Lint, Run, Debug and Mutation report it instead of
+// substituting the sibling guess resolveCblPath falls back to.
+export function pairingError(cutPath: string): string | undefined {
+  return cutToError.get(key(cutPath));
 }
 
 export function pairedSuites(programPath: string): string[] {
-  return programToCuts.get(key(programPath)) ?? [];
+  return (programToCuts.get(key(programPath)) ?? []).map((cut) => inSpellingOf(programPath, cut));
 }

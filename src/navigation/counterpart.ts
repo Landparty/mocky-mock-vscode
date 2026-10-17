@@ -49,6 +49,8 @@ async function openCounterpart(uri: unknown, wanted: 'suite' | 'program'): Promi
         await vscode.window.showTextDocument(target);
       }
       await vscode.commands.executeCommand('mockymock.newTestSuite');
+    } else if (pair.kind === 'program' && pair.error !== undefined) {
+      void vscode.window.showErrorMessage(`mockymock: ${pair.error}`);
     } else {
       void vscode.window.showErrorMessage(
         `mockymock: couldn't find the program this suite tests (looked for ${vscode.workspace.asRelativePath(pair.path)} and its .cob/.cobol variants). Add a PROGRAM "<path>" line after TESTSUITE to point at it.`

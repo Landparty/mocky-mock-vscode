@@ -51,6 +51,23 @@ describe('parseLintOutput', () => {
     assert.strictEqual(cutRelativeLine(problems[0]), null);
   });
 
+  it('places a refusal that names its own .cut line on that line (UNKNOWN_DATA_NAME)', () => {
+    const problems = parseLintOutput(
+      'mockymock lint: refused (UNKNOWN_DATA_NAME): .cut line 4: MOVE target WS-AA is not a data item of P\n' +
+        'mockymock lint: 1 problem(s) found.\n'
+    );
+    assert.strictEqual(problems.length, 1);
+    assert.strictEqual(problems[0].code, 'UNKNOWN_DATA_NAME');
+    assert.strictEqual(cutRelativeLine(problems[0]), 4);
+  });
+
+  it('keeps a .cbl "line N" refusal file-level even when the word .cut appears later', () => {
+    const problems = parseLintOutput(
+      'mockymock lint: refused (NESTED_EXEC): EXEC at line 12 is nested (see the .cut line 3 case)\n'
+    );
+    assert.strictEqual(cutRelativeLine(problems[0]), null);
+  });
+
   it('parses a .cut parse error with its line number', () => {
     const problems = parseLintOutput(
       'mockymock lint: invalid .cut file /p/PROG.cut: line 7: unrecognized statement: \'JUNK\'\n' +

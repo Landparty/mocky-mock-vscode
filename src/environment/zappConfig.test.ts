@@ -88,6 +88,24 @@ describe('resolveZappCopybookPaths', () => {
     assert.deepStrictEqual(resolveZappCopybookPaths(tempDir), [path.join(tempDir, 'COPYBOOK')]);
   });
 
+  it('keeps a property group with no language, which applies to every language', () => {
+    fs.writeFileSync(
+      path.join(tempDir, 'zapp.yaml'),
+      [
+        'name: payroll',
+        'propertyGroups:',
+        '  - name: shared-copybooks',
+        '    libraries:',
+        '      - name: syslib',
+        '        type: local',
+        '        locations:',
+        '          - "copybooks"',
+      ].join('\n')
+    );
+
+    assert.deepStrictEqual(resolveZappCopybookPaths(tempDir), [path.join(tempDir, 'copybooks')]);
+  });
+
   it('falls back to zapp.yaml when zapp.yml is absent', () => {
     fs.writeFileSync(
       path.join(tempDir, 'zapp.yaml'),

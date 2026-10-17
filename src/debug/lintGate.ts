@@ -30,8 +30,9 @@ export function evaluateLintResult(result: CommandResult): LintGate {
       const code = problem.code ? `[${problem.code}] ` : '';
       // Only a .cut-relative line gets a prefix: a refusal's embedded line
       // is in the .cbl, and at the front it would read as a line of the
-      // .cut being debugged. The message still carries it in its own words.
-      const cutLine = cutRelativeLine(problem);
+      // .cut being debugged. The message still carries it in its own words,
+      // as does a refusal that names its `.cut line N` itself (cutRelative).
+      const cutLine = problem.cutRelative ? null : cutRelativeLine(problem);
       const location = cutLine !== null ? `line ${cutLine}: ` : '';
       return `${code}${location}${problem.message}`;
     })

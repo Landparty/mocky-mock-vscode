@@ -86,3 +86,12 @@ export function resolveInvocationConfig(context: vscode.ExtensionContext, uri: v
   const zappCopybookPaths = workspaceFolder ? resolveZappCopybookPaths(workspaceFolder.uri.fsPath) : [];
   return { executablePath, copybookPaths: mergeCopybookPaths(settingCopybookPaths, zappCopybookPaths) };
 }
+
+// The settings resolveInvocationConfig reads (the copybook paths, their
+// cobolAnalyzer fallback, the CLI itself): changing any of them changes
+// lint results and completion's boundaries without any file being saved.
+export const INVOCATION_SETTINGS = [
+  'mockymock.copybookPaths',
+  'cobolAnalyzer.copybookPaths',
+  'mockymock.executablePath',
+];

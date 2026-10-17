@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as path from 'path';
 import { counterpartOf, isExportedProgram, originalOfExport } from './counterpartLogic';
+import { setPairings } from '../discovery/suitePairing';
 
 const dir = path.join(path.sep, 'w');
 const p = (name: string) => path.join(dir, name);
@@ -72,5 +73,19 @@ describe('originalOfExport', () => {
   it('is undefined for an ordinary program or when the original is gone', () => {
     assert.strictEqual(originalOfExport(p('PAY.cbl'), () => true), undefined);
     assert.strictEqual(originalOfExport(p('PAY.mainframe.cbl'), () => false), undefined);
+  });
+});
+
+describe('counterpartOf with a CLI pairing error', () => {
+  afterEach(() => setPairings([]));
+
+  it("reports the CLI's reason instead of a guessed sibling program", () => {
+    const cut = path.join(path.sep, 'ws', 'tests', 'PAY.cut');
+    const error = 'PROGRAM \'../src/PAYY.cbl\' does not exist';
+    setPairings([{ root: '', testsDir: '', sourceRoot: '', suites: [{ cut, program: null, error }] }]);
+    const pair = counterpartOf(cut, () => true);
+    assert.ok(pair && pair.kind === 'program');
+    assert.strictEqual(pair.exists, false);
+    assert.strictEqual(pair.error, error);
   });
 });

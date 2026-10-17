@@ -5,6 +5,9 @@ import {
   resolveCblPath,
   resolveCutPath,
   isExcludedCutPath,
+  isSameOrUnder,
+  EXCLUDED_PATH_SEGMENTS,
+  CUT_DISCOVERY_EXCLUDE_GLOB,
   cutSuitesFromCollectJson,
 } from './cutDiscovery';
 
@@ -69,6 +72,14 @@ describe('resolveCblPath', () => {
     assert.strictEqual(resolveCblPath(cutPath, (p) => p === cobol), cobol);
   });
 
+  it('resolves an uppercase sibling PROG.CBL / .COB / .COBOL, as the CLI does', () => {
+    const cutPath = path.join('/repo', 'UPPROG.cut');
+    for (const ext of ['.CBL', '.COB', '.COBOL']) {
+      const upper = path.join('/repo', `UPPROG${ext}`);
+      assert.strictEqual(resolveCblPath(cutPath, (p) => p === upper, () => undefined), upper);
+    }
+  });
+
   it('prefers .cbl when more than one candidate exists, and defaults to .cbl when none does', () => {
     const cutPath = path.join('/repo', 'PROG.cut');
     const cbl = path.join('/repo', 'PROG.cbl');
@@ -94,36 +105,88 @@ describe('resolveCutPath', () => {
 describe('isExcludedCutPath', () => {
   it('excludes a path under a .claude/worktrees checkout', () => {
     assert.strictEqual(
-      isExcludedCutPath('/repo/.claude/worktrees/some-branch/examples/invupdt/INVUPDT.cut'),
+      isExcludedCutPath('/repo/.claude/worktrees/some-branch/examples/invupdt/INVUPDT.cut', '/repo'),
       true
     );
   });
 
   it('excludes a path under a top-level .worktrees checkout', () => {
-    assert.strictEqual(isExcludedCutPath('/repo/.worktrees/some-branch/examples/invupdt/INVUPDT.cut'), true);
+    assert.strictEqual(isExcludedCutPath('/repo/.worktrees/some-branch/examples/invupdt/INVUPDT.cut', '/repo'), true);
   });
 
   it('excludes a path under a plain worktrees/ directory', () => {
-    assert.strictEqual(isExcludedCutPath('/repo/worktrees/some-branch/examples/invupdt/INVUPDT.cut'), true);
+    assert.strictEqual(isExcludedCutPath('/repo/worktrees/some-branch/examples/invupdt/INVUPDT.cut', '/repo'), true);
   });
 
   it('excludes a path under node_modules', () => {
-    assert.strictEqual(isExcludedCutPath('/repo/node_modules/some-package/fixture.cut'), true);
+    assert.strictEqual(isExcludedCutPath('/repo/node_modules/some-package/fixture.cut', '/repo'), true);
   });
 
   it('does not exclude a real example path', () => {
-    assert.strictEqual(isExcludedCutPath('/repo/examples/invupdt/INVUPDT.cut'), false);
+    assert.strictEqual(isExcludedCutPath('/repo/examples/invupdt/INVUPDT.cut', '/repo'), false);
   });
 
   it('does not exclude a path that merely contains "worktrees" as a substring, not a whole segment', () => {
-    assert.strictEqual(isExcludedCutPath('/repo/my-worktrees-notes/INVUPDT.cut'), false);
+    assert.strictEqual(isExcludedCutPath('/repo/my-worktrees-notes/INVUPDT.cut', '/repo'), false);
   });
 
   it('works with Windows-style backslash separators', () => {
     assert.strictEqual(
-      isExcludedCutPath('C:\\repo\\.claude\\worktrees\\some-branch\\examples\\invupdt\\INVUPDT.cut'),
+      isExcludedCutPath('C:\\repo\\.claude\\worktrees\\some-branch\\examples\\invupdt\\INVUPDT.cut', 'C:\\repo'),
       true
     );
+  });
+});
+
+describe('isExcludedCutPath scope', () => {
+  it('ignores excluded names above the workspace folder', () => {
+    assert.strictEqual(isExcludedCutPath('/x/worktrees/repo/tests/CUSTPROG.cut', '/x/worktrees/repo'), false);
+    assert.strictEqual(
+      isExcludedCutPath('/home/sam/repo/.claude/worktrees/fix-123/CUSTPROG.cut', '/home/sam/repo/.claude/worktrees/fix-123'),
+      false
+    );
+  });
+
+  it('still excludes an excluded folder inside a workspace that sits under one', () => {
+    assert.strictEqual(isExcludedCutPath('/x/worktrees/repo/node_modules/p/CUSTPROG.cut', '/x/worktrees/repo'), true);
+  });
+
+  it('never excludes a file outside every workspace folder', () => {
+    assert.strictEqual(isExcludedCutPath('/x/worktrees/repo/CUSTPROG.cut', undefined), false);
+    assert.strictEqual(isExcludedCutPath('/elsewhere/build/CUSTPROG.cut', '/repo'), false);
+  });
+
+  it("excludes every folder the CLI's directory scan skips", () => {
+    for (const dir of ['build', 'dist', '.venv', 'venv', '__pycache__', '.hg', '.svn', '.mypy_cache', '.pytest_cache', '.ruff_cache']) {
+      assert.strictEqual(isExcludedCutPath(`/w/${dir}/tests/PROG.cut`, '/w'), true, dir);
+    }
+  });
+});
+
+describe('CUT discovery exclusions match the CLI', () => {
+  // mocky-mock's mockymock/cli/discovery.py CUT_DISCOVERY_EXCLUDE_DIRS.
+  const CLI_EXCLUDE_DIRS = [
+    '.git', '.hg', '.svn', 'node_modules', '.venv', 'venv', '__pycache__',
+    '.mypy_cache', '.pytest_cache', '.ruff_cache', 'dist', 'build',
+  ];
+
+  it('excludes every folder the CLI excludes', () => {
+    for (const dir of CLI_EXCLUDE_DIRS) assert.ok(EXCLUDED_PATH_SEGMENTS.has(dir), dir);
+  });
+
+  it('keeps the findFiles glob and the path check in step', () => {
+    for (const dir of EXCLUDED_PATH_SEGMENTS) assert.ok(CUT_DISCOVERY_EXCLUDE_GLOB.includes(`**/${dir}/**`), dir);
+  });
+});
+
+describe('isSameOrUnder', () => {
+  it('matches the folder itself and anything inside it, and nothing beside it', () => {
+    const folder = path.join(path.sep, 'ws', 'tests', 'pay');
+    assert.strictEqual(isSameOrUnder(folder, folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(folder, 'PAYCALC.cut'), folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(folder, 'sub', 'X.cut'), folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(path.sep, 'ws', 'tests', 'payroll', 'X.cut'), folder), false);
+    assert.strictEqual(isSameOrUnder(path.join(path.sep, 'ws', 'tests', 'X.cut'), folder), false);
   });
 });
 

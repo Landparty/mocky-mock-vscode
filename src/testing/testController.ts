@@ -11,6 +11,7 @@ import {
   cutSuitesFromCollectJson,
   CutSuite,
   CUT_DISCOVERY_EXCLUDE_GLOB,
+  isSameOrUnder,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import {
@@ -28,6 +29,7 @@ import { DiscoveryTracker } from './discoveryTracker';
 import { parseMutationJson, survivorsOf, survivorReason, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
+import { pairingError } from '../discovery/suitePairing';
 import { EnvironmentManager, ReadyResult } from '../environment/environmentManager';
 import {
   describeTooOldCli,
@@ -162,7 +164,7 @@ export function activateTestController(
   }
 
   async function discoverAndBuildNow(uri: vscode.Uri) {
-    if (isExcludedCutPath(uri.fsPath)) return;
+    if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
     const generation = discoveries.begin(uri.toString());
     let text: string;
     try {
@@ -238,10 +240,58 @@ export function activateTestController(
   });
   watcher.onDidDelete(removeFile);
 
+  // The file watcher folds a folder delete/rename into one event for the
+  // folder, which `**/*.cut` never matches -- so a deleted or renamed folder
+  // of suites would leave stale items behind and never show the moved ones.
+  // These workspace events do report folder operations (made in VS Code).
+  function removeUnder(folder: vscode.Uri) {
+    for (const [id, fileItem] of [...fileItems]) {
+      if (fileItem.uri && isSameOrUnder(fileItem.uri.fsPath, folder.fsPath)) {
+        controller.items.delete(id);
+        fileItems.delete(id);
+      }
+    }
+  }
+  async function discoverUnder(target: vscode.Uri) {
+    if (target.fsPath.endsWith('.cut')) {
+      await discoverAndBuild(target);
+      return;
+    }
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(target, '**/*.cut'),
+      CUT_DISCOVERY_EXCLUDE_GLOB
+    );
+    for (const uri of uris) await discoverAndBuild(uri);
+  }
+  context.subscriptions.push(
+    vscode.workspace.onDidDeleteFiles((e) => e.files.forEach(removeUnder)),
+    vscode.workspace.onDidRenameFiles((e) => {
+      for (const { oldUri, newUri } of e.files) {
+        removeUnder(oldUri);
+        void discoverUnder(newUri).catch(() => undefined);
+      }
+    })
+  );
+
   controller.resolveHandler = async (item) => {
     if (!item) {
       await discoverAllCutFiles().catch(() => undefined);
     }
+  };
+  // Test Explorer's Refresh: also drops items whose file is gone (deleted
+  // outside VS Code, where no folder event reaches the extension).
+  controller.refreshHandler = async () => {
+    await Promise.all(
+      [...fileItems.values()].map(async (fileItem) => {
+        if (!fileItem.uri) return;
+        try {
+          await fs.access(fileItem.uri.fsPath);
+        } catch {
+          removeFile(fileItem.uri);
+        }
+      })
+    );
+    await discoverAllCutFiles().catch(() => undefined);
   };
   void discoverAllCutFiles().catch(() => undefined);
 
@@ -470,6 +520,14 @@ export function activateTestController(
     }
 
     const cutPath = fileItem.uri!.fsPath;
+    // The CLI said why it can't pair this suite: report that, not a
+    // "no such file" for a sibling program the user never named.
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      failEverything('errored', unpaired);
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     // mkdtemp, not predictable names in the shared tmpdir: an unguessable
     // per-run directory closes the classic pre-creation/symlink surface, and
@@ -702,6 +760,13 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
 
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      run.errored(fileItem, new vscode.TestMessage(unpaired));
+      return;
+    }
+
     const ready = await ensureReady();
     if (token.isCancellationRequested) {
       run.skipped(fileItem);
@@ -847,6 +912,12 @@ export function activateTestController(
 
     const cutUri = plan.fileItem.uri!;
     const cutPath = cutUri.fsPath;
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(unpaired));
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     const { executablePath, copybookPaths } = resolveInvocationConfig(context, cutUri);
 
@@ -986,7 +1057,7 @@ export function activateTestController(
           rerunTimer = setTimeout(() => void fireRerun(), 300);
         }
         const rerun = (uri: vscode.Uri) => {
-          if (isExcludedCutPath(uri.fsPath)) return;
+          if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
           // A program change reruns every suite paired with it -- under
           // tests/, PROG.<topic>.cut siblings, not just a sibling PROG.cut.
           const cutFsPaths = uri.fsPath.endsWith('.cut') ? [uri.fsPath] : suitesForProgram(uri.fsPath);
