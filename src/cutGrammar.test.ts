@@ -132,3 +132,31 @@ describe('.cut grammar: comments and literals', () => {
     assert.strictEqual(scopeOf("    ROW 'x', 1", "'x'"), 'string.quoted.single.cut');
   });
 });
+
+describe('.cut grammar: CAPTURE and subscripted or qualified names', () => {
+  it('highlights CAPTURE ARG <n> INTO <target>', () => {
+    const line = '        CAPTURE ARG 2 INTO WS-CAP';
+    assert.strictEqual(scopeOf(line, 'CAPTURE'), 'keyword.other.capture.cut');
+    assert.strictEqual(scopeOf(line, 'INTO'), 'keyword.other.capture.cut');
+    assert.strictEqual(scopeOf(line, '2'), 'constant.numeric.cut');
+    assert.strictEqual(scopeOf(line, 'WS-CAP'), 'variable.other.cobol.cut');
+    assert.strictEqual(scopeOf('        CAPTURE ARG 1 INTO WS-TAB(1, 2)', 'WS-TAB(1, 2)'), 'variable.other.cobol.cut');
+  });
+
+  it('highlights MOVE and EXPECT on a subscripted name with a comma or space inside', () => {
+    assert.strictEqual(scopeOf('    MOVE 1 TO WS-TAB(1, 2)', 'MOVE'), 'keyword.other.move.cut');
+    assert.strictEqual(scopeOf('    MOVE 1 TO WS-TAB(1, 2)', 'WS-TAB(1, 2)'), 'variable.other.cobol.cut');
+    assert.strictEqual(scopeOf('    EXPECT WS-TAB(1 2) TO BE 5', 'EXPECT'), 'keyword.control.assertion.cut');
+    assert.strictEqual(scopeOf('    EXPECT WS-TAB(1 2) TO BE 5', 'WS-TAB(1 2)'), 'variable.other.cobol.cut');
+  });
+
+  it('highlights a qualified name the same way', () => {
+    assert.strictEqual(scopeOf('    MOVE 7 TO CUST-ID OF OUT-REC', 'CUST-ID OF OUT-REC'), 'variable.other.cobol.cut');
+    assert.strictEqual(scopeOf('    EXPECT CUST-ID IN OUT-REC TO BE 7', 'CUST-ID IN OUT-REC'), 'variable.other.cobol.cut');
+  });
+
+  it('still highlights the plain forms', () => {
+    assert.strictEqual(scopeOf('    MOVE 1 TO WS-X', 'WS-X'), 'variable.other.cobol.cut');
+    assert.strictEqual(scopeOf('    EXPECT WS-TAB(1) TO BE 5', 'WS-TAB(1)'), 'variable.other.cobol.cut');
+  });
+});

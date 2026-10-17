@@ -85,7 +85,7 @@
     "directives": {
       "patterns": [
         {
-          "match": "^\\s*(EXPECT)\\s+(\\S+)\\s+(?:(NOT)\\s+)?(TO\\s+BE)\\b(?:\\s+(GREATER\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?|LESS\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?))?",
+          "match": "^\\s*(EXPECT)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s+(?:(NOT)\\s+)?(TO\\s+BE)\\b(?:\\s+(GREATER\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?|LESS\\s+THAN(?:\\s+OR\\s+EQUAL\\s+TO)?))?",
           "captures": {
             "1": { "name": "keyword.control.assertion.cut" },
             "2": { "name": "variable.other.cobol.cut" },
@@ -112,7 +112,7 @@
           }
         },
         {
-          "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+(\\S+)\\s*$",
+          "match": "^\\s*(MOVE)\\s+(.+?)\\s+(TO)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s*$",
           "captures": {
             "1": { "name": "keyword.other.move.cut" },
             "2": {
@@ -124,6 +124,16 @@
             },
             "3": { "name": "keyword.other.move.cut" },
             "4": { "name": "variable.other.cobol.cut" }
+          }
+        },
+        {
+          "match": "^\\s*(CAPTURE)\\s+(ARG)\\s+(\\S+)\\s+(INTO)\\s+([A-Za-z0-9][A-Za-z0-9-]*(?:\\s+(?:OF|IN)\\s+[A-Za-z0-9][A-Za-z0-9-]*)*(?:\\s*\\([^)]*\\))?|\\S+)\\s*$",
+          "captures": {
+            "1": { "name": "keyword.other.capture.cut" },
+            "2": { "name": "keyword.other.capture.cut" },
+            "3": { "patterns": [{ "include": "#numbers" }] },
+            "4": { "name": "keyword.other.capture.cut" },
+            "5": { "name": "variable.other.cobol.cut" }
           }
         },
         {
