@@ -143,7 +143,7 @@ export function activateTestController(
   }
 
   async function discoverAndBuild(uri: vscode.Uri) {
-    if (isExcludedCutPath(uri.fsPath)) return;
+    if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
     let text: string;
     try {
       text = await fs.readFile(uri.fsPath, 'utf8');
@@ -911,7 +911,7 @@ export function activateTestController(
           rerunTimer = setTimeout(() => void fireRerun(), 300);
         }
         const rerun = (uri: vscode.Uri) => {
-          if (isExcludedCutPath(uri.fsPath)) return;
+          if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
           const cutFsPath = uri.fsPath.endsWith('.cut')
             ? uri.fsPath
             : uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');

@@ -250,12 +250,40 @@ export function suitesForProgram(
 // own `.claude/worktrees/<name>/` convention and the plain `.worktrees/<name>/`
 // convention some repos use), which are full checkouts that duplicate every
 // example under a different absolute path and would otherwise show up as
-// look-alike duplicate entries in the Test Explorer tree.
-const EXCLUDED_PATH_SEGMENTS = new Set(['node_modules', '.git', '.worktrees', 'worktrees']);
+// look-alike duplicate entries in the Test Explorer tree. Also every folder
+// the CLI's own directory scan skips (mocky-mock's
+// mockymock/cli/discovery.py CUT_DISCOVERY_EXCLUDE_DIRS), so the two agree
+// on which suites belong to the project.
+export const EXCLUDED_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+  'node_modules',
+  '.git',
+  '.worktrees',
+  'worktrees',
+  '.hg',
+  '.svn',
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.ruff_cache',
+  'dist',
+  'build',
+]);
 
-export function isExcludedCutPath(fsPath: string): boolean {
-  return fsPath.split(/[\\/]/).some((segment) => EXCLUDED_PATH_SEGMENTS.has(segment));
+// Only the segments BELOW the workspace folder count, the same scope as
+// CUT_DISCOVERY_EXCLUDE_GLOB (which findFiles applies relative to the
+// folder): a workspace opened at ~/worktrees/feature-x is not itself a
+// worktree to hide. A file outside every workspace folder (`workspaceRoot`
+// undefined, or not an ancestor) is never excluded.
+export function isExcludedCutPath(fsPath: string, workspaceRoot: string | undefined): boolean {
+  if (workspaceRoot === undefined) return false;
+  const fold = (segment: string) => (process.platform === 'win32' ? segment.toLowerCase() : segment);
+  const rootSegments = workspaceRoot.split(/[\\/]/).filter(Boolean);
+  const segments = fsPath.split(/[\\/]/).filter(Boolean);
+  if (rootSegments.length > segments.length) return false;
+  if (rootSegments.some((segment, i) => fold(segment) !== fold(segments[i]))) return false;
+  return segments.slice(rootSegments.length).some((segment) => EXCLUDED_PATH_SEGMENTS.has(segment));
 }
 
-export const CUT_DISCOVERY_EXCLUDE_GLOB =
-  '{**/node_modules/**,**/.git/**,**/.worktrees/**,**/worktrees/**}';
+export const CUT_DISCOVERY_EXCLUDE_GLOB = `{${Array.from(EXCLUDED_PATH_SEGMENTS, (name) => `**/${name}/**`).join(',')}}`;

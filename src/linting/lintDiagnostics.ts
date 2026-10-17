@@ -31,7 +31,7 @@ export function activateLintDiagnostics(
 
   async function lintDocument(document: vscode.TextDocument): Promise<void> {
     if (!document.uri.fsPath.endsWith('.cut') || document.uri.scheme !== 'file') return;
-    if (isExcludedCutPath(document.uri.fsPath)) return;
+    if (isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) return;
     const config = vscode.workspace.getConfiguration('mockymock', document.uri);
     if (!(config.get<boolean>('lintOnSave') ?? true)) {
       collection.delete(document.uri);

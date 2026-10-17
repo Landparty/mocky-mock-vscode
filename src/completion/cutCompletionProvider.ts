@@ -83,7 +83,7 @@ async function loadBoundaries(
 export function activateCutCompletion(context: vscode.ExtensionContext): void {
   const provider: vscode.CompletionItemProvider = {
     async provideCompletionItems(document, position) {
-      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath)) {
+      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) {
         return undefined;
       }
       const lineTextBeforeCursor = document.lineAt(position).text.slice(0, position.character);
