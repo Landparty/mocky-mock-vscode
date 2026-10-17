@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
+import { isCobolPath } from '../environment/cobolPaths';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
@@ -133,12 +134,44 @@ export function activateLintDiagnostics(
     }
   }
 
+  // A suite is linted against its program, so saving, creating or deleting
+  // a program re-lints every open suite paired with it (before or after).
+  const samePath = (a: string, b: string): boolean =>
+    process.platform === 'win32'
+      ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+      : path.resolve(a) === path.resolve(b);
+  const relintSuitesOf = (programUri: vscode.Uri): void => {
+    if (!isCobolPath(programUri.fsPath)) return;
+    for (const document of vscode.workspace.textDocuments) {
+      if (!document.uri.fsPath.endsWith('.cut')) continue;
+      const previous = lintedAgainst.get(document.uri.fsPath);
+      if (
+        (previous !== undefined && samePath(previous, programUri.fsPath)) ||
+        samePath(resolveCblPath(document.uri.fsPath), programUri.fsPath)
+      ) {
+        void lintDocument(document);
+      }
+    }
+  };
+  const programWatcher = vscode.workspace.createFileSystemWatcher(
+    '**/*.{cbl,cob,cobol,CBL,COB,COBOL}',
+    false,
+    true,
+    false
+  );
+
   // A fixed (or newly broken) project config changes every suite's lint
   // result without any .cut being saved.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
-    vscode.workspace.onDidSaveTextDocument((document) => void lintDocument(document)),
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      void lintDocument(document);
+      relintSuitesOf(document.uri);
+    }),
+    programWatcher,
+    programWatcher.onDidCreate(relintSuitesOf),
+    programWatcher.onDidDelete(relintSuitesOf),
     vscode.workspace.onDidCloseTextDocument((document) => {
       collection.delete(document.uri);
       lintedAgainst.delete(document.uri.fsPath);
