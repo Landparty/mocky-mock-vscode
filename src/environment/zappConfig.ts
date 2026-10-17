@@ -44,8 +44,9 @@ const zappCache = new Map<string, ZappCacheEntry>();
 // Reads a zapp.yml/zapp.yaml at the workspace root (the same file/schema IBM
 // Z Open Editor's DBB tooling uses) and returns the local cobol copybook
 // library locations it declares, resolved to absolute paths. mvs-type
-// libraries and non-cobol language groups are parsed but ignored -- the
-// mockymock CLI only understands local filesystem paths today.
+// libraries and groups limited to another language are parsed but ignored --
+// the mockymock CLI only understands local filesystem paths today. A group
+// with no `language` isn't limited to one, so it covers COBOL too.
 export function resolveZappCopybookPaths(workspaceRoot: string): string[] {
   const zappFile = findZappFile(workspaceRoot);
   if (!zappFile) {
@@ -63,7 +64,7 @@ export function resolveZappCopybookPaths(workspaceRoot: string): string[] {
     const config: ZappConfig = parseYaml(fs.readFileSync(zappFile, 'utf8')) ?? {};
     const propertyGroups = Array.isArray(config.propertyGroups) ? config.propertyGroups : [];
     const locations = propertyGroups
-      .filter((group) => group.language?.toLowerCase() === 'cobol')
+      .filter((group) => group.language === undefined || String(group.language).toLowerCase() === 'cobol')
       .flatMap((group) => (Array.isArray(group.libraries) ? group.libraries : []))
       .filter((library) => library.type?.toLowerCase() === 'local')
       .flatMap((library) => (Array.isArray(library.locations) ? library.locations : []));
