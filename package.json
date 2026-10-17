@@ -371,7 +371,7 @@
           {
             "id": "createSuite",
             "title": "Create your first test suite",
-            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
+            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per scenario through its entry point, with every CALL, file, SQL, CICS and IMS boundary already mocked. With Docker running it also records today's values as EXPECT lines.\n[Create a Test Suite](command:mockymock.newTestSuite)",
             "media": {
               "markdown": "walkthroughs/create-suite.md"
             },
