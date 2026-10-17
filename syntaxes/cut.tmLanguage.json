@@ -13,7 +13,7 @@
   ],
   "repository": {
     "comment": {
-      "match": "\\*>.*$",
+      "match": "^\\s*\\*>.*$",
       "name": "comment.line.cut"
     },
     "structure": {
@@ -139,8 +139,16 @@
       ]
     },
     "strings": {
-      "match": "\"[^\"]*\"",
-      "name": "string.quoted.double.cut"
+      "patterns": [
+        {
+          "match": "\"[^\"]*\"",
+          "name": "string.quoted.double.cut"
+        },
+        {
+          "match": "'[^']*'",
+          "name": "string.quoted.single.cut"
+        }
+      ]
     },
     "placeholder": {
       "match": "\\{[A-Za-z][A-Za-z0-9-]*\\}",
