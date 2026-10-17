@@ -1,8 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { runCommandIn } from '../environment/commandRunner';
+import { anchorCommandPath, runCommandIn } from '../environment/commandRunner';
+import { resolveExecutablePath } from '../environment/checks';
+import { resolveExecutablePathSetting } from '../environment/copybookPaths';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { configuredExecutablePath, resolveInvocationConfig, settingPathContext } from '../environment/invocationConfig';
 import { absolutizeDebugPaths, buildLintArgs } from './debugArgs';
 import { evaluateCaseSelection, evaluateLintResult } from './lintGate';
 
@@ -68,7 +70,9 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
     }
     const resolved = this.withDefaults(folder, config);
     if (config[PREFLIGHTED]) return resolved;
-    const problem = await this.preflight(resolved);
+    const problem = await this.preflight(folder, resolved);
+    // null: ensureReady() already showed its own prompt for the problem.
+    if (problem === null) return undefined;
     if (problem) {
       vscode.window.showErrorMessage(problem);
       // undefined (not null) aborts the launch without opening launch.json.
@@ -78,15 +82,24 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
   }
 
   // The checks `mockymock debug` would otherwise fail opaquely on; the
-  // message to show for the first that fails, else undefined.
-  private async preflight(config: vscode.DebugConfiguration): Promise<string | undefined> {
+  // message to show for the first that fails (null when ensureReady() has
+  // shown it already), else undefined.
+  private async preflight(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration
+  ): Promise<string | null | undefined> {
     const ready = await this.environmentManager.ensureReady();
-    if (!ready.ok) return ready.message;
+    if (!ready.ok) return ready.reported ? null : ready.message;
     const cutPath = config.cut as string;
     const run = runCommandIn(path.dirname(cutPath));
-    const executablePath =
-      (config.executablePath as string | undefined) ??
-      resolveInvocationConfig(this.context, vscode.Uri.file(cutPath)).executablePath;
+    // The same binary debugAdapterFactory will launch.
+    const configuredPath =
+      resolveExecutablePathSetting(config.executablePath as string | undefined, settingPathContext(folder)) ??
+      configuredExecutablePath(folder);
+    const executablePath = anchorCommandPath(
+      resolveExecutablePath(configuredPath, this.context.extensionPath),
+      process.cwd()
+    );
     const caseGate = evaluateCaseSelection(
       await run(executablePath, ['collect', '--cut', cutPath, '--json']),
       String(config.case),

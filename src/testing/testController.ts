@@ -245,11 +245,14 @@ export function activateTestController(
   // of suites would leave stale items behind and never show the moved ones.
   // These workspace events do report folder operations (made in VS Code).
   function removeUnder(folder: vscode.Uri) {
-    for (const [id, fileItem] of [...fileItems]) {
-      if (fileItem.uri && isSameOrUnder(fileItem.uri.fsPath, folder.fsPath)) {
-        controller.items.delete(id);
-        fileItems.delete(id);
-      }
+    // Through removeFile, so a discovery still in flight under the folder --
+    // including a file's first one, not yet in fileItems -- can't re-add it.
+    for (const key of discoveries.keys()) {
+      const uri = vscode.Uri.parse(key);
+      if (isSameOrUnder(uri.fsPath, folder.fsPath)) removeFile(uri);
+    }
+    for (const fileItem of [...fileItems.values()]) {
+      if (fileItem.uri && isSameOrUnder(fileItem.uri.fsPath, folder.fsPath)) removeFile(fileItem.uri);
     }
   }
   async function discoverUnder(target: vscode.Uri) {
@@ -1019,7 +1022,7 @@ export function activateTestController(
       // selection whenever a .cut (or its paired COBOL source) changes, until
       // the user turns the eye icon off (token cancellation).
       if (request.continuous) {
-        const continuousWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol}');
+        const continuousWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol,CBL,COB,COBOL}');
         // Debounced + single-flight: the watcher fires on every save, and a
         // fast save sequence (or format-on-save's double write) used to stack
         // overlapping full runs -- overlapping compiles inside the shared
@@ -1254,7 +1257,11 @@ export function activateTestController(
       // Calling the run handler directly bypasses testing.saveBeforeTest,
       // so save the suite and its program here: the CLI reads them from disk.
       if (!(await saveBeforeCli([uri.fsPath, resolveCblPath(uri.fsPath)], 'running mutation testing'))) return;
-      if (!fileItems.has(uri.toString())) await discoverAndBuild(uri);
+      // The save may have changed the suite: build its item from what is on
+      // disk now, and let the watcher's own rediscovery land, before the run
+      // takes the item -- a later one would replace it mid-run.
+      await discoverAndBuild(uri);
+      await discoveries.idle();
       const fileItem = fileItems.get(uri.toString());
       if (!fileItem) {
         void vscode.window.showWarningMessage(`mockymock: no test suite found in ${path.basename(uri.fsPath)}.`);

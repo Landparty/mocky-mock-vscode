@@ -18,6 +18,15 @@ describe('DiscoveryTracker', () => {
     tracker.begin('file:///B.cut');
     assert.strictEqual(tracker.isCurrent('file:///A.cut', a), true);
   });
+
+  it('lists every file a discovery started for, so a folder delete can supersede them', () => {
+    const tracker = new DiscoveryTracker();
+    const first = tracker.begin('file:///suites/A.cut');
+    tracker.begin('file:///B.cut');
+    assert.deepStrictEqual(tracker.keys().sort(), ['file:///B.cut', 'file:///suites/A.cut']);
+    tracker.begin('file:///suites/A.cut');
+    assert.strictEqual(tracker.isCurrent('file:///suites/A.cut', first), false);
+  });
 });
 
 describe('DiscoveryTracker.idle', () => {

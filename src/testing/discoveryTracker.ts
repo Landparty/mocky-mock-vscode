@@ -21,6 +21,11 @@ export class DiscoveryTracker {
     return generation;
   }
 
+  /** Every key a discovery was ever started for. */
+  keys(): string[] {
+    return [...this.generations.keys()];
+  }
+
   /** True while `generation` is still the newest one for `key`. */
   isCurrent(key: string, generation: number): boolean {
     return this.generations.get(key) === generation;

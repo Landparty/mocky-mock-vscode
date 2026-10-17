@@ -84,7 +84,7 @@ export function activateCounterpartNavigation(context: vscode.ExtensionContext):
 
   // A suite created (or deleted) while its program is open should flip the
   // title-bar button straight away, not on the next editor switch.
-  const watcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol}', false, true, false);
+  const watcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol,CBL,COB,COBOL}', false, true, false);
   watcher.onDidCreate(refresh);
   watcher.onDidDelete(refresh);
 
