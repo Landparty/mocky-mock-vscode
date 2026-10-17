@@ -15,8 +15,10 @@ COBOL today — see you on the *wildside*.
 2. **Open a COBOL program** (`.cbl`, `.cob` or `.cobol`) and click the
    beaker icon in the editor title bar — **New Test Suite for This Program**.
    mockymock reads the program and writes a `.cut` suite under `tests/`
-   (mirroring the program's folder), one test case per paragraph with every `CALL`, file, SQL, CICS and IMS
-   boundary already mocked.
+   (mirroring the program's folder): one test case per scenario through the
+   program's entry point, with every `CALL`, file, SQL, CICS and IMS boundary
+   already mocked. With Docker running it also records today's values as
+   `EXPECT` lines.
 3. **Press play** in the Test Explorer (or the green arrow beside any
    `TESTCASE`). The first run checks your setup and starts Docker Desktop
    for you if it isn't running.
@@ -235,6 +237,7 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 | `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
 | `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). When left unset it falls back to `cobolAnalyzer.copybookPaths`, so one copybook setup serves both extensions — see [Sharing one copybook setup](#sharing-one-copybook-setup). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: its `cobol`-language `local` library locations are merged in after this setting's own entries, which win on a duplicate path |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
+| `mockymock.newTestSuite.casePerParagraph` | `false` | **New Test Suite** writes one test case per paragraph that touches a boundary instead of one per scenario through the entry point; these cases are never run to record `EXPECT` lines |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |
 
 All of the defaults work out of the box; most users never touch these.
@@ -257,7 +260,7 @@ one setting the two extensions deliberately share.
   on the one feature it affects rather than failing anything else.
 - Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container). If Docker Desktop is installed but not running, the extension
-  starts it automatically before your first run/lint and waits for it to
+  starts it automatically before your first run and waits for it to
   become ready — no need to launch it yourself. If Docker isn't installed at
   all, you'll get a prompt linking to the Docker Desktop download page.
 - VS Code ≥ 1.88.
@@ -271,8 +274,9 @@ under `tests/` (see below). When Docker is running it uses `mockymock init`: one
 mocked, run once so the values the program produced today become real
 `EXPECT` lines. That's a characterization suite: a change that alters what
 the program does turns it red. Without Docker it falls back to
-`mockymock generate`, which writes the same cases with no assertions yet,
-and the notification says so. Set `mockymock.newTestSuite.casePerParagraph`
+`mockymock generate`, which writes the same cases with only what it can
+work out without running them (usually `VERIFY ... WAS CALLED n TIMES` call
+counts, no recorded field values), and the notification says which. Set `mockymock.newTestSuite.casePerParagraph`
 for one case per paragraph instead. It never overwrites an existing suite.
 On a program that already has suites it lists them, plus **New Test
 Suite…**, which asks for a topic and writes `PROG.<topic>.cut`. If the CLI

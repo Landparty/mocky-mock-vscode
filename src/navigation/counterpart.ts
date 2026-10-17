@@ -5,8 +5,9 @@
 // the editor title bar: on a program with a suite, the beaker becomes
 // "Open Test Suite" (instead of offering to create one that already
 // exists); on a suite, a button jumps back to its program.
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { counterpartOf } from './counterpartLogic';
+import { counterpartOf, isExportedProgram, originalOfExport } from './counterpartLogic';
 import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
 import { NEW_SUITE, pickSuite } from './suitePicker';
 
@@ -22,6 +23,19 @@ function targetUri(uri: unknown): vscode.Uri | undefined {
 
 async function openCounterpart(uri: unknown, wanted: 'suite' | 'program'): Promise<void> {
   const target = targetUri(uri);
+  // An exported PROG.mainframe.cbl has no suites of its own (counterpartOf
+  // returns nothing for it): say so, rather than "open a COBOL program".
+  if (target?.scheme === 'file' && wanted === 'suite' && isExportedProgram(target.fsPath)) {
+    const original = originalOfExport(target.fsPath);
+    const open = original ? `Open ${path.basename(original)}'s Test Suite` : undefined;
+    const choice = await vscode.window.showErrorMessage(
+      `mockymock: "${path.basename(target.fsPath)}" is an exported file (build output), not a program with test suites.` +
+        (original ? ` Its suites belong to ${path.basename(original)}.` : ''),
+      ...(open ? [open] : [])
+    );
+    if (original && choice === open) await openCounterpart(vscode.Uri.file(original), 'suite');
+    return;
+  }
   const pair = target?.scheme === 'file' ? counterpartOf(target.fsPath) : undefined;
   if (!pair || pair.kind !== wanted) {
     const noun = wanted === 'suite' ? 'a COBOL program' : 'a .cut test suite';
@@ -48,7 +62,8 @@ async function openCounterpart(uri: unknown, wanted: 'suite' | 'program'): Promi
       if (vscode.window.activeTextEditor?.document.uri.fsPath !== target.fsPath) {
         await vscode.window.showTextDocument(target);
       }
-      await vscode.commands.executeCommand('mockymock.newTestSuite');
+      // The user just chose "New Test Suite…" from this same list.
+      await vscode.commands.executeCommand('mockymock.newTestSuite', undefined, { skipPicker: true });
     } else if (picked) {
       await vscode.window.showTextDocument(vscode.Uri.file(picked));
     }
