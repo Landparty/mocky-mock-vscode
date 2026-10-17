@@ -35,6 +35,66 @@ describe('quoteArgForWindowsShell', () => {
   it('quotes an empty argument so it does not vanish from the joined command line', () => {
     assert.strictEqual(quoteArgForWindowsShell(''), '""');
   });
+
+  // The MSVC CRT (2008+) argv rules the bundled CPython splits its command
+  // line with: 2n backslashes + `"` -> n backslashes and a quote toggle,
+  // 2n+1 -> n and a literal `"`, `""` inside a quoted span -> literal `"`.
+  function splitCrtArgs(line: string): string[] {
+    const args: string[] = [];
+    let cur = '';
+    let inArg = false;
+    let quoted = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '\\') {
+        let n = 0;
+        while (line[i] === '\\') { n++; i++; }
+        if (line[i] === '"') {
+          cur += '\\'.repeat(Math.floor(n / 2));
+          if (n % 2 === 1) cur += '"';
+          else i--;
+          if (n % 2 === 1) { inArg = true; continue; }
+        } else {
+          cur += '\\'.repeat(n);
+          i--;
+        }
+        inArg = true;
+        continue;
+      }
+      if (c === '"') {
+        inArg = true;
+        if (quoted && line[i + 1] === '"') { cur += '"'; i++; }
+        else quoted = !quoted;
+        continue;
+      }
+      if (!quoted && (c === ' ' || c === '\t')) {
+        if (inArg) args.push(cur);
+        cur = '';
+        inArg = false;
+        continue;
+      }
+      cur += c;
+      inArg = true;
+    }
+    if (inArg) args.push(cur);
+    return args;
+  }
+
+  it('round-trips arguments with trailing and quote-adjacent backslashes through the CRT argv rules', () => {
+    const args = [
+      '--copybook-path', 'C:\\a b\\',
+      '--copybook-path', 'D:\\Common Cpy\\\\',
+      'C:\\plain\\dir\\',
+      'say \\"hi\\" & bye',
+      'C:\\R&D\\x',
+      '',
+    ];
+    assert.deepStrictEqual(splitCrtArgs(args.map(quoteArgForWindowsShell).join(' ')), args);
+  });
+
+  it('doubles a trailing backslash inside the quotes so it cannot escape the closing quote', () => {
+    assert.strictEqual(quoteArgForWindowsShell('C:\\a b\\'), '"C:\\a b\\\\"');
+  });
 });
 
 describe('describeSpawnError', () => {

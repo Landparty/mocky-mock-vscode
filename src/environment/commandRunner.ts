@@ -60,6 +60,14 @@ export function anchorCommandPath(command: string, baseDir: string): string {
 // In practice unreachable -- `"` is illegal in Windows filenames and .cut case names
 // can't contain it -- but wrong is wrong.
 //
+// Backslashes matter to the CHILD, not to cmd.exe: the bundled CPython (like every
+// MSVC-built program) splits its command line with the CRT rules, where a run of
+// backslashes followed by `"` is halved and `\"` reads as an escaped literal quote. So
+// a trailing separator -- `"D:\Common Cpy\"`, an ordinary copybookPaths entry -- used
+// to swallow the closing quote and run on into the next argument. Every run of
+// backslashes that precedes a `"` or the closing quote is therefore doubled; backslashes
+// anywhere else are literal and stay as they are.
+//
 // Known residual gap: `%VAR%` expands inside cmd.exe double quotes and cannot be
 // escaped on a non-batch command line at all, so a path containing a spelled-out
 // existing environment variable name between two % signs is still rewritten. There is
@@ -74,7 +82,8 @@ export function quoteArgForWindowsShell(arg: string): string {
     return '""'; // an unquoted empty arg would vanish from the joined command line
   }
   if (CMD_NEEDS_QUOTING.test(arg)) {
-    return `"${arg.replace(/"/g, '""')}"`;
+    const escaped = arg.replace(/(\\*)"/g, '$1$1""').replace(/(\\+)$/, '$1$1');
+    return `"${escaped}"`;
   }
   return arg;
 }
