@@ -19,7 +19,7 @@ import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
-import { EnvironmentManager } from '../environment/environmentManager';
+import { EnvironmentManager, ReadyResult } from '../environment/environmentManager';
 import {
   describeTooOldCli,
   resolveExecutablePath,
@@ -397,11 +397,22 @@ export function activateTestController(
     });
   }
 
+  // One setup attempt per test run, shared by every file in it. ensureReady()
+  // only dedupes a probe while it is in flight, so files run one after
+  // another each started a fresh attempt: with Docker unable to start, N
+  // suites cost N full 90 s launch-and-wait cycles (and N setup prompts).
+  // Lazy, so nothing is probed for a run that selects no file.
+  function readinessForRun(token: vscode.CancellationToken): () => Promise<ReadyResult> {
+    let ready: Promise<ReadyResult> | undefined;
+    return () => (ready ??= environmentManager.ensureReady(token));
+  }
+
   async function runOneFile(
     plan: FilePlan,
     run: vscode.TestRun,
     token: vscode.CancellationToken,
-    withCoverage: boolean
+    withCoverage: boolean,
+    ensureReady: () => Promise<ReadyResult>
   ) {
     const { fileItem } = plan;
     const selected = new Set(selectedCaseItems(plan));
@@ -421,7 +432,7 @@ export function activateTestController(
       if (wholeFile) run[kind](fileItem, new vscode.TestMessage(message));
     }
 
-    const ready = await environmentManager.ensureReady(token);
+    const ready = await ensureReady();
     if (token.isCancellationRequested) {
       for (const caseItem of selected) run.skipped(caseItem);
       return;
@@ -614,7 +625,12 @@ export function activateTestController(
   // binary and every mutant faces all of it -- so any narrower selection
   // collapses to the whole file, with a note in the output. Verdicts land on
   // the FILE item only: mutation scores the suite, not individual cases.
-  async function runMutationFile(plan: FilePlan, run: vscode.TestRun, token: vscode.CancellationToken) {
+  async function runMutationFile(
+    plan: FilePlan,
+    run: vscode.TestRun,
+    token: vscode.CancellationToken,
+    ensureReady: () => Promise<ReadyResult>
+  ) {
     const { fileItem } = plan;
     run.started(fileItem);
     if (plan.caseItems !== null) {
@@ -635,7 +651,7 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
 
-    const ready = await environmentManager.ensureReady(token);
+    const ready = await ensureReady();
     if (token.isCancellationRequested) {
       run.skipped(fileItem);
       return;
@@ -947,13 +963,14 @@ export function activateTestController(
         const configured =
           vscode.workspace.getConfiguration('mockymock').get<number>('maxParallelRuns') ?? 1;
         const parallelism = Math.max(1, Math.floor(configured));
+        const ensureReady = readinessForRun(token);
 
         let next = 0;
         async function worker() {
           while (next < plans.length && !token.isCancellationRequested) {
             const plan = plans[next++];
             try {
-              await runOneFile(plan, run, token, withCoverage);
+              await runOneFile(plan, run, token, withCoverage, ensureReady);
             } catch (err) {
               // Never leave a "started" item without a terminal state: if
               // runOneFile threw after marking items started, error out the
@@ -1044,10 +1061,11 @@ export function activateTestController(
         for (const plan of plans) {
           mutationDiagnostics.delete(vscode.Uri.file(resolveCblPath(plan.fileItem.uri!.fsPath)));
         }
+        const ensureReady = readinessForRun(token);
         for (const plan of plans) {
           if (token.isCancellationRequested) break;
           try {
-            await runMutationFile(plan, run, token);
+            await runMutationFile(plan, run, token, ensureReady);
           } catch (err) {
             // Never leave a "started" item without a terminal state: same
             // guard as makeRunHandler's worker for "Run"/"Run with
