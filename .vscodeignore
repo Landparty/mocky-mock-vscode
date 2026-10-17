@@ -17,6 +17,9 @@ staging/**
 # script embedding the developer's own local filesystem paths. Must never
 # ship in a packaged .vsix.
 scripts/.local/**
+# The rest of scripts/ (install-local.js, build-cli.sh) is developer and
+# CI tooling a user never runs.
+scripts/**
 dist/**
 # Build-time inputs/outputs of scripts/build-cli.sh (build-and-release.yml):
 # the compiled binary ships from bin/, never from here.
@@ -24,6 +27,9 @@ packaging/**
 cli-build/**
 scripts/build-cli.sh
 .github/**
+# release-please's CI configuration.
+release-please-config.json
+.release-please-manifest.json
 # Claude Code session/worktree state (e.g. .claude/worktrees/<branch>/,
 # a full nested checkout with its own node_modules and docs) has no
 # business in the package -- exclude the whole directory rather than
