@@ -16,6 +16,7 @@ import {
   MOCK_CATEGORIES,
   boundaryKeyCandidates,
   detectCompletionContext,
+  keyReplaceLengthAfterCursor,
 } from './cutCompletionLogic';
 
 interface BoundaryCacheEntry {
@@ -86,7 +87,8 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
       if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath)) {
         return undefined;
       }
-      const lineTextBeforeCursor = document.lineAt(position).text.slice(0, position.character);
+      const lineText = document.lineAt(position).text;
+      const lineTextBeforeCursor = lineText.slice(0, position.character);
       const completionContext = detectCompletionContext(lineTextBeforeCursor);
       if (completionContext === null) return undefined;
 
@@ -112,10 +114,14 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
       // Replace exactly the token typed so far (which may start with a
       // quote and contain hyphens): VS Code's default word boundary stops
       // at both, so without an explicit range accepting `INV-FILE` after
-      // typing `INV-F` would yield `INV-INV-FILE`.
+      // typing `INV-F` would yield `INV-INV-FILE`. The range also takes in
+      // an auto-closed quote right after the cursor.
       const range = new vscode.Range(
         position.translate(0, -completionContext.partial.length),
-        position
+        position.translate(
+          0,
+          keyReplaceLengthAfterCursor(completionContext.partial, lineText.slice(position.character))
+        )
       );
       return candidates.map(({ insertText, boundary }) => {
         const item = new vscode.CompletionItem(insertText, vscode.CompletionItemKind.Value);

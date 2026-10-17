@@ -5,6 +5,7 @@ import {
   boundaryKeyCandidates,
   detectCompletionContext,
   keyFromDirective,
+  keyReplaceLengthAfterCursor,
   MOCK_CATEGORIES,
   QUOTED_CATEGORIES,
 } from './cutCompletionLogic';
@@ -216,6 +217,32 @@ describe('keyFromDirective', () => {
     assert.strictEqual(keyFromDirective('MOCK READ INV-FILE ROWS'), 'INV-FILE');
     assert.strictEqual(keyFromDirective(null), null);
     assert.strictEqual(keyFromDirective(undefined), null);
+  });
+});
+
+describe('keyReplaceLengthAfterCursor', () => {
+  // Apply a key completion the way the provider does: replace `partial`
+  // before the cursor plus the returned length after it.
+  const accept = (line: string, cursor: number, insertText: string): string => {
+    const context = detectCompletionContext(line.slice(0, cursor));
+    assert.ok(context && context.kind === 'key');
+    const end = cursor + keyReplaceLengthAfterCursor(context.partial, line.slice(cursor));
+    return line.slice(0, cursor - context.partial.length) + insertText + line.slice(end);
+  };
+
+  it('replaces the auto-closed quote after the cursor', () => {
+    assert.strictEqual(accept('    MOCK CALL ""', 15, '"DISCRATE"'), '    MOCK CALL "DISCRATE"');
+    assert.strictEqual(accept('    MOCK CALL "DIS"', 18, '"DISCRATE"'), '    MOCK CALL "DISCRATE"');
+    assert.strictEqual(
+      accept('    MOCK SQL "UPDATE "', 21, '"UPDATE ORDERS"'),
+      '    MOCK SQL "UPDATE ORDERS"'
+    );
+  });
+
+  it('replaces nothing after the cursor without an opening and a following quote', () => {
+    assert.strictEqual(keyReplaceLengthAfterCursor('"DIS', ''), 0);
+    assert.strictEqual(keyReplaceLengthAfterCursor('"DIS', ' ROWS'), 0);
+    assert.strictEqual(keyReplaceLengthAfterCursor('INV-F', '"'), 0);
   });
 });
 

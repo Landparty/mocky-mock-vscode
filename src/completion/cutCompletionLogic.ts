@@ -94,6 +94,15 @@ export function detectCompletionContext(lineTextBeforeCursor: string): Completio
   return null;
 }
 
+// How many characters *after* the cursor a key completion must replace as
+// well: the closing quote the editor auto-inserted when the opening `"`
+// was typed (`MOCK CALL "|"`). Every quoted insert text carries both
+// quotes, so leaving that one behind would write `MOCK CALL "X""`, which
+// the CLI rejects as a malformed MOCK directive.
+export function keyReplaceLengthAfterCursor(partial: string, lineTextAfterCursor: string): number {
+  return partial.startsWith('"') && lineTextAfterCursor.startsWith('"') ? 1 : 0;
+}
+
 export interface BoundaryInfo {
   category: string;
   key: string | null;
