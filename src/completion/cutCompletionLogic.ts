@@ -118,8 +118,9 @@ function quoted(key: string): string {
 //
 // - `MQ` is not a real mock_surface category (an MQ call is CALL with
 //   `is_mq=true` under the hood), so `MQ` and `CALL` share the CALL pool.
-// - `MOCK CALL <bare-word>` is a *dynamic* CALL, so CALL also offers every
-//   DYNCALL site's identifier, unquoted.
+// - `MOCK CALL <bare-word>` is a *dynamic* CALL, so CALL (and only CALL:
+//   MQ takes a quoted key alone) also offers every DYNCALL site's
+//   identifier, unquoted.
 // - A multi-key site (`OPEN INV-FILE RPT-FILE`) is one site with several
 //   valid keys; every one of them is offered.
 // - SQL/CICS/DLI sites have no key of their own -- the DSL keys them on a
@@ -137,7 +138,7 @@ export function boundaryKeyCandidates(boundaries: BoundaryInfo[], category: stri
     result.push({ insertText, boundary });
   };
   for (const boundary of boundaries) {
-    if (boundary.category === 'DYNCALL' && target === 'CALL') {
+    if (boundary.category === 'DYNCALL' && normalized === 'CALL') {
       for (const key of boundary.keys) push(key, boundary);
       continue;
     }

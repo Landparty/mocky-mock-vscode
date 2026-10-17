@@ -155,8 +155,8 @@ describe('boundaryKeyCandidates', () => {
     assert.ok(texts('CALL').includes('WS-PGM'));
   });
 
-  it('treats MQ as an alias for CALL (quoted)', () => {
-    assert.deepStrictEqual(texts('MQ'), ['"SUBPROG"', 'WS-PGM']);
+  it('treats MQ as an alias for CALL (quoted), without the bare dynamic-CALL identifiers', () => {
+    assert.deepStrictEqual(texts('MQ'), ['"SUBPROG"']);
   });
 
   it('offers every key of a multi-key site', () => {
