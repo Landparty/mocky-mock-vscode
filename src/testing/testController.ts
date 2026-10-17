@@ -967,8 +967,14 @@ export function activateTestController(
       await handler(request, token);
     };
 
-    async function handler(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+    async function handler(request: vscode.TestRunRequest, outerToken: vscode.CancellationToken) {
       const run = controller.createTestRun(request);
+      // Same merge as the Mutation Test profile: a continuous-mode rerun
+      // passes the continuous request's token, which the Test Results Stop
+      // button never reaches -- it cancels run.token. Either one stops it.
+      const cancel = new vscode.CancellationTokenSource();
+      const cancelListeners = [outerToken, run.token].map((t) => t.onCancellationRequested(() => cancel.cancel()));
+      const token = cancel.token;
       try {
         const plans = planRuns(request);
         const configured =
@@ -1000,6 +1006,8 @@ export function activateTestController(
           Array.from({ length: Math.min(parallelism, Math.max(plans.length, 1)) }, () => worker())
         );
       } finally {
+        cancelListeners.forEach((l) => l.dispose());
+        cancel.dispose();
         run.end();
       }
     }
