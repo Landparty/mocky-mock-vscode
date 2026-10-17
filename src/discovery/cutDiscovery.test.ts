@@ -5,6 +5,7 @@ import {
   resolveCblPath,
   resolveCutPath,
   isExcludedCutPath,
+  isSameOrUnder,
   EXCLUDED_PATH_SEGMENTS,
   CUT_DISCOVERY_EXCLUDE_GLOB,
   cutSuitesFromCollectJson,
@@ -175,6 +176,17 @@ describe('CUT discovery exclusions match the CLI', () => {
 
   it('keeps the findFiles glob and the path check in step', () => {
     for (const dir of EXCLUDED_PATH_SEGMENTS) assert.ok(CUT_DISCOVERY_EXCLUDE_GLOB.includes(`**/${dir}/**`), dir);
+  });
+});
+
+describe('isSameOrUnder', () => {
+  it('matches the folder itself and anything inside it, and nothing beside it', () => {
+    const folder = path.join(path.sep, 'ws', 'tests', 'pay');
+    assert.strictEqual(isSameOrUnder(folder, folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(folder, 'PAYCALC.cut'), folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(folder, 'sub', 'X.cut'), folder), true);
+    assert.strictEqual(isSameOrUnder(path.join(path.sep, 'ws', 'tests', 'payroll', 'X.cut'), folder), false);
+    assert.strictEqual(isSameOrUnder(path.join(path.sep, 'ws', 'tests', 'X.cut'), folder), false);
   });
 });
 

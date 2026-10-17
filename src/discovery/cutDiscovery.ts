@@ -249,6 +249,13 @@ export function suitesForProgram(
   return Array.from(found.values()).sort();
 }
 
+// True when `fsPath` is `folder` itself or anything inside it -- a folder
+// delete or rename arrives as one event for the folder, never one per file.
+export function isSameOrUnder(fsPath: string, folder: string): boolean {
+  const relative = path.relative(folder, fsPath);
+  return relative === '' || (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..');
+}
+
 // Directory names that mark a path as generated/vendored/scratch, not a real
 // source location for .cut suites -- most notably git worktrees (Claude Code's
 // own `.claude/worktrees/<name>/` convention and the plain `.worktrees/<name>/`

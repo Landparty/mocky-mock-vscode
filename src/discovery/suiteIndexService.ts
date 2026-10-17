@@ -115,6 +115,10 @@ export function activateSuiteIndex(context: vscode.ExtensionContext): void {
     configs,
     changed,
     vscode.workspace.onDidChangeWorkspaceFolders(scheduleRefresh),
+    // A moved or deleted folder of suites/programs arrives as one event for
+    // the folder, which the glob watchers above never match.
+    vscode.workspace.onDidDeleteFiles(scheduleRefresh),
+    vscode.workspace.onDidRenameFiles(scheduleRefresh),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('mockymock.executablePath')) scheduleRefresh();
     }),

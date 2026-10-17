@@ -10,6 +10,7 @@ import {
   cutSuitesFromCollectJson,
   CutSuite,
   CUT_DISCOVERY_EXCLUDE_GLOB,
+  isSameOrUnder,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
 import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
@@ -216,10 +217,58 @@ export function activateTestController(
   });
   watcher.onDidDelete(removeFile);
 
+  // The file watcher folds a folder delete/rename into one event for the
+  // folder, which `**/*.cut` never matches -- so a deleted or renamed folder
+  // of suites would leave stale items behind and never show the moved ones.
+  // These workspace events do report folder operations (made in VS Code).
+  function removeUnder(folder: vscode.Uri) {
+    for (const [id, fileItem] of [...fileItems]) {
+      if (fileItem.uri && isSameOrUnder(fileItem.uri.fsPath, folder.fsPath)) {
+        controller.items.delete(id);
+        fileItems.delete(id);
+      }
+    }
+  }
+  async function discoverUnder(target: vscode.Uri) {
+    if (target.fsPath.endsWith('.cut')) {
+      await discoverAndBuild(target);
+      return;
+    }
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(target, '**/*.cut'),
+      CUT_DISCOVERY_EXCLUDE_GLOB
+    );
+    for (const uri of uris) await discoverAndBuild(uri);
+  }
+  context.subscriptions.push(
+    vscode.workspace.onDidDeleteFiles((e) => e.files.forEach(removeUnder)),
+    vscode.workspace.onDidRenameFiles((e) => {
+      for (const { oldUri, newUri } of e.files) {
+        removeUnder(oldUri);
+        void discoverUnder(newUri).catch(() => undefined);
+      }
+    })
+  );
+
   controller.resolveHandler = async (item) => {
     if (!item) {
       await discoverAllCutFiles().catch(() => undefined);
     }
+  };
+  // Test Explorer's Refresh: also drops items whose file is gone (deleted
+  // outside VS Code, where no folder event reaches the extension).
+  controller.refreshHandler = async () => {
+    await Promise.all(
+      [...fileItems.values()].map(async (fileItem) => {
+        if (!fileItem.uri) return;
+        try {
+          await fs.access(fileItem.uri.fsPath);
+        } catch {
+          removeFile(fileItem.uri);
+        }
+      })
+    );
+    await discoverAllCutFiles().catch(() => undefined);
   };
   void discoverAllCutFiles().catch(() => undefined);
 
