@@ -89,10 +89,19 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.checkEnvironment', async () => {
       const result = await environmentManager.ensureReady();
-      // On failure ensureReady() has already shown the relevant actionable
-      // prompt itself (install the CLI, start Docker, open the download
-      // page); a success needs its own feedback since the status bar text
-      // change alone is easy to miss on a deliberate "is this set up?" click.
+      // On most failures ensureReady() has already shown the relevant
+      // actionable prompt itself (install the CLI, open the download page);
+      // the rest (Docker failed to start, no access to Docker) only change
+      // the status bar, which is easy to miss on a deliberate "is this set
+      // up?" click -- and so is a success, which needs its own feedback too.
+      if (!result.ok) {
+        if (!result.reported) {
+          const tryAgain = 'Try Again';
+          const choice = await vscode.window.showErrorMessage(`mockymock: ${result.message}`, tryAgain);
+          if (choice === tryAgain) await vscode.commands.executeCommand('mockymock.checkEnvironment');
+        }
+        return;
+      }
       // In a workspace with no suite yet, "ready" naturally leads to "so
       // write one" -- offer that next step right on the toast.
       if (result.ok) {

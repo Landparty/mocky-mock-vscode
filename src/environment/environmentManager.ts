@@ -19,6 +19,9 @@ import { CUT_DISCOVERY_EXCLUDE_GLOB } from '../discovery/cutDiscovery';
 export interface ReadyResult {
   ok: boolean;
   message: string;
+  // True when ensureReady() already showed the user a prompt for this
+  // failure, so an explicit Check Setup doesn't report it a second time.
+  reported?: boolean;
 }
 
 export class EnvironmentManager {
@@ -163,7 +166,7 @@ export class EnvironmentManager {
         const message = permissionDeniedMessageForPath(executablePath);
         this.setStatus('cli-blocked', message);
         vscode.window.showErrorMessage(message);
-        return { ok: false, message };
+        return { ok: false, message, reported: true };
       }
       const installed = await this.installMockymock(executablePath);
       if (!installed) {
@@ -171,6 +174,7 @@ export class EnvironmentManager {
         return {
           ok: false,
           message: 'mockymock CLI is not installed and automatic install failed. See the mocky-mock README for manual install steps.',
+          reported: true,
         };
       }
     }
@@ -201,7 +205,7 @@ export class EnvironmentManager {
 
     this.setStatus('docker-missing');
     this.promptInstallDocker();
-    return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.' };
+    return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.', reported: true };
   }
 
   private async installMockymock(executablePath: string): Promise<boolean> {
