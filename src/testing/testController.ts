@@ -16,7 +16,7 @@ import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } fr
 import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
-import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
+import { parseMutationJson, survivorsOf, survivorReason, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { EnvironmentManager } from '../environment/environmentManager';
@@ -103,7 +103,7 @@ export function activateTestController(
     const line = Math.max(0, m.line - 1);
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
-      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"` +
+      `surviving mutant [${m.operator}] ${m.description}: ${survivorReason(m)}` +
         (m.hint ? `\n${m.hint}` : ''),
       vscode.DiagnosticSeverity.Warning
     );
@@ -709,7 +709,7 @@ export function activateTestController(
       const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
       const messages = survivors.map((m) => {
         const message = vscode.TestMessage.diff(
-          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})` +
+          `surviving mutant [${m.operator}] ${m.description} -- ${m.ran ? 'the tests never noticed this change' : survivorReason(m)} (mutation score ${scoreText})` +
             (m.hint ? `\n${m.hint}` : ''),
           m.original,
           m.mutated

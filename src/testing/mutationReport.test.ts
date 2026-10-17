@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseMutationJson, survivorsOf } from './mutationReport';
+import { parseMutationJson, survivorsOf, survivorReason } from './mutationReport';
 
 const SAMPLE = JSON.stringify({
   program: 'PROG.cbl',
@@ -50,6 +50,7 @@ describe('parseMutationJson', () => {
       status: 'survived',
       detail: '',
       hint: 'every test case starts WS-AGE at 0; seed a non-zero starting value to kill this mutant',
+      ran: true,
     });
     // An older CLI (or a non-survivor) carries no hint: it reads as empty.
     assert.strictEqual(report!.mutants[0].hint, '');
@@ -113,5 +114,35 @@ describe('survivorsOf', () => {
     const survivors = survivorsOf(report);
     assert.strictEqual(survivors.length, 1);
     assert.strictEqual(survivors[0].line, 42);
+  });
+});
+
+describe('survivorReason', () => {
+  const NOT_COMPILED = JSON.stringify({
+    mutants: [
+      {
+        line: 30,
+        operator: 'arith-swap',
+        description: 'ADD -> SUBTRACT',
+        original: '           ADD 1 TO WS-X',
+        mutated: '           SUBTRACT 1 FROM WS-X',
+        status: 'survived',
+        detail: 'line never executed by the suite (baseline coverage); not compiled',
+        ran: false,
+      },
+    ],
+  });
+
+  it('says a never-executed survivor needs a test case that reaches its line', () => {
+    const m = parseMutationJson(NOT_COMPILED)!.mutants[0];
+    assert.strictEqual(m.ran, false);
+    assert.match(survivorReason(m), /never executed by any test case \(not compiled\): add a case that reaches this line/);
+    assert.doesNotMatch(survivorReason(m), /every test still passes/);
+  });
+
+  it('says every test still passes for a survivor that ran (ran defaults to true on an older CLI)', () => {
+    const m = parseMutationJson(SAMPLE)!.mutants[1];
+    assert.strictEqual(m.ran, true);
+    assert.strictEqual(survivorReason(m), 'every test still passes when this line becomes "IF WS-AGE > 66"');
   });
 });

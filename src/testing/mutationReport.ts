@@ -28,6 +28,13 @@ export interface MutantEntry {
    * value to change. Empty otherwise, and on a CLI older than the field.
    */
   hint: string;
+  /**
+   * False for a mutant on a line the baseline never executes: with the
+   * coverage gate on (the CLI default) it is recorded as survived without
+   * ever being built or run. True otherwise, and on a CLI older than the
+   * field.
+   */
+  ran: boolean;
 }
 
 export interface MutationReport {
@@ -78,6 +85,7 @@ export function parseMutationJson(text: string): MutationReport | null {
       status: item.status as MutantStatus,
       detail: asString(item.detail),
       hint: asString(item.hint),
+      ran: item.ran !== false,
     });
   }
 
@@ -101,4 +109,15 @@ export function parseMutationJson(text: string): MutationReport | null {
 
 export function survivorsOf(report: MutationReport): MutantEntry[] {
   return report.mutants.filter((m) => m.status === 'survived');
+}
+
+/**
+ * Why a survivor survived, in words that point at the right fix: a mutant no
+ * test ran against needs a test case that reaches its line, not a stronger
+ * assertion.
+ */
+export function survivorReason(m: MutantEntry): string {
+  return m.ran
+    ? `every test still passes when this line becomes "${m.mutated.trim()}"`
+    : 'never executed by any test case (not compiled): add a case that reaches this line';
 }
