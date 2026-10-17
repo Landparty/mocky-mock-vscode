@@ -1,6 +1,12 @@
 import * as assert from 'assert';
 import * as path from 'path';
-import { anchorCommandPath, runCommand, quoteArgForWindowsShell, describeSpawnError } from './commandRunner';
+import {
+  anchorCommandPath,
+  runCommand,
+  quoteArgForWindowsShell,
+  describeSpawnError,
+  windowsTreeKillCommand,
+} from './commandRunner';
 
 describe('quoteArgForWindowsShell', () => {
   it('leaves a plain argument untouched', () => {
@@ -122,6 +128,12 @@ describe('runCommand cancellation', () => {
     const result = await pending;
     assert.notStrictEqual(result.code, 0);
     assert.match(result.stderr, /cancelled/);
+  });
+});
+
+describe('windowsTreeKillCommand', () => {
+  it('force-kills the whole process tree under the cmd.exe child, not just cmd.exe', () => {
+    assert.deepStrictEqual(windowsTreeKillCommand(4242), { command: 'taskkill', args: ['/pid', '4242', '/T', '/F'] });
   });
 });
 
