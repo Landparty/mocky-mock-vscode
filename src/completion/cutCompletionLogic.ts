@@ -46,9 +46,9 @@ export const QUOTED_CATEGORIES: ReadonlySet<string> = new Set(['CALL', 'MQ', 'SQ
 // Categories that take a `ROWS` block (mocky-mock's dsl/model.py
 // `ROWS_CATEGORIES`, i.e. SQL/READ/RETURN plus its
 // `SEQUENCED_CALL_CATEGORIES`): one row per FETCH/READ/RETURN, or -- for
-// CALL, MQ, DLI and CICS -- one response per call, which also requires a
+// CALL, MQ, DLI, CICS and ACCEPT -- one response per call, which also requires a
 // `TERMINAL ( ... )`.
-export const ROWS_CATEGORIES: ReadonlySet<string> = new Set(['SQL', 'READ', 'RETURN', 'CALL', 'MQ', 'DLI', 'CICS']);
+export const ROWS_CATEGORIES: ReadonlySet<string> = new Set(['SQL', 'READ', 'RETURN', 'CALL', 'MQ', 'DLI', 'CICS', 'ACCEPT']);
 
 export type CompletionContext =
   | { kind: 'category' }

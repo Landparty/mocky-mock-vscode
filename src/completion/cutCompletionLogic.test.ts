@@ -254,11 +254,11 @@ describe('QUOTED_CATEGORIES', () => {
 });
 
 describe('ROWS_CATEGORIES', () => {
-  // mocky-mock 0.10.1's dsl/model.py: ROWS_CATEGORIES = {SQL, READ, RETURN}
-  // | SEQUENCED_CALL_CATEGORIES, the latter {CALL, DYNCALL, DLI, CICS}.
+  // mocky-mock 0.10.2's dsl/model.py: ROWS_CATEGORIES = {SQL, READ, RETURN}
+  // | SEQUENCED_CALL_CATEGORIES, the latter {CALL, DYNCALL, DLI, CICS, ACCEPT}.
   // DYNCALL is spelled `MOCK CALL <bare-word>` and MQ is CALL at parse time.
   it("matches mocky-mock's dsl/model.py ROWS_CATEGORIES (MQ spelled as the DSL writes it)", () => {
-    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
+    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['ACCEPT', 'CALL', 'CICS', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
   });
 });
 

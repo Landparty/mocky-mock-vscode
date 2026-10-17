@@ -12,7 +12,7 @@ export const MOCKYMOCK_PYPI_PACKAGE = 'mockymock';
 // checks and the `suites` command multi-suite pairing uses.
 // .github/workflows/ci.yml and build-and-release.yml default to this same
 // version (cliPackage.test.ts keeps them in step) -- bump all three together.
-export const MOCKYMOCK_CLI_VERSION = '0.10.1';
+export const MOCKYMOCK_CLI_VERSION = '0.10.2';
 
 // What the auto-install fallback asks uv for: a floor, not an exact pin, so
 // a user who has to install the CLI gets the newest release (newer
