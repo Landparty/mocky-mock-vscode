@@ -64,8 +64,13 @@ export type CompletionContext =
 // Case-sensitive, like mocky-mock's dsl/parser.py `_MOCK_QUOTED_RE` /
 // `_MOCK_BARE_RE`: `mock` and `MOCK call` are not MOCK lines to the CLI,
 // so completing after them would only help write a line it rejects.
-const AFTER_MOCK_RE = /^\s*MOCK\s+$/;
-const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Z]+)\s+(\S*)$/;
+// A partly typed category (`MOCK RE`) is still the category position: the
+// provider sets no range, so the editor's word range replaces the partial
+// (in either case) with the accepted, uppercase category.
+const AFTER_MOCK_RE = /^\s*MOCK\s+[A-Za-z]*$/;
+// The key partial is a bare token, or an unclosed quoted key, which may
+// already contain spaces (`MOCK SQL "UPDATE ` before `ORDERS"`).
+const AFTER_MOCK_CATEGORY_RE = /^\s*MOCK\s+([A-Z]+)\s+("[^"]*|\S*)$/;
 // A key is complete once it is a closed quoted string (SQL keys contain
 // spaces) or a bare word followed by whitespace. The trailing ROWS partial
 // may be in any case: accepting the item replaces it with `ROWS`.

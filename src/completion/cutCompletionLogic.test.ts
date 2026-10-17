@@ -18,6 +18,24 @@ describe('detectCompletionContext', () => {
     assert.strictEqual(detectCompletionContext('MOCK'), null);
   });
 
+  it('still offers categories once a category is partly typed', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK R'), { kind: 'category' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK REA'), { kind: 'category' });
+  });
+
+  it('keeps the key position inside an unclosed quoted key that contains a space', () => {
+    assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "UPDATE '), {
+      kind: 'key',
+      category: 'SQL',
+      partial: '"UPDATE ',
+    });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "UPDATE O'), {
+      kind: 'key',
+      category: 'SQL',
+      partial: '"UPDATE O',
+    });
+  });
+
   it('detects the key position after MOCK <category> <partial key>', () => {
     assert.deepStrictEqual(detectCompletionContext('    MOCK CALL SUB'), {
       kind: 'key',
@@ -54,7 +72,7 @@ describe('detectCompletionContext', () => {
   it('does not offer ROWS for categories without a ROWS block, or mid-quote', () => {
     assert.strictEqual(detectCompletionContext('    MOCK WRITE OUT-FILE '), null);
     assert.strictEqual(detectCompletionContext('    MOCK PARAGRAPH 1000-X '), null);
-    assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT '), null);
+    assert.strictEqual(detectCompletionContext('    MOCK SQL "SELECT ')?.kind, 'key');
   });
 
   it('offers nothing after a lowercase MOCK or category, which the CLI rejects', () => {
