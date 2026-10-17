@@ -102,7 +102,7 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
         const item = new vscode.CompletionItem('ROWS', vscode.CompletionItemKind.Keyword);
         item.range = new vscode.Range(position.translate(0, -completionContext.partial.length), position);
         item.detail =
-          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI call (those also need a TERMINAL ( ... ) line)';
+          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI/CICS call (those also need a TERMINAL ( ... ) line)';
         return [item];
       }
 

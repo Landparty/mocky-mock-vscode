@@ -48,6 +48,7 @@ describe('detectCompletionContext', () => {
     assert.deepStrictEqual(detectCompletionContext('    MOCK SQL "FETCH CUR1" RO'), { kind: 'rows', partial: 'RO' });
     assert.deepStrictEqual(detectCompletionContext('    mock read CUST-FILE '), { kind: 'rows', partial: '' });
     assert.deepStrictEqual(detectCompletionContext('    MOCK DLI "GN" '), { kind: 'rows', partial: '' });
+    assert.deepStrictEqual(detectCompletionContext('    MOCK CICS "LINK PROGRAM" '), { kind: 'rows', partial: '' });
   });
 
   it('does not offer ROWS for categories without a ROWS block, or mid-quote', () => {
@@ -200,7 +201,10 @@ describe('QUOTED_CATEGORIES', () => {
 });
 
 describe('ROWS_CATEGORIES', () => {
+  // mocky-mock 0.10.1's dsl/model.py: ROWS_CATEGORIES = {SQL, READ, RETURN}
+  // | SEQUENCED_CALL_CATEGORIES, the latter {CALL, DYNCALL, DLI, CICS}.
+  // DYNCALL is spelled `MOCK CALL <bare-word>` and MQ is CALL at parse time.
   it("matches mocky-mock's dsl/model.py ROWS_CATEGORIES (MQ spelled as the DSL writes it)", () => {
-    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
+    assert.deepStrictEqual([...ROWS_CATEGORIES].sort(), ['CALL', 'CICS', 'DLI', 'MQ', 'READ', 'RETURN', 'SQL']);
   });
 });
