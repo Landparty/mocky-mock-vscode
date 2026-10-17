@@ -141,6 +141,24 @@ describe('starterCutFacts', () => {
     assert.equal(facts.firstParagraph, 'DO-WORK');
   });
 
+  it('falls back to the first SECTION for a program written with sections only', () => {
+    const facts = starterCutFacts('/w/PROG.cbl', [
+      `${AREA_A}IDENTIFICATION DIVISION.`,
+      `${AREA_A}PROGRAM-ID. PROG.`,
+      `${AREA_A}DATA DIVISION.`,
+      `${AREA_A}WORKING-STORAGE SECTION.`,
+      `${AREA_A}01 WS-A PIC 9(4) VALUE 0.`,
+      `${AREA_A}PROCEDURE DIVISION.`,
+      `${AREA_A}MAIN-LOGIC SECTION.`,
+      `${AREA_B}ADD 1 TO WS-A`,
+      `${AREA_B}PERFORM CALC-LOGIC`,
+      `${AREA_B}GOBACK.`,
+      `${AREA_A}CALC-LOGIC SECTION.`,
+      `${AREA_B}ADD 2 TO WS-A.`,
+    ]);
+    assert.equal(facts.firstParagraph, 'MAIN-LOGIC');
+  });
+
   it('falls back to the file stem when there is no PROGRAM-ID', () => {
     const facts = starterCutFacts('/w/CUSTPROG.cbl', [`${AREA_A}PROCEDURE DIVISION.`]);
     assert.equal(facts.programName, 'CUSTPROG');

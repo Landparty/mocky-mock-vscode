@@ -101,6 +101,8 @@ export function parseGeneratedCaseCount(stdout: string): number | null {
 
 export interface StarterCutFacts {
   programName: string;
+  // The PERFORM target: the first paragraph, or the first section of a
+  // program written with sections only (PERFORM accepts either).
   firstParagraph: string | undefined;
 }
 
@@ -115,8 +117,8 @@ function firstParagraphIn(nodes: OutlineNode[]): string | undefined {
 
 // What the fallback template needs from the program source: its PROGRAM-ID
 // (falling back to the file stem, which is also what the paired .cut is
-// named after) and the first PROCEDURE DIVISION paragraph, which is the
-// natural first PERFORM target. Reuses the Outline panel's own scanner so
+// named after) and the first PROCEDURE DIVISION paragraph (else section),
+// which is the natural first PERFORM target. Reuses the Outline panel's own scanner so
 // the template and the Outline agree on what counts as a paragraph.
 export function starterCutFacts(cblPath: string, sourceLines: string[]): StarterCutFacts {
   const outline = buildOutline(sourceLines);
@@ -126,7 +128,10 @@ export function starterCutFacts(cblPath: string, sourceLines: string[]): Starter
     if (division.name === 'IDENTIFICATION DIVISION') {
       programName = division.children.find((c) => c.kind === 'programId')?.name;
     } else if (division.name === 'PROCEDURE DIVISION') {
-      firstParagraph = firstParagraphIn(division.children);
+      // The Outline names a section "X SECTION"; PERFORM takes the bare name.
+      firstParagraph =
+        firstParagraphIn(division.children) ??
+        division.children.find((c) => c.kind === 'section')?.name.replace(/\s+SECTION$/i, '');
     }
   }
   return { programName: programName ?? path.parse(cblPath).name, firstParagraph };
