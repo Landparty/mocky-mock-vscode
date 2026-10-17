@@ -24,6 +24,7 @@ import {
 import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
+import { DiscoveryTracker } from './discoveryTracker';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
@@ -150,8 +151,13 @@ export function activateTestController(
     return parseCutFile(text);
   }
 
+  // Only the newest discovery of a file may replace its TestItem (see
+  // DiscoveryTracker); removeFile supersedes any still in flight too.
+  const discoveries = new DiscoveryTracker();
+
   async function discoverAndBuild(uri: vscode.Uri) {
     if (isExcludedCutPath(uri.fsPath)) return;
+    const generation = discoveries.begin(uri.toString());
     let text: string;
     try {
       text = await fs.readFile(uri.fsPath, 'utf8');
@@ -159,6 +165,7 @@ export function activateTestController(
       return;
     }
     const suites = await discoverSuites(uri, text);
+    if (!discoveries.isCurrent(uri.toString(), generation)) return;
 
     const fileItem = controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
@@ -191,6 +198,8 @@ export function activateTestController(
   }
 
   function removeFile(uri: vscode.Uri) {
+    // Supersedes any discovery still in flight, which would re-add the file.
+    discoveries.begin(uri.toString());
     controller.items.delete(uri.toString());
     fileItems.delete(uri.toString());
   }
