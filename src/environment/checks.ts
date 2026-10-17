@@ -332,12 +332,46 @@ export function darwinPathFallbackCandidates(homeDir: string): string[] {
 // Production callers keep the fs.existsSync default; only tests pass a fake.
 export type FileExistsProbe = (candidatePath: string) => boolean;
 
+// Where `uv tool install` (installMockymock's fallback) puts its executables
+// when uv's own config doesn't move them, in uv's order of precedence --
+// the same on every platform: UV_TOOL_BIN_DIR, $XDG_BIN_HOME,
+// $XDG_DATA_HOME/../bin, then ~/.local/bin. That directory is often not on
+// PATH (uv warns about it), and a window reload never changes the
+// extension host's PATH.
+export function uvToolBinDirs(
+  platform: NodeJS.Platform,
+  homeDir: string,
+  env: NodeJS.ProcessEnv = process.env
+): string[] {
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const dirs: string[] = [];
+  if (env.UV_TOOL_BIN_DIR) dirs.push(env.UV_TOOL_BIN_DIR);
+  if (env.XDG_BIN_HOME) dirs.push(env.XDG_BIN_HOME);
+  if (env.XDG_DATA_HOME) dirs.push(p.join(env.XDG_DATA_HOME, '..', 'bin'));
+  dirs.push(p.join(homeDir, '.local', 'bin'));
+  return dirs;
+}
+
+// Whether a bare `name` would be found on PATH -- so a CLI already reachable
+// there keeps winning over the uv tool directory, as it always has on
+// linux/win32.
+function isOnPath(name: string, platform: NodeJS.Platform, env: NodeJS.ProcessEnv, fileExists: FileExistsProbe): boolean {
+  const p = platform === 'win32' ? path.win32 : path.posix;
+  const pathValue = (platform === 'win32' ? env.Path ?? env.PATH : env.PATH) ?? '';
+  const exts = platform === 'win32' ? ['', ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)] : [''];
+  return pathValue
+    .split(p.delimiter)
+    .filter(Boolean)
+    .some((dir) => exts.some((ext) => fileExists(p.join(dir, name + ext))));
+}
+
 export function resolveExecutablePath(
   configuredPath: string | undefined,
   extensionPath: string,
   platform: NodeJS.Platform = process.platform,
   homeDir: string = os.homedir(),
-  fileExists: FileExistsProbe = fs.existsSync
+  fileExists: FileExistsProbe = fs.existsSync,
+  env: NodeJS.ProcessEnv = process.env
 ): string {
   if (configuredPath && configuredPath.trim().length > 0) {
     return configuredPath.trim();
@@ -350,12 +384,23 @@ export function resolveExecutablePath(
   // so process.env.PATH here can lack directories a login shell would have
   // -- notably ~/.local/bin, where the uv-install fallback below puts its
   // shim. Probing known install locations directly, before giving up to the
-  // bare command name, catches a CLI a plain PATH lookup would miss.
-  // Windows and Linux desktop sessions don't have this gap (PATH is set
-  // system-wide, or sourced by the display manager), so this only runs on
-  // darwin -- no behavior change for other platforms.
+  // bare command name, catches a CLI a plain PATH lookup would miss, so on
+  // darwin they come before PATH.
+  const joinPath = (platform === 'win32' ? path.win32 : path.posix).join;
+  const uvCandidates = uvToolBinDirs(platform, homeDir, env).map((dir) => joinPath(dir, bundledBinaryName(platform)));
   if (platform === 'darwin') {
-    const fallback = darwinPathFallbackCandidates(homeDir).find((candidate) => fileExists(candidate));
+    const fallback = [...uvCandidates, ...darwinPathFallbackCandidates(homeDir)].find((candidate) => fileExists(candidate));
+    if (fallback) {
+      return fallback;
+    }
+    return 'mockymock';
+  }
+  // Elsewhere PATH is complete, so a CLI on it still wins; the uv tool
+  // directory is only the fallback for one installed where PATH doesn't
+  // reach (otherwise every run re-installed it and asked for a reload that
+  // could never help).
+  if (!isOnPath('mockymock', platform, env, fileExists)) {
+    const fallback = uvCandidates.find((candidate) => fileExists(candidate));
     if (fallback) {
       return fallback;
     }

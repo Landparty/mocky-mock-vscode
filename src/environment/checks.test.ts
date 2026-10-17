@@ -296,9 +296,12 @@ describe('resolveExecutablePath', () => {
   });
 
   it('returns "mockymock" when unconfigured and no bundled binary exists', () => {
-    assert.strictEqual(resolveExecutablePath(undefined, tempDir), 'mockymock');
-    assert.strictEqual(resolveExecutablePath('', tempDir), 'mockymock');
-    assert.strictEqual(resolveExecutablePath('   ', tempDir), 'mockymock');
+    // Sandboxed: a real uv-installed CLI in the host's ~/.local/bin would
+    // otherwise be found by the uv-tool-directory fallback.
+    const noFiles = () => false;
+    assert.strictEqual(resolveExecutablePath(undefined, tempDir, process.platform, os.homedir(), noFiles), 'mockymock');
+    assert.strictEqual(resolveExecutablePath('', tempDir, process.platform, os.homedir(), noFiles), 'mockymock');
+    assert.strictEqual(resolveExecutablePath('   ', tempDir, process.platform, os.homedir(), noFiles), 'mockymock');
   });
 
   it('returns the configured path when set, even if a bundled binary exists', () => {
@@ -371,14 +374,35 @@ describe('resolveExecutablePath', () => {
     assert.strictEqual(resolveExecutablePath(undefined, tempDir, 'darwin', fakeHomeDir), path.join(binDir, 'mockymock'));
   });
 
-  it('does not apply the darwin PATH fallback on win32/linux', () => {
+  it('on win32/linux, finds a uv-installed CLI in the uv tool directory when PATH does not reach it', () => {
     const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
-    const fakeHomeDir = path.join(tempDir, 'home');
-    const localBinDir = path.join(fakeHomeDir, '.local', 'bin');
-    fs.mkdirSync(localBinDir, { recursive: true });
-    fs.writeFileSync(path.join(localBinDir, 'mockymock'), '');
-    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'linux', fakeHomeDir), 'mockymock');
-    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'win32', fakeHomeDir), 'mockymock');
+    const home = '/h';
+    const files = new Set(['/h/.local/bin/mockymock', 'C:\\Users\\sam\\.local\\bin\\mockymock.exe', '/xdg/bin/mockymock']);
+    const exists = (p: string) => files.has(p);
+    const env = { PATH: '/usr/bin:/bin', Path: 'C:\\Windows' };
+    assert.strictEqual(resolveExecutablePath(undefined, noBinExtensionPath, 'linux', home, exists, env), '/h/.local/bin/mockymock');
+    assert.strictEqual(
+      resolveExecutablePath(undefined, noBinExtensionPath, 'win32', 'C:\\Users\\sam', exists, env),
+      'C:\\Users\\sam\\.local\\bin\\mockymock.exe'
+    );
+    assert.strictEqual(
+      resolveExecutablePath(undefined, noBinExtensionPath, 'linux', home, exists, { ...env, XDG_BIN_HOME: '/xdg/bin' }),
+      '/xdg/bin/mockymock'
+    );
+  });
+
+  it('on win32/linux, a CLI on PATH still wins over the uv tool directory', () => {
+    const noBinExtensionPath = path.join(tempDir, 'does-not-exist');
+    const files = new Set(['/h/.local/bin/mockymock', '/usr/bin/mockymock', 'C:\\tools\\mockymock.EXE']);
+    const exists = (p: string) => files.has(p);
+    assert.strictEqual(
+      resolveExecutablePath(undefined, noBinExtensionPath, 'linux', '/h', exists, { PATH: '/usr/bin:/bin' }),
+      'mockymock'
+    );
+    assert.strictEqual(
+      resolveExecutablePath(undefined, noBinExtensionPath, 'win32', 'C:\\h', exists, { Path: 'C:\\tools', PATHEXT: '.EXE' }),
+      'mockymock'
+    );
   });
 });
 

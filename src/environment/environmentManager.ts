@@ -1,7 +1,9 @@
 // src/environment/environmentManager.ts
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { launchDetached, runCommand } from './commandRunner';
 import {
+  bundledBinaryName,
   checkCommandAvailable,
   checkDocker,
   DOCKER_INFO_TIMEOUT_MS,
@@ -169,7 +171,7 @@ export class EnvironmentManager {
         vscode.window.showErrorMessage(message);
         return { ok: false, message, reported: true };
       }
-      const installed = await this.installMockymock(executablePath);
+      const installed = await this.installMockymock();
       if (!installed) {
         this.setStatus('cli-missing');
         return {
@@ -209,7 +211,7 @@ export class EnvironmentManager {
     return { ok: false, message: 'Docker Desktop is not installed. Install it, then re-run the test.', reported: true };
   }
 
-  private async installMockymock(executablePath: string): Promise<boolean> {
+  private async installMockymock(): Promise<boolean> {
     this.setStatus('installing');
 
     const uvOk = await checkCommandAvailable(runCommand, 'uv', ['--version']);
@@ -232,18 +234,37 @@ export class EnvironmentManager {
           vscode.window.showErrorMessage(`mockymock install failed: ${result.stderr || result.stdout}`);
           return false;
         }
-        // uv installs its shim into a directory (e.g. ~/.local/bin) that may not be on
-        // this already-running VS Code process's in-memory PATH yet. Re-verify the CLI is
-        // actually invocable before declaring success, so we don't silently proceed to the
-        // Docker check and fail later with a confusing raw spawn error.
-        const nowAvailable = await checkCommandAvailable(runCommand, executablePath, ['--version']);
-        if (!nowAvailable) {
-          vscode.window.showWarningMessage(
-            "mockymock was installed, but this VS Code window can't see it yet. Reload the window (Developer: Reload Window) and try again."
-          );
-          return false;
+        // uv installs its shim into a directory (e.g. ~/.local/bin) that is often not on
+        // this VS Code process's PATH -- and a window reload doesn't change that. Re-resolve
+        // (resolveExecutablePath also looks in uv's default tool directory) and re-verify the
+        // CLI is actually invocable before declaring success, so we don't silently proceed to
+        // the Docker check and fail later with a confusing raw spawn error.
+        const resolved = resolveExecutablePath(undefined, this.context.extensionPath);
+        if (await checkCommandAvailable(runCommand, resolved, ['--version'])) {
+          return true;
         }
-        return true;
+        // uv's config can move the directory; ask uv where it put the CLI.
+        const binDir = await runCommand('uv', ['tool', 'dir', '--bin']);
+        const dir = binDir.code === 0 ? binDir.stdout.trim() : '';
+        const installedPath = dir ? path.join(dir, bundledBinaryName(process.platform)) : '';
+        if (installedPath && (await checkCommandAvailable(runCommand, installedPath, ['--version']))) {
+          const useIt = 'Use This CLI';
+          const choice = await vscode.window.showWarningMessage(
+            `mockymock was installed to ${dir}, which isn't on VS Code's PATH. Use it from there (sets mockymock.executablePath), or add ${dir} to PATH and restart VS Code.`,
+            useIt
+          );
+          if (choice !== useIt) return false;
+          await vscode.workspace
+            .getConfiguration('mockymock')
+            .update('executablePath', installedPath, vscode.ConfigurationTarget.Global);
+          return true;
+        }
+        vscode.window.showWarningMessage(
+          dir
+            ? `mockymock was installed, but VS Code can't run it from ${dir}. Add that directory to PATH and restart VS Code, or set mockymock.executablePath to the installed mockymock.`
+            : "mockymock was installed, but VS Code can't find it. Run `uv tool dir --bin` to see where uv put it, then add that directory to PATH or set mockymock.executablePath."
+        );
+        return false;
       }
     );
   }
