@@ -2,6 +2,7 @@ import * as assert from 'assert';
 import {
   parseJsonReport,
   mapJsonReport,
+  mapJsonReportCases,
   formatAdvisorySignals,
   formatDuplicateCaseStarts,
   formatRiskyPass,
@@ -147,6 +148,62 @@ describe('mapJsonReport', () => {
     const outcomes = mapJsonReport(['a', 'b'], null, 'refused: PARSE_WARNING');
     assert.deepStrictEqual(outcomes.get('a'), { kind: 'errored', message: 'refused: PARSE_WARNING' });
     assert.deepStrictEqual(outcomes.get('b'), { kind: 'errored', message: 'refused: PARSE_WARNING' });
+  });
+});
+
+// TESTCASE names need not be unique; the CLI keeps same-named cases apart by
+// position and gives each its own .cut line.
+describe('mapJsonReportCases with duplicate case names', () => {
+  const dupReport = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: 's', line: 1 },
+      cases: [
+        {
+          name: 'adds tax',
+          line: 6,
+          status: 'failed',
+          failures: [{ message: 'expected 1, got 2', kind: 'expect', line: 9, expected: '1', actual: '2' }],
+        },
+        { name: 'adds tax', line: 44, status: 'passed', failures: [] },
+      ],
+    })
+  );
+
+  it('gives each same-named case the verdict of its own report entry', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 6 },
+        { name: 'adds tax', line: 44 },
+      ],
+      dupReport
+    );
+    assert.strictEqual(outcomes[0].kind, 'failed');
+    assert.deepStrictEqual(outcomes[1], { kind: 'passed' });
+  });
+
+  it('pairs by line regardless of report order', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 44 },
+        { name: 'adds tax', line: 6 },
+      ],
+      dupReport
+    );
+    assert.deepStrictEqual(outcomes[0], { kind: 'passed' });
+    assert.strictEqual(outcomes[1].kind, 'failed');
+  });
+
+  it('falls back to report order, one entry per case, when the lines do not match', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 7 },
+        { name: 'adds tax', line: null },
+      ],
+      dupReport
+    );
+    assert.strictEqual(outcomes[0].kind, 'failed');
+    assert.deepStrictEqual(outcomes[1], { kind: 'passed' });
   });
 });
 

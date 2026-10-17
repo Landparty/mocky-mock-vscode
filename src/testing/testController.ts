@@ -12,8 +12,8 @@ import {
   CUT_DISCOVERY_EXCLUDE_GLOB,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
-import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
+import { mapResultsForCases, unattributedFailures, CaseOutcome, ExpectedCase, UnattributedFailure } from './resultMapper';
+import { parseJsonReport, mapJsonReportCases, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
 import { parseCoverageJson } from './coverageReport';
 import { runSuite } from './mockymockRunner';
 import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
@@ -489,12 +489,21 @@ export function activateTestController(
     }
 
     const selectedNames = [...selected].map((c) => c.label);
+    // In .cut order, each with its own 1-based line: the report pairs
+    // results to cases by line, so two same-named TESTCASEs each get their
+    // own verdict rather than the last one's.
+    const expectedItems: vscode.TestItem[] = [];
+    forEachSelectedSuite(plan, selected, (_suiteItem, cases) => expectedItems.push(...cases));
+    const expectedCases: ExpectedCase[] = expectedItems.map((c) => ({
+      name: c.label,
+      line: c.range ? c.range.start.line + 1 : null,
+    }));
     const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
 
     // Prefer the JSON report (locations + expected/actual); fall back to the
     // JUnit XML for a CLI predating --json-report; fall back to the process
     // output when neither was produced (refusal / compile failure).
-    let outcomes: Map<string, CaseOutcome>;
+    let caseOutcomes: CaseOutcome[];
     // FAIL lines mockymock couldn't attribute to any known case id (a
     // MOCK/VERIFY firing after its case already ended, or a framework/binary
     // mismatch) — these don't belong to any TestItem, so nothing above would
@@ -502,13 +511,14 @@ export function activateTestController(
     let orphans: UnattributedFailure[];
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
     if (jsonReport) {
-      outcomes = mapJsonReport(selectedNames, jsonReport, processFailureMessage);
+      caseOutcomes = mapJsonReportCases(expectedCases, jsonReport, processFailureMessage);
       orphans = jsonReport.orphanFailures;
     } else {
       const junitSuite = result.junitXml ? parseJUnitXml(result.junitXml) : null;
-      outcomes = mapResults(selectedNames, junitSuite, junitSuite ? undefined : processFailureMessage);
+      caseOutcomes = mapResultsForCases(expectedCases, junitSuite, junitSuite ? undefined : processFailureMessage);
       orphans = unattributedFailures(selectedNames, junitSuite);
     }
+    const outcomes = new Map(expectedItems.map((item, i) => [item, caseOutcomes[i]]));
 
     let fileHasFailed = false;
     let fileHasErrored = false;
@@ -516,7 +526,7 @@ export function activateTestController(
       let suiteHasFailed = false;
       let suiteHasErrored = false;
       for (const caseItem of cases) {
-        const outcome = outcomes.get(caseItem.label);
+        const outcome = outcomes.get(caseItem);
         if (!outcome || outcome.kind === 'passed') {
           run.passed(caseItem);
           if (outcome?.risky) {

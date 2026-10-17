@@ -1,6 +1,6 @@
 // src/testing/resultMapper.test.ts
 import * as assert from 'assert';
-import { mapResults, unattributedFailures } from './resultMapper';
+import { mapResults, mapResultsForCases, unattributedFailures } from './resultMapper';
 import { JUnitTestSuite } from './junitParser';
 
 describe('mapResults', () => {
@@ -55,6 +55,23 @@ describe('mapResults', () => {
       kind: 'errored',
       message: 'mockymock run did not produce results (refused or failed to compile)',
     });
+  });
+});
+
+describe('mapResultsForCases', () => {
+  it('keeps a failing same-named case red when a later one passes', () => {
+    const suite: JUnitTestSuite = {
+      name: 's', tests: 2, failures: 1, errors: 0,
+      cases: [
+        { name: 'dup', status: 'failed', messages: ['expected 1 got 2'] },
+        { name: 'dup', status: 'passed', messages: [] },
+      ],
+    };
+    const outcomes = mapResultsForCases([{ name: 'dup', line: 6 }, { name: 'dup', line: 44 }], suite);
+    assert.deepStrictEqual(outcomes, [
+      { kind: 'failed', message: 'expected 1 got 2' },
+      { kind: 'passed' },
+    ]);
   });
 });
 
