@@ -2,7 +2,7 @@
 // This is the preferred results channel (it carries .cut line numbers and
 // expected/actual per failure); the JUnit XML path in resultMapper.ts stays
 // as the fallback for a mockymock CLI that predates --json-report.
-import { CaseOutcome, FailureDetail } from './resultMapper';
+import { CaseOutcome, ExpectedCase, FailureDetail, UnattributedFailure, pairResultEntries } from './resultMapper';
 
 export interface JsonReportFailure {
   message: string;
@@ -224,54 +224,71 @@ export function mapJsonReport(
   report: JsonRunReport | null,
   processFailureMessage?: string
 ): Map<string, CaseOutcome> {
-  const outcomes = new Map<string, CaseOutcome>();
+  const outcomes = mapJsonReportCases(
+    expectedCaseNames.map((name) => ({ name, line: null })),
+    report,
+    processFailureMessage
+  );
+  return new Map(expectedCaseNames.map((name, i) => [name, outcomes[i]]));
+}
 
+// One outcome per expected case, in the same order. Each case is paired
+// with its own report entry by .cut line (see pairResultEntries), so two
+// same-named TESTCASEs keep their own verdicts.
+export function mapJsonReportCases(
+  expected: ExpectedCase[],
+  report: JsonRunReport | null,
+  processFailureMessage?: string
+): CaseOutcome[] {
   if (!report) {
     const message =
       processFailureMessage ?? 'mockymock run did not produce results (refused or failed to compile)';
-    for (const name of expectedCaseNames) {
-      outcomes.set(name, { kind: 'errored', message });
-    }
-    return outcomes;
+    return expected.map(() => ({ kind: 'errored', message }));
   }
 
-  const byName = new Map(report.cases.map((c) => [c.name, c]));
-  for (const name of expectedCaseNames) {
-    const found = byName.get(name);
+  const paired = pairResultEntries(expected, report.cases);
+  // A refusal or compile failure writes the report with one synthetic entry
+  // ("mockymock run", no .cut line) carrying the reason, and at most not_run
+  // entries for the real cases. When no expected case got a verdict of its
+  // own, that entry's reason is the answer for every one of them -- not "an
+  // earlier crash, or a name mismatch".
+  const unattributed = unattributedEntries(paired, report, (c) => c.line === null);
+  if (unattributed.length && paired.every((found) => !found || found.status === 'not_run')) {
+    const message =
+      unattributed.map((u) => u.message).filter(Boolean).join('\n') ||
+      processFailureMessage ||
+      unattributed.map((u) => u.caseId).join('\n');
+    return expected.map(() => ({ kind: 'errored', message }));
+  }
+
+  return paired.map((found): CaseOutcome => {
     if (!found) {
       // Absent from the report entirely. Unlike an explicit not_run entry
       // (below), the report makes NO claim about why -- most plausibly a
       // crash cut the suite short, but a discovery/CLI name drift (e.g.
       // PROVIDER row expansion producing a different "name [row N: ...]"
       // label) looks identical from here. Don't assert a cause we can't know.
-      outcomes.set(name, {
+      return {
         kind: 'not-run',
         message: 'did not run — not present in the run report (an earlier crash, or a name mismatch between discovery and the CLI)',
-      });
-      continue;
+      };
     }
     if (found.status === 'not_run') {
-      outcomes.set(name, {
+      return {
         kind: 'not-run',
         message: found.crashDetail
           ? `did not run — an earlier case in this suite crashed (${found.crashDetail})`
           : 'did not run — an earlier case in this suite crashed',
-      });
-      continue;
+      };
     }
     if (found.status === 'passed') {
-      outcomes.set(name, found.risky ? { kind: 'passed', risky: true } : { kind: 'passed' });
-      continue;
+      return found.risky ? { kind: 'passed', risky: true } : { kind: 'passed' };
     }
     if (found.status === 'crashed') {
       const parts = found.failures.map((f) => f.message);
       const detail = found.crashDetail ? ` (${found.crashDetail})` : '';
       const prefix = `case crashed before its checks finished${detail}`;
-      outcomes.set(name, {
-        kind: 'errored',
-        message: parts.length ? `${prefix}\n${parts.join('\n')}` : prefix,
-      });
-      continue;
+      return { kind: 'errored', message: parts.length ? `${prefix}\n${parts.join('\n')}` : prefix };
     }
     const details: FailureDetail[] = found.failures.map((f) => ({
       message: f.message,
@@ -279,11 +296,35 @@ export function mapJsonReport(
       expected: f.expected,
       actual: f.actual,
     }));
-    outcomes.set(name, {
+    return {
       kind: 'failed',
       message: details.map((d) => d.message).join('\n') || 'failed',
       details,
-    });
-  }
-  return outcomes;
+    };
+  });
+}
+
+function unattributedEntries(
+  paired: (JsonReportCase | undefined)[],
+  report: JsonRunReport,
+  include: (c: JsonReportCase) => boolean = () => true
+): UnattributedFailure[] {
+  const used = new Set(paired);
+  return report.cases
+    .filter((c) => !used.has(c) && c.status !== 'passed' && c.status !== 'not_run' && include(c))
+    .map((c) => ({
+      caseId: c.name,
+      message: c.failures.map((f) => f.message).join('\n') || c.crashDetail || c.status,
+    }));
+}
+
+// Report entries that belong to none of the expected cases yet did not pass
+// -- the synthetic "mockymock run" entry of a refusal or compile failure, or
+// a case whose name drifted from discovery. They belong to no TestItem, so
+// the caller surfaces them on the file, like orphanFailures.
+export function unattributedReportFailures(
+  expected: ExpectedCase[],
+  report: JsonRunReport
+): UnattributedFailure[] {
+  return unattributedEntries(pairResultEntries(expected, report.cases), report);
 }

@@ -6,16 +6,25 @@ import * as path from 'path';
 import {
   parseCutFile,
   resolveCblPath,
+  suitesForProgram,
   isExcludedCutPath,
   cutSuitesFromCollectJson,
   CutSuite,
   CUT_DISCOVERY_EXCLUDE_GLOB,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
-import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
-import { parseCoverageJson } from './coverageReport';
+import {
+  mapResultsForCases,
+  unattributedFailures,
+  unexplainedExitProblem,
+  CaseOutcome,
+  ExpectedCase,
+  UnattributedFailure,
+} from './resultMapper';
+import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
+import { parseCoverageJson, mergeCoverage, CoverageData } from './coverageReport';
 import { runSuite } from './mockymockRunner';
+import { DiscoveryTracker } from './discoveryTracker';
 import { parseMutationJson, survivorsOf, survivorReason, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
@@ -144,8 +153,17 @@ export function activateTestController(
     return parseCutFile(text);
   }
 
-  async function discoverAndBuild(uri: vscode.Uri) {
+  // Only the newest discovery of a file may replace its TestItem (see
+  // DiscoveryTracker); removeFile supersedes any still in flight too.
+  const discoveries = new DiscoveryTracker();
+
+  function discoverAndBuild(uri: vscode.Uri): Promise<void> {
+    return discoveries.track(discoverAndBuildNow(uri));
+  }
+
+  async function discoverAndBuildNow(uri: vscode.Uri) {
     if (isExcludedCutPath(uri.fsPath)) return;
+    const generation = discoveries.begin(uri.toString());
     let text: string;
     try {
       text = await fs.readFile(uri.fsPath, 'utf8');
@@ -153,6 +171,7 @@ export function activateTestController(
       return;
     }
     const suites = await discoverSuites(uri, text);
+    if (!discoveries.isCurrent(uri.toString(), generation)) return;
 
     const fileItem = controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
@@ -185,6 +204,8 @@ export function activateTestController(
   }
 
   function removeFile(uri: vscode.Uri) {
+    // Supersedes any discovery still in flight, which would re-add the file.
+    discoveries.begin(uri.toString());
     controller.items.delete(uri.toString());
     fileItems.delete(uri.toString());
   }
@@ -414,7 +435,10 @@ export function activateTestController(
     run: vscode.TestRun,
     token: vscode.CancellationToken,
     withCoverage: boolean,
-    ensureReady: () => Promise<ReadyResult>
+    ensureReady: () => Promise<ReadyResult>,
+    // Collects this file's coverage for the handler, which merges every
+    // suite of a program and adds one FileCoverage per program at the end.
+    collectCoverage: (cblPath: string, coverage: CoverageData) => void
   ) {
     const { fileItem } = plan;
     const selected = new Set(selectedCaseItems(plan));
@@ -502,12 +526,21 @@ export function activateTestController(
     }
 
     const selectedNames = [...selected].map((c) => c.label);
+    // In .cut order, each with its own 1-based line: the report pairs
+    // results to cases by line, so two same-named TESTCASEs each get their
+    // own verdict rather than the last one's.
+    const expectedItems: vscode.TestItem[] = [];
+    forEachSelectedSuite(plan, selected, (_suiteItem, cases) => expectedItems.push(...cases));
+    const expectedCases: ExpectedCase[] = expectedItems.map((c) => ({
+      name: c.label,
+      line: c.range ? c.range.start.line + 1 : null,
+    }));
     const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
 
     // Prefer the JSON report (locations + expected/actual); fall back to the
     // JUnit XML for a CLI predating --json-report; fall back to the process
     // output when neither was produced (refusal / compile failure).
-    let outcomes: Map<string, CaseOutcome>;
+    let caseOutcomes: CaseOutcome[];
     // FAIL lines mockymock couldn't attribute to any known case id (a
     // MOCK/VERIFY firing after its case already ended, or a framework/binary
     // mismatch) — these don't belong to any TestItem, so nothing above would
@@ -515,13 +548,14 @@ export function activateTestController(
     let orphans: UnattributedFailure[];
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
     if (jsonReport) {
-      outcomes = mapJsonReport(selectedNames, jsonReport, processFailureMessage);
-      orphans = jsonReport.orphanFailures;
+      caseOutcomes = mapJsonReportCases(expectedCases, jsonReport, processFailureMessage);
+      orphans = [...jsonReport.orphanFailures, ...unattributedReportFailures(expectedCases, jsonReport)];
     } else {
       const junitSuite = result.junitXml ? parseJUnitXml(result.junitXml) : null;
-      outcomes = mapResults(selectedNames, junitSuite, junitSuite ? undefined : processFailureMessage);
+      caseOutcomes = mapResultsForCases(expectedCases, junitSuite, junitSuite ? undefined : processFailureMessage);
       orphans = unattributedFailures(selectedNames, junitSuite);
     }
+    const outcomes = new Map(expectedItems.map((item, i) => [item, caseOutcomes[i]]));
 
     let fileHasFailed = false;
     let fileHasErrored = false;
@@ -529,7 +563,7 @@ export function activateTestController(
       let suiteHasFailed = false;
       let suiteHasErrored = false;
       for (const caseItem of cases) {
-        const outcome = outcomes.get(caseItem.label);
+        const outcome = outcomes.get(caseItem);
         if (!outcome || outcome.kind === 'passed') {
           run.passed(caseItem);
           if (outcome?.risky) {
@@ -579,6 +613,16 @@ export function activateTestController(
     if (duplicates) {
       gatingProblems.push(duplicates);
     }
+    // Orphans and duplicate starts already explain a nonzero exit.
+    const unexplainedExit = unexplainedExitProblem(
+      result.exitCode,
+      fileHasFailed || fileHasErrored || gatingProblems.length > 0,
+      result.stderr,
+      result.stdout
+    );
+    if (unexplainedExit) {
+      gatingProblems.push(unexplainedExit);
+    }
 
     if (gatingProblems.length) {
       const summary = gatingProblems.join('\n\n');
@@ -600,22 +644,27 @@ export function activateTestController(
 
     if (withCoverage && result.coverageJson) {
       const coverage = parseCoverageJson(result.coverageJson);
-      if (coverage) {
-        const fileCoverage = new vscode.FileCoverage(
-          vscode.Uri.file(cblPath),
-          new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
-        );
-        coverageDetails.set(
-          fileCoverage,
-          coverage.lines.map(
-            // Clamped for the same reason as messagesForOutcome's location:
-            // a "line": 0 in the coverage JSON must not throw out of runOneFile.
-            (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
-          )
-        );
-        run.addCoverage(fileCoverage);
-      }
+      if (coverage) collectCoverage(cblPath, coverage);
     }
+  }
+
+  // One FileCoverage per program. VS Code keys file coverage by URI and a
+  // second addCoverage for the same .cbl replaces the first, so several
+  // suites of one program must be merged before they are added.
+  function addProgramCoverage(run: vscode.TestRun, cblPath: string, coverage: CoverageData) {
+    const fileCoverage = new vscode.FileCoverage(
+      vscode.Uri.file(cblPath),
+      new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
+    );
+    coverageDetails.set(
+      fileCoverage,
+      coverage.lines.map(
+        // Clamped for the same reason as messagesForOutcome's location:
+        // a "line": 0 in the coverage JSON must not throw out of the handler.
+        (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
+      )
+    );
+    run.addCoverage(fileCoverage);
   }
 
   // "Mutation Test": run `mockymock mutate` for a .cut file -- every mutant
@@ -916,6 +965,12 @@ export function activateTestController(
           }
           running = true;
           try {
+            // A .cut save also starts a rediscovery (the watcher above).
+            // Run against the tree it produces, not the one it replaces --
+            // or a renamed case runs under its old name and a new one not
+            // at all.
+            await discoveries.idle();
+            if (token.isCancellationRequested) return;
             const include = request.include?.length ? request.include : undefined;
             await handler(new vscode.TestRunRequest(include, request.exclude, request.profile), token);
           } finally {
@@ -932,13 +987,14 @@ export function activateTestController(
         }
         const rerun = (uri: vscode.Uri) => {
           if (isExcludedCutPath(uri.fsPath)) return;
-          const cutFsPath = uri.fsPath.endsWith('.cut')
-            ? uri.fsPath
-            : uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');
-          const cutUri = vscode.Uri.file(cutFsPath).toString();
-          if (!fileItems.has(cutUri)) return;
-          const relevant =
-            !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          // A program change reruns every suite paired with it -- under
+          // tests/, PROG.<topic>.cut siblings, not just a sibling PROG.cut.
+          const cutFsPaths = uri.fsPath.endsWith('.cut') ? [uri.fsPath] : suitesForProgram(uri.fsPath);
+          const relevant = cutFsPaths.some((cutFsPath) => {
+            const cutUri = vscode.Uri.file(cutFsPath).toString();
+            if (!fileItems.has(cutUri)) return false;
+            return !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          });
           if (!relevant) return;
           scheduleRerun();
         };
@@ -960,8 +1016,25 @@ export function activateTestController(
       await handler(request, token);
     };
 
-    async function handler(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+    async function handler(request: vscode.TestRunRequest, outerToken: vscode.CancellationToken) {
       const run = controller.createTestRun(request);
+      // Same merge as the Mutation Test profile: a continuous-mode rerun
+      // passes the continuous request's token, which the Test Results Stop
+      // button never reaches -- it cancels run.token. Either one stops it.
+      const cancel = new vscode.CancellationTokenSource();
+      const cancelListeners = [outerToken, run.token].map((t) => t.onCancellationRequested(() => cancel.cancel()));
+      const token = cancel.token;
+      // Keyed like suitesForProgram (case-insensitive on Windows): suites in
+      // different folders can name one program by differently-spelled paths.
+      const coverageByProgram = new Map<string, { cblPath: string; coverage: CoverageData }>();
+      const collectCoverage = (cblPath: string, coverage: CoverageData) => {
+        const key = process.platform === 'win32' ? path.resolve(cblPath).toLowerCase() : path.resolve(cblPath);
+        const earlier = coverageByProgram.get(key);
+        coverageByProgram.set(key, {
+          cblPath,
+          coverage: earlier ? mergeCoverage(earlier.coverage, coverage) : coverage,
+        });
+      };
       try {
         const plans = planRuns(request);
         const configured =
@@ -974,7 +1047,7 @@ export function activateTestController(
           while (next < plans.length && !token.isCancellationRequested) {
             const plan = plans[next++];
             try {
-              await runOneFile(plan, run, token, withCoverage, ensureReady);
+              await runOneFile(plan, run, token, withCoverage, ensureReady, collectCoverage);
             } catch (err) {
               // Never leave a "started" item without a terminal state: if
               // runOneFile threw after marking items started, error out the
@@ -993,7 +1066,10 @@ export function activateTestController(
         await Promise.all(
           Array.from({ length: Math.min(parallelism, Math.max(plans.length, 1)) }, () => worker())
         );
+        for (const { cblPath, coverage } of coverageByProgram.values()) addProgramCoverage(run, cblPath, coverage);
       } finally {
+        cancelListeners.forEach((l) => l.dispose());
+        cancel.dispose();
         run.end();
       }
     }

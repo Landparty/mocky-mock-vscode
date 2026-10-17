@@ -1,6 +1,6 @@
 // src/testing/resultMapper.test.ts
 import * as assert from 'assert';
-import { mapResults, unattributedFailures } from './resultMapper';
+import { mapResults, mapResultsForCases, unattributedFailures, unexplainedExitProblem } from './resultMapper';
 import { JUnitTestSuite } from './junitParser';
 
 describe('mapResults', () => {
@@ -58,6 +58,23 @@ describe('mapResults', () => {
   });
 });
 
+describe('mapResultsForCases', () => {
+  it('keeps a failing same-named case red when a later one passes', () => {
+    const suite: JUnitTestSuite = {
+      name: 's', tests: 2, failures: 1, errors: 0,
+      cases: [
+        { name: 'dup', status: 'failed', messages: ['expected 1 got 2'] },
+        { name: 'dup', status: 'passed', messages: [] },
+      ],
+    };
+    const outcomes = mapResultsForCases([{ name: 'dup', line: 6 }, { name: 'dup', line: 44 }], suite);
+    assert.deepStrictEqual(outcomes, [
+      { kind: 'failed', message: 'expected 1 got 2' },
+      { kind: 'passed' },
+    ]);
+  });
+});
+
 describe('unattributedFailures', () => {
   it('picks out an orphan-<id> testcase not among the expected case names', () => {
     const suite: JUnitTestSuite = {
@@ -92,5 +109,26 @@ describe('unattributedFailures', () => {
     assert.deepStrictEqual(unattributedFailures([], suite), [
       { caseId: 'orphan-3', message: 'errored' },
     ]);
+  });
+});
+
+describe('unexplainedExitProblem', () => {
+  it('flags a nonzero exit when every case passed', () => {
+    assert.strictEqual(
+      unexplainedExitProblem(1, false, 'binary timed out (exit 124)\n', 'ok\n'),
+      'mockymock run exited 1 although every case passed:\nbinary timed out (exit 124)'
+    );
+  });
+
+  it('falls back to the tail of stdout when stderr is empty', () => {
+    const stdout = Array.from({ length: 30 }, (_, i) => `line ${i}`).join('\n') + '\n';
+    const problem = unexplainedExitProblem(1, false, '', stdout)!;
+    assert.match(problem, /line 29$/);
+    assert.doesNotMatch(problem, /line 9\n/);
+  });
+
+  it('says nothing when the exit code is 0 or a case already failed', () => {
+    assert.strictEqual(unexplainedExitProblem(0, false, '', ''), undefined);
+    assert.strictEqual(unexplainedExitProblem(1, true, 'x', ''), undefined);
   });
 });

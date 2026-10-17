@@ -2,6 +2,8 @@ import * as assert from 'assert';
 import {
   parseJsonReport,
   mapJsonReport,
+  mapJsonReportCases,
+  unattributedReportFailures,
   formatAdvisorySignals,
   formatDuplicateCaseStarts,
   formatRiskyPass,
@@ -150,6 +152,62 @@ describe('mapJsonReport', () => {
   });
 });
 
+// TESTCASE names need not be unique; the CLI keeps same-named cases apart by
+// position and gives each its own .cut line.
+describe('mapJsonReportCases with duplicate case names', () => {
+  const dupReport = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: 's', line: 1 },
+      cases: [
+        {
+          name: 'adds tax',
+          line: 6,
+          status: 'failed',
+          failures: [{ message: 'expected 1, got 2', kind: 'expect', line: 9, expected: '1', actual: '2' }],
+        },
+        { name: 'adds tax', line: 44, status: 'passed', failures: [] },
+      ],
+    })
+  );
+
+  it('gives each same-named case the verdict of its own report entry', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 6 },
+        { name: 'adds tax', line: 44 },
+      ],
+      dupReport
+    );
+    assert.strictEqual(outcomes[0].kind, 'failed');
+    assert.deepStrictEqual(outcomes[1], { kind: 'passed' });
+  });
+
+  it('pairs by line regardless of report order', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 44 },
+        { name: 'adds tax', line: 6 },
+      ],
+      dupReport
+    );
+    assert.deepStrictEqual(outcomes[0], { kind: 'passed' });
+    assert.strictEqual(outcomes[1].kind, 'failed');
+  });
+
+  it('falls back to report order, one entry per case, when the lines do not match', () => {
+    const outcomes = mapJsonReportCases(
+      [
+        { name: 'adds tax', line: 7 },
+        { name: 'adds tax', line: null },
+      ],
+      dupReport
+    );
+    assert.strictEqual(outcomes[0].kind, 'failed');
+    assert.deepStrictEqual(outcomes[1], { kind: 'passed' });
+  });
+});
+
 // These three keys are emitted by mockymock's JSON report but had no reader
 // here, so preferring the JSON report over the JUnit fallback used to LOSE
 // the duplicate-CASE-START warning the fallback surfaced as a synthetic
@@ -229,4 +287,60 @@ describe('run-report integrity signals', () => {
     assert.deepStrictEqual(report.orphanEnds, ['ok']);
     assert.deepStrictEqual(report.orphanRecords, [{ caseId: '?', dataName: '?', value: '' }]);
   });
+});
+
+// What `mockymock run` writes for a static refusal or a compile failure: one
+// synthetic "mockymock run" entry carrying the reason (and, when the CLI had
+// parsed the .cut, a not_run entry per real case).
+describe('refusal and compile-failure reports', () => {
+  const reason = 'refused (UNRESOLVED_COPYBOOK): unresolved COPY statement at line 26';
+  const refusal = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: '', line: null },
+      cases: [{ name: 'mockymock run', line: null, status: 'failed', failures: [{ message: reason, kind: 'unknown', line: null }] }],
+    })
+  );
+  const compileFailure = parseJsonReport(
+    JSON.stringify({
+      version: 1,
+      suite: { name: 's', line: 1 },
+      cases: [
+        { name: 'mockymock run', line: null, status: 'failed', failures: [{ message: 'cobc: error: x', kind: 'unknown', line: null }] },
+        { name: 'one', line: 3, status: 'not_run', failures: [], crashDetail: null },
+        { name: 'two', line: 9, status: 'not_run', failures: [], crashDetail: null },
+      ],
+    })
+  );
+  const expected = [
+    { name: 'one', line: 3 },
+    { name: 'two', line: 9 },
+  ];
+
+  it('errors every case with the refusal reason', () => {
+    assert.deepStrictEqual(mapJsonReportCases(expected, refusal, 'PROCESS FAILURE MSG'), [
+      { kind: 'errored', message: reason },
+      { kind: 'errored', message: reason },
+    ]);
+  });
+
+  it('errors every case with the compile error, not "an earlier case crashed"', () => {
+    assert.deepStrictEqual(mapJsonReportCases(expected, compileFailure), [
+      { kind: 'errored', message: 'cobc: error: x' },
+      { kind: 'errored', message: 'cobc: error: x' },
+    ]);
+  });
+
+  it('surfaces the synthetic entry as an unattributed failure for the file', () => {
+    assert.deepStrictEqual(unattributedReportFailures(expected, refusal!), [{ caseId: 'mockymock run', message: reason }]);
+  });
+
+  it('leaves a real crash report alone', () => {
+    const outcomes = mapJsonReport(['never ran'], report());
+    assert.strictEqual(outcomes.get('never ran')?.kind, 'not-run');
+  });
+
+  function report() {
+    return parseJsonReport(SAMPLE_REPORT);
+  }
 });
