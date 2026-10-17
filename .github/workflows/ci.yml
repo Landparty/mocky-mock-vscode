@@ -41,7 +41,7 @@ jobs:
       # exercises.
       - name: Install the mockymock CLI from PyPI
         env:
-          MOCKYMOCK_VERSION: ${{ vars.MOCKYMOCK_VERSION || '0.10.1' }}
+          MOCKYMOCK_VERSION: ${{ vars.MOCKYMOCK_VERSION || '0.10.2' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install "mockymock==${MOCKYMOCK_VERSION}"

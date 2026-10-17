@@ -11,6 +11,7 @@ const states: SetupState[] = [
   'cli-blocked',
   'docker-stopped',
   'docker-failed',
+  'docker-denied',
   'docker-missing',
 ];
 

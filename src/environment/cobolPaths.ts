@@ -15,3 +15,9 @@ export function isCobolPath(fsPath: string): boolean {
   const lower = fsPath.toLowerCase();
   return lower.endsWith('.cbl') || lower.endsWith('.cob') || lower.endsWith('.cobol');
 }
+
+// A copybook by its conventional extension: saving one can change any
+// program that COPYs it.
+export function isCopybookPath(fsPath: string): boolean {
+  return /\.(cpy|copy)$/i.test(fsPath);
+}

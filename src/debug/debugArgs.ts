@@ -19,7 +19,9 @@ export interface MockymockDebugConfiguration {
 // argv mockymock debug --dap-stdio needs, kept separate from the
 // vscode.DebugAdapterDescriptorFactory that actually spawns it.
 export function buildDebugArgs(config: MockymockDebugConfiguration): string[] {
-  const args = ['debug', config.program, '--cut', config.cut, '--case', config.case, '--dap-stdio'];
+  // `--case=<name>` as one element, as in buildRunArgs: a case name that
+  // starts with `-` would otherwise be read by argparse as an option.
+  const args = ['debug', config.program, '--cut', config.cut, `--case=${config.case}`, '--dap-stdio'];
   for (const p of config.copybookPaths ?? []) {
     args.push('--copybook-path', p);
   }

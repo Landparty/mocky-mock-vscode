@@ -1,7 +1,12 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { absolutizeDebugPaths } from './debugArgs';
+import { anchorCommandPath, runCommandIn } from '../environment/commandRunner';
+import { resolveExecutablePath } from '../environment/checks';
+import { resolveExecutablePathSetting } from '../environment/copybookPaths';
+import { EnvironmentManager } from '../environment/environmentManager';
+import { configuredExecutablePath, resolveInvocationConfig, settingPathContext } from '../environment/invocationConfig';
+import { absolutizeDebugPaths, buildLintArgs } from './debugArgs';
+import { evaluateCaseSelection, evaluateLintResult } from './lintGate';
 
 // This debug type is normally launched programmatically (see the "Debug
 // (Interactive)" test profile in testController.ts, which builds a complete
@@ -22,8 +27,20 @@ import { absolutizeDebugPaths } from './debugArgs';
 // mockymock.copybookPaths setting and the zapp.yml library locations --
 // surfacing as an UNRESOLVED_COPYBOOK refusal on a workspace that was in
 // fact configured correctly, and that the Test Explorer could debug fine.
+//
+// And it runs the same preflight the Test Explorer's "Debug (Interactive)"
+// runs before it starts a session (environment ready, `lint`), plus a check
+// that `case` names a real TESTCASE: `mockymock debug --dap-stdio` refuses
+// each of those in plain text before ever speaking DAP, which VS Code shows
+// only as "debug adapter process has terminated unexpectedly". A session the
+// Test Explorer started (PREFLIGHTED set) has been through all of it already.
+export const PREFLIGHTED = 'mockymockPreflighted';
+
 export class MockymockDebugConfigurationProvider implements vscode.DebugConfigurationProvider {
-  constructor(private readonly context: vscode.ExtensionContext) {}
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly environmentManager: EnvironmentManager
+  ) {}
 
   resolveDebugConfiguration(
     folder: vscode.WorkspaceFolder | undefined,
@@ -44,13 +61,65 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
   // absolutizeDebugPaths for why the adapter needs it absolute. The
   // copybookPaths default is filled here too, not in resolveDebugConfiguration:
   // only now is `program` a real path to scope the settings lookup to.
-  resolveDebugConfigurationWithSubstitutedVariables(
+  async resolveDebugConfigurationWithSubstitutedVariables(
     folder: vscode.WorkspaceFolder | undefined,
     config: vscode.DebugConfiguration
-  ): vscode.ProviderResult<vscode.DebugConfiguration> {
+  ): Promise<vscode.DebugConfiguration | undefined> {
     if (typeof config.program !== 'string' || typeof config.cut !== 'string') {
       return config;
     }
+    const resolved = this.withDefaults(folder, config);
+    if (config[PREFLIGHTED]) return resolved;
+    const problem = await this.preflight(folder, resolved);
+    // null: ensureReady() already showed its own prompt for the problem.
+    if (problem === null) return undefined;
+    if (problem) {
+      vscode.window.showErrorMessage(problem);
+      // undefined (not null) aborts the launch without opening launch.json.
+      return undefined;
+    }
+    return resolved;
+  }
+
+  // The checks `mockymock debug` would otherwise fail opaquely on; the
+  // message to show for the first that fails (null when ensureReady() has
+  // shown it already), else undefined.
+  private async preflight(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration
+  ): Promise<string | null | undefined> {
+    const ready = await this.environmentManager.ensureReady();
+    if (!ready.ok) return ready.reported ? null : ready.message;
+    const cutPath = config.cut as string;
+    const run = runCommandIn(path.dirname(cutPath));
+    // The same binary debugAdapterFactory will launch.
+    const configuredPath =
+      resolveExecutablePathSetting(config.executablePath as string | undefined, settingPathContext(folder)) ??
+      configuredExecutablePath(folder);
+    const executablePath = anchorCommandPath(
+      resolveExecutablePath(configuredPath, this.context.extensionPath),
+      process.cwd()
+    );
+    const caseGate = evaluateCaseSelection(
+      await run(executablePath, ['collect', '--cut', cutPath, '--json']),
+      String(config.case),
+      cutPath
+    );
+    if (caseGate.blocked) return caseGate.message;
+    const lintGate = evaluateLintResult(
+      await run(
+        executablePath,
+        buildLintArgs({
+          program: config.program as string,
+          cut: cutPath,
+          copybookPaths: config.copybookPaths as string[] | undefined,
+        })
+      )
+    );
+    return lintGate.blocked ? lintGate.message : undefined;
+  }
+
+  private withDefaults(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): vscode.DebugConfiguration {
     const resolved = absolutizeDebugPaths(
       { ...config, program: config.program, cut: config.cut, copybookPaths: config.copybookPaths as string[] | undefined },
       folder?.uri.fsPath

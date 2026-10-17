@@ -71,8 +71,13 @@
   },
   "Shared mocks for every test case": {
     "prefix": "before-each-mock",
-    "body": ["BEFORE-EACH", "    MOCK ${1|CALL,OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
-    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these)"
+    "body": ["BEFORE-EACH", "    MOCK ${1|OPEN,CLOSE,READ,WRITE,REWRITE,DELETE,START,UNLOCK,SORT,MERGE,RELEASE,RETURN,ACCEPT|} ${2:NAME}", "    END-MOCK", "END-BEFORE"],
+    "description": "BEFORE-EACH block of shared mocks (a TESTCASE mock with the same key overrides these); use before-each-mock-call for a CALL"
+  },
+  "Shared CALL mock for every test case": {
+    "prefix": "before-each-mock-call",
+    "body": ["BEFORE-EACH", "    MOCK CALL \"${1:PROGRAM}\"", "        MOVE ${2:0} TO ${3:WS-RESULT}", "    END-MOCK", "END-BEFORE"],
+    "description": "BEFORE-EACH block with a shared static CALL mock (a TESTCASE MOCK CALL of the same program overrides it)"
   },
   "After each test case": {
     "prefix": "after-each",

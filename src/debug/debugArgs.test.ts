@@ -15,10 +15,14 @@ describe('buildDebugArgs', () => {
       '/ws/ACCTPRG.cbl',
       '--cut',
       '/ws/ACCTPRG.cut',
-      '--case',
-      'posts a credit',
+      '--case=posts a credit',
       '--dap-stdio',
     ]);
+  });
+
+  it('keeps a case name starting with "-" attached to --case', () => {
+    const config: MockymockDebugConfiguration = { program: 'P.cbl', cut: 'P.cut', case: '-fetches' };
+    assert.ok(buildDebugArgs(config).includes('--case=-fetches'));
   });
 
   it('always includes --dap-stdio even if the caller omits it from config', () => {
@@ -39,8 +43,7 @@ describe('buildDebugArgs', () => {
       'P.cbl',
       '--cut',
       'P.cut',
-      '--case',
-      'a',
+      '--case=a',
       '--dap-stdio',
       '--copybook-path',
       '/ws/copybooks',

@@ -16,7 +16,7 @@ import * as vscode from 'vscode';
 import { resolveCblPath } from '../discovery/cutDiscovery';
 import { runCommandIn } from '../environment/commandRunner';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { hasSuggestedFix } from './lintCodeActionLogic';
+import { describePartialFill, hasSuggestedFix, parseFillOutcome } from './lintCodeActionLogic';
 
 export const FILL_MISSING_MOCKS_COMMAND = 'mockymock.fillMissingMocks';
 
@@ -99,12 +99,19 @@ export function activateLintCodeActions(
         () => runCommandIn(path.dirname(cutPath))(executablePath, args)
       );
       if (result.code !== 0) {
-        void vscode.window.showErrorMessage(
-          `mockymock couldn't fill in the missing mocks: ${result.stderr || result.stdout || 'unknown error'}`
-        );
-        return;
+        // A non-zero exit after inserting blocks still changed the file:
+        // say what's left, and re-lint so the squiggles match it.
+        const outcome = parseFillOutcome(result.stdout);
+        if (outcome.added === 0) {
+          void vscode.window.showErrorMessage(
+            `mockymock couldn't fill in the missing mocks: ${result.stderr || result.stdout || 'unknown error'}`
+          );
+          return;
+        }
+        void vscode.window.showWarningMessage(describePartialFill(outcome));
+      } else {
+        void vscode.window.showInformationMessage(result.stdout.trim() || 'Mock blocks filled in.');
       }
-      void vscode.window.showInformationMessage(result.stdout.trim() || 'Mock blocks filled in.');
       // The file changed on disk, not through the editor -- wait for VS
       // Code's own reload of the open buffer before asking for a fresh
       // lint pass, so the new lines are what the diagnostic positions

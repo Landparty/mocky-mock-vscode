@@ -6,29 +6,42 @@ import * as path from 'path';
 import {
   parseCutFile,
   resolveCblPath,
+  suitesForProgram,
   isExcludedCutPath,
   cutSuitesFromCollectJson,
   CutSuite,
   CUT_DISCOVERY_EXCLUDE_GLOB,
+  isSameOrUnder,
 } from '../discovery/cutDiscovery';
 import { parseJUnitXml } from './junitParser';
-import { mapResults, unattributedFailures, CaseOutcome, UnattributedFailure } from './resultMapper';
-import { parseJsonReport, mapJsonReport, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
-import { parseCoverageJson } from './coverageReport';
+import {
+  mapResultsForCases,
+  unattributedFailures,
+  unexplainedExitProblem,
+  CaseOutcome,
+  ExpectedCase,
+  UnattributedFailure,
+} from './resultMapper';
+import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, formatAdvisorySignals, formatDuplicateCaseStarts, formatRiskyPass } from './jsonReport';
+import { parseCoverageJson, mergeCoverage, CoverageData } from './coverageReport';
 import { runSuite } from './mockymockRunner';
-import { parseMutationJson, survivorsOf, MutantEntry } from './mutationReport';
+import { DiscoveryTracker } from './discoveryTracker';
+import { parseMutationJson, survivorsOf, survivorReason, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
-import { EnvironmentManager } from '../environment/environmentManager';
+import { pairingError } from '../discovery/suitePairing';
+import { EnvironmentManager, ReadyResult } from '../environment/environmentManager';
 import {
   describeTooOldCli,
   resolveExecutablePath,
   supportsDebugCommand,
   supportsMutateCommand,
 } from '../environment/checks';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { configuredExecutablePath, resolveInvocationConfig } from '../environment/invocationConfig';
+import { saveBeforeCli } from '../environment/saveBeforeCli';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
+import { PREFLIGHTED } from '../debug/debugConfigurationProvider';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
 
 interface FilePlan {
@@ -103,7 +116,7 @@ export function activateTestController(
     const line = Math.max(0, m.line - 1);
     const diagnostic = new vscode.Diagnostic(
       new vscode.Range(line, 0, line, Number.MAX_SAFE_INTEGER),
-      `surviving mutant [${m.operator}] ${m.description}: every test still passes when this line becomes "${m.mutated.trim()}"` +
+      `surviving mutant [${m.operator}] ${m.description}: ${survivorReason(m)}` +
         (m.hint ? `\n${m.hint}` : ''),
       vscode.DiagnosticSeverity.Warning
     );
@@ -122,7 +135,7 @@ export function activateTestController(
 
   function resolveConfiguredExecutable(uri: vscode.Uri): string {
     return resolveExecutablePath(
-      vscode.workspace.getConfiguration('mockymock', uri).get<string>('executablePath'),
+      configuredExecutablePath(vscode.workspace.getWorkspaceFolder(uri)),
       context.extensionPath
     );
   }
@@ -142,8 +155,17 @@ export function activateTestController(
     return parseCutFile(text);
   }
 
-  async function discoverAndBuild(uri: vscode.Uri) {
-    if (isExcludedCutPath(uri.fsPath)) return;
+  // Only the newest discovery of a file may replace its TestItem (see
+  // DiscoveryTracker); removeFile supersedes any still in flight too.
+  const discoveries = new DiscoveryTracker();
+
+  function discoverAndBuild(uri: vscode.Uri): Promise<void> {
+    return discoveries.track(discoverAndBuildNow(uri));
+  }
+
+  async function discoverAndBuildNow(uri: vscode.Uri) {
+    if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
+    const generation = discoveries.begin(uri.toString());
     let text: string;
     try {
       text = await fs.readFile(uri.fsPath, 'utf8');
@@ -151,6 +173,7 @@ export function activateTestController(
       return;
     }
     const suites = await discoverSuites(uri, text);
+    if (!discoveries.isCurrent(uri.toString(), generation)) return;
 
     const fileItem = controller.createTestItem(uri.toString(), path.basename(uri.fsPath), uri);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
@@ -183,6 +206,8 @@ export function activateTestController(
   }
 
   function removeFile(uri: vscode.Uri) {
+    // Supersedes any discovery still in flight, which would re-add the file.
+    discoveries.begin(uri.toString());
     controller.items.delete(uri.toString());
     fileItems.delete(uri.toString());
   }
@@ -215,10 +240,61 @@ export function activateTestController(
   });
   watcher.onDidDelete(removeFile);
 
+  // The file watcher folds a folder delete/rename into one event for the
+  // folder, which `**/*.cut` never matches -- so a deleted or renamed folder
+  // of suites would leave stale items behind and never show the moved ones.
+  // These workspace events do report folder operations (made in VS Code).
+  function removeUnder(folder: vscode.Uri) {
+    // Through removeFile, so a discovery still in flight under the folder --
+    // including a file's first one, not yet in fileItems -- can't re-add it.
+    for (const key of discoveries.keys()) {
+      const uri = vscode.Uri.parse(key);
+      if (isSameOrUnder(uri.fsPath, folder.fsPath)) removeFile(uri);
+    }
+    for (const fileItem of [...fileItems.values()]) {
+      if (fileItem.uri && isSameOrUnder(fileItem.uri.fsPath, folder.fsPath)) removeFile(fileItem.uri);
+    }
+  }
+  async function discoverUnder(target: vscode.Uri) {
+    if (target.fsPath.endsWith('.cut')) {
+      await discoverAndBuild(target);
+      return;
+    }
+    const uris = await vscode.workspace.findFiles(
+      new vscode.RelativePattern(target, '**/*.cut'),
+      CUT_DISCOVERY_EXCLUDE_GLOB
+    );
+    for (const uri of uris) await discoverAndBuild(uri);
+  }
+  context.subscriptions.push(
+    vscode.workspace.onDidDeleteFiles((e) => e.files.forEach(removeUnder)),
+    vscode.workspace.onDidRenameFiles((e) => {
+      for (const { oldUri, newUri } of e.files) {
+        removeUnder(oldUri);
+        void discoverUnder(newUri).catch(() => undefined);
+      }
+    })
+  );
+
   controller.resolveHandler = async (item) => {
     if (!item) {
       await discoverAllCutFiles().catch(() => undefined);
     }
+  };
+  // Test Explorer's Refresh: also drops items whose file is gone (deleted
+  // outside VS Code, where no folder event reaches the extension).
+  controller.refreshHandler = async () => {
+    await Promise.all(
+      [...fileItems.values()].map(async (fileItem) => {
+        if (!fileItem.uri) return;
+        try {
+          await fs.access(fileItem.uri.fsPath);
+        } catch {
+          removeFile(fileItem.uri);
+        }
+      })
+    );
+    await discoverAllCutFiles().catch(() => undefined);
   };
   void discoverAllCutFiles().catch(() => undefined);
 
@@ -397,11 +473,25 @@ export function activateTestController(
     });
   }
 
+  // One setup attempt per test run, shared by every file in it. ensureReady()
+  // only dedupes a probe while it is in flight, so files run one after
+  // another each started a fresh attempt: with Docker unable to start, N
+  // suites cost N full 90 s launch-and-wait cycles (and N setup prompts).
+  // Lazy, so nothing is probed for a run that selects no file.
+  function readinessForRun(token: vscode.CancellationToken): () => Promise<ReadyResult> {
+    let ready: Promise<ReadyResult> | undefined;
+    return () => (ready ??= environmentManager.ensureReady(token));
+  }
+
   async function runOneFile(
     plan: FilePlan,
     run: vscode.TestRun,
     token: vscode.CancellationToken,
-    withCoverage: boolean
+    withCoverage: boolean,
+    ensureReady: () => Promise<ReadyResult>,
+    // Collects this file's coverage for the handler, which merges every
+    // suite of a program and adds one FileCoverage per program at the end.
+    collectCoverage: (cblPath: string, coverage: CoverageData) => void
   ) {
     const { fileItem } = plan;
     const selected = new Set(selectedCaseItems(plan));
@@ -421,18 +511,26 @@ export function activateTestController(
       if (wholeFile) run[kind](fileItem, new vscode.TestMessage(message));
     }
 
-    const ready = await environmentManager.ensureReady();
+    const ready = await ensureReady();
+    if (token.isCancellationRequested) {
+      for (const caseItem of selected) run.skipped(caseItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
       failEverything('errored', ready.message);
       return;
     }
-    if (token.isCancellationRequested) {
-      for (const caseItem of selected) run.skipped(caseItem);
-      return;
-    }
 
     const cutPath = fileItem.uri!.fsPath;
+    // The CLI said why it can't pair this suite: report that, not a
+    // "no such file" for a sibling program the user never named.
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      failEverything('errored', unpaired);
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     // mkdtemp, not predictable names in the shared tmpdir: an unguessable
     // per-run directory closes the classic pre-creation/symlink surface, and
@@ -489,12 +587,21 @@ export function activateTestController(
     }
 
     const selectedNames = [...selected].map((c) => c.label);
+    // In .cut order, each with its own 1-based line: the report pairs
+    // results to cases by line, so two same-named TESTCASEs each get their
+    // own verdict rather than the last one's.
+    const expectedItems: vscode.TestItem[] = [];
+    forEachSelectedSuite(plan, selected, (_suiteItem, cases) => expectedItems.push(...cases));
+    const expectedCases: ExpectedCase[] = expectedItems.map((c) => ({
+      name: c.label,
+      line: c.range ? c.range.start.line + 1 : null,
+    }));
     const processFailureMessage = `mockymock run did not produce results:\n${result.stderr || result.stdout}`;
 
     // Prefer the JSON report (locations + expected/actual); fall back to the
     // JUnit XML for a CLI predating --json-report; fall back to the process
     // output when neither was produced (refusal / compile failure).
-    let outcomes: Map<string, CaseOutcome>;
+    let caseOutcomes: CaseOutcome[];
     // FAIL lines mockymock couldn't attribute to any known case id (a
     // MOCK/VERIFY firing after its case already ended, or a framework/binary
     // mismatch) — these don't belong to any TestItem, so nothing above would
@@ -502,13 +609,14 @@ export function activateTestController(
     let orphans: UnattributedFailure[];
     const jsonReport = result.jsonReport ? parseJsonReport(result.jsonReport) : null;
     if (jsonReport) {
-      outcomes = mapJsonReport(selectedNames, jsonReport, processFailureMessage);
-      orphans = jsonReport.orphanFailures;
+      caseOutcomes = mapJsonReportCases(expectedCases, jsonReport, processFailureMessage);
+      orphans = [...jsonReport.orphanFailures, ...unattributedReportFailures(expectedCases, jsonReport)];
     } else {
       const junitSuite = result.junitXml ? parseJUnitXml(result.junitXml) : null;
-      outcomes = mapResults(selectedNames, junitSuite, junitSuite ? undefined : processFailureMessage);
+      caseOutcomes = mapResultsForCases(expectedCases, junitSuite, junitSuite ? undefined : processFailureMessage);
       orphans = unattributedFailures(selectedNames, junitSuite);
     }
+    const outcomes = new Map(expectedItems.map((item, i) => [item, caseOutcomes[i]]));
 
     let fileHasFailed = false;
     let fileHasErrored = false;
@@ -516,7 +624,7 @@ export function activateTestController(
       let suiteHasFailed = false;
       let suiteHasErrored = false;
       for (const caseItem of cases) {
-        const outcome = outcomes.get(caseItem.label);
+        const outcome = outcomes.get(caseItem);
         if (!outcome || outcome.kind === 'passed') {
           run.passed(caseItem);
           if (outcome?.risky) {
@@ -566,6 +674,16 @@ export function activateTestController(
     if (duplicates) {
       gatingProblems.push(duplicates);
     }
+    // Orphans and duplicate starts already explain a nonzero exit.
+    const unexplainedExit = unexplainedExitProblem(
+      result.exitCode,
+      fileHasFailed || fileHasErrored || gatingProblems.length > 0,
+      result.stderr,
+      result.stdout
+    );
+    if (unexplainedExit) {
+      gatingProblems.push(unexplainedExit);
+    }
 
     if (gatingProblems.length) {
       const summary = gatingProblems.join('\n\n');
@@ -587,22 +705,27 @@ export function activateTestController(
 
     if (withCoverage && result.coverageJson) {
       const coverage = parseCoverageJson(result.coverageJson);
-      if (coverage) {
-        const fileCoverage = new vscode.FileCoverage(
-          vscode.Uri.file(cblPath),
-          new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
-        );
-        coverageDetails.set(
-          fileCoverage,
-          coverage.lines.map(
-            // Clamped for the same reason as messagesForOutcome's location:
-            // a "line": 0 in the coverage JSON must not throw out of runOneFile.
-            (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
-          )
-        );
-        run.addCoverage(fileCoverage);
-      }
+      if (coverage) collectCoverage(cblPath, coverage);
     }
+  }
+
+  // One FileCoverage per program. VS Code keys file coverage by URI and a
+  // second addCoverage for the same .cbl replaces the first, so several
+  // suites of one program must be merged before they are added.
+  function addProgramCoverage(run: vscode.TestRun, cblPath: string, coverage: CoverageData) {
+    const fileCoverage = new vscode.FileCoverage(
+      vscode.Uri.file(cblPath),
+      new vscode.TestCoverageCount(coverage.totalCovered, coverage.totalExecutable)
+    );
+    coverageDetails.set(
+      fileCoverage,
+      coverage.lines.map(
+        // Clamped for the same reason as messagesForOutcome's location:
+        // a "line": 0 in the coverage JSON must not throw out of the handler.
+        (l) => new vscode.StatementCoverage(l.covered ? 1 : 0, new vscode.Position(Math.max(0, l.line - 1), 0))
+      )
+    );
+    run.addCoverage(fileCoverage);
   }
 
   // "Mutation Test": run `mockymock mutate` for a .cut file -- every mutant
@@ -614,7 +737,12 @@ export function activateTestController(
   // binary and every mutant faces all of it -- so any narrower selection
   // collapses to the whole file, with a note in the output. Verdicts land on
   // the FILE item only: mutation scores the suite, not individual cases.
-  async function runMutationFile(plan: FilePlan, run: vscode.TestRun, token: vscode.CancellationToken) {
+  async function runMutationFile(
+    plan: FilePlan,
+    run: vscode.TestRun,
+    token: vscode.CancellationToken,
+    ensureReady: () => Promise<ReadyResult>
+  ) {
     const { fileItem } = plan;
     run.started(fileItem);
     if (plan.caseItems !== null) {
@@ -635,14 +763,21 @@ export function activateTestController(
     const cblPath = resolveCblPath(cutPath);
     const cblUri = vscode.Uri.file(cblPath);
 
-    const ready = await environmentManager.ensureReady();
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, fileItem);
+      run.errored(fileItem, new vscode.TestMessage(unpaired));
+      return;
+    }
+
+    const ready = await ensureReady();
+    if (token.isCancellationRequested) {
+      run.skipped(fileItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, fileItem);
       run.errored(fileItem, new vscode.TestMessage(ready.message));
-      return;
-    }
-    if (token.isCancellationRequested) {
-      run.skipped(fileItem);
       return;
     }
 
@@ -709,7 +844,7 @@ export function activateTestController(
       const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
       const messages = survivors.map((m) => {
         const message = vscode.TestMessage.diff(
-          `surviving mutant [${m.operator}] ${m.description} -- the tests never noticed this change (mutation score ${scoreText})` +
+          `surviving mutant [${m.operator}] ${m.description} -- ${m.ran ? 'the tests never noticed this change' : survivorReason(m)} (mutation score ${scoreText})` +
             (m.hint ? `\n${m.hint}` : ''),
           m.original,
           m.mutated
@@ -767,19 +902,25 @@ export function activateTestController(
     const plan = plans.find((p) => selectedCaseItems(p).includes(caseItem))!;
     run.started(caseItem);
 
-    const ready = await environmentManager.ensureReady();
+    const ready = await environmentManager.ensureReady(token);
+    if (token.isCancellationRequested) {
+      run.skipped(caseItem);
+      return;
+    }
     if (!ready.ok) {
       run.appendOutput(toCrlf(`${ready.message}\n`), undefined, caseItem);
       run.errored(caseItem, new vscode.TestMessage(ready.message));
       return;
     }
-    if (token.isCancellationRequested) {
-      run.skipped(caseItem);
-      return;
-    }
 
     const cutUri = plan.fileItem.uri!;
     const cutPath = cutUri.fsPath;
+    const unpaired = pairingError(cutPath);
+    if (unpaired !== undefined) {
+      run.appendOutput(toCrlf(`mockymock: ${unpaired}\n`), undefined, caseItem);
+      run.errored(caseItem, new vscode.TestMessage(unpaired));
+      return;
+    }
     const cblPath = resolveCblPath(cutPath);
     const { executablePath, copybookPaths } = resolveInvocationConfig(context, cutUri);
 
@@ -822,6 +963,8 @@ export function activateTestController(
       case: caseItem.label,
       executablePath,
       copybookPaths,
+      // Already through ensureReady() and the lint gate above.
+      [PREFLIGHTED]: true,
     };
 
     // Captured so a Test Results panel cancel can actually stop the session
@@ -879,7 +1022,7 @@ export function activateTestController(
       // selection whenever a .cut (or its paired COBOL source) changes, until
       // the user turns the eye icon off (token cancellation).
       if (request.continuous) {
-        const continuousWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol}');
+        const continuousWatcher = vscode.workspace.createFileSystemWatcher('**/*.{cut,cbl,cob,cobol,CBL,COB,COBOL}');
         // Debounced + single-flight: the watcher fires on every save, and a
         // fast save sequence (or format-on-save's double write) used to stack
         // overlapping full runs -- overlapping compiles inside the shared
@@ -896,6 +1039,12 @@ export function activateTestController(
           }
           running = true;
           try {
+            // A .cut save also starts a rediscovery (the watcher above).
+            // Run against the tree it produces, not the one it replaces --
+            // or a renamed case runs under its old name and a new one not
+            // at all.
+            await discoveries.idle();
+            if (token.isCancellationRequested) return;
             const include = request.include?.length ? request.include : undefined;
             await handler(new vscode.TestRunRequest(include, request.exclude, request.profile), token);
           } finally {
@@ -911,14 +1060,15 @@ export function activateTestController(
           rerunTimer = setTimeout(() => void fireRerun(), 300);
         }
         const rerun = (uri: vscode.Uri) => {
-          if (isExcludedCutPath(uri.fsPath)) return;
-          const cutFsPath = uri.fsPath.endsWith('.cut')
-            ? uri.fsPath
-            : uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');
-          const cutUri = vscode.Uri.file(cutFsPath).toString();
-          if (!fileItems.has(cutUri)) return;
-          const relevant =
-            !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          if (isExcludedCutPath(uri.fsPath, vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath)) return;
+          // A program change reruns every suite paired with it -- under
+          // tests/, PROG.<topic>.cut siblings, not just a sibling PROG.cut.
+          const cutFsPaths = uri.fsPath.endsWith('.cut') ? [uri.fsPath] : suitesForProgram(uri.fsPath);
+          const relevant = cutFsPaths.some((cutFsPath) => {
+            const cutUri = vscode.Uri.file(cutFsPath).toString();
+            if (!fileItems.has(cutUri)) return false;
+            return !request.include || request.include.some((item) => item.uri?.toString() === cutUri);
+          });
           if (!relevant) return;
           scheduleRerun();
         };
@@ -940,20 +1090,38 @@ export function activateTestController(
       await handler(request, token);
     };
 
-    async function handler(request: vscode.TestRunRequest, token: vscode.CancellationToken) {
+    async function handler(request: vscode.TestRunRequest, outerToken: vscode.CancellationToken) {
       const run = controller.createTestRun(request);
+      // Same merge as the Mutation Test profile: a continuous-mode rerun
+      // passes the continuous request's token, which the Test Results Stop
+      // button never reaches -- it cancels run.token. Either one stops it.
+      const cancel = new vscode.CancellationTokenSource();
+      const cancelListeners = [outerToken, run.token].map((t) => t.onCancellationRequested(() => cancel.cancel()));
+      const token = cancel.token;
+      // Keyed like suitesForProgram (case-insensitive on Windows): suites in
+      // different folders can name one program by differently-spelled paths.
+      const coverageByProgram = new Map<string, { cblPath: string; coverage: CoverageData }>();
+      const collectCoverage = (cblPath: string, coverage: CoverageData) => {
+        const key = process.platform === 'win32' ? path.resolve(cblPath).toLowerCase() : path.resolve(cblPath);
+        const earlier = coverageByProgram.get(key);
+        coverageByProgram.set(key, {
+          cblPath,
+          coverage: earlier ? mergeCoverage(earlier.coverage, coverage) : coverage,
+        });
+      };
       try {
         const plans = planRuns(request);
         const configured =
           vscode.workspace.getConfiguration('mockymock').get<number>('maxParallelRuns') ?? 1;
         const parallelism = Math.max(1, Math.floor(configured));
+        const ensureReady = readinessForRun(token);
 
         let next = 0;
         async function worker() {
           while (next < plans.length && !token.isCancellationRequested) {
             const plan = plans[next++];
             try {
-              await runOneFile(plan, run, token, withCoverage);
+              await runOneFile(plan, run, token, withCoverage, ensureReady, collectCoverage);
             } catch (err) {
               // Never leave a "started" item without a terminal state: if
               // runOneFile threw after marking items started, error out the
@@ -972,7 +1140,10 @@ export function activateTestController(
         await Promise.all(
           Array.from({ length: Math.min(parallelism, Math.max(plans.length, 1)) }, () => worker())
         );
+        for (const { cblPath, coverage } of coverageByProgram.values()) addProgramCoverage(run, cblPath, coverage);
       } finally {
+        cancelListeners.forEach((l) => l.dispose());
+        cancel.dispose();
         run.end();
       }
     }
@@ -1044,10 +1215,11 @@ export function activateTestController(
         for (const plan of plans) {
           mutationDiagnostics.delete(vscode.Uri.file(resolveCblPath(plan.fileItem.uri!.fsPath)));
         }
+        const ensureReady = readinessForRun(token);
         for (const plan of plans) {
           if (token.isCancellationRequested) break;
           try {
-            await runMutationFile(plan, run, token);
+            await runMutationFile(plan, run, token, ensureReady);
           } catch (err) {
             // Never leave a "started" item without a terminal state: same
             // guard as makeRunHandler's worker for "Run"/"Run with
@@ -1082,7 +1254,14 @@ export function activateTestController(
         void vscode.window.showWarningMessage('mockymock: open a .cut test suite to run mutation testing on it.');
         return;
       }
-      if (!fileItems.has(uri.toString())) await discoverAndBuild(uri);
+      // Calling the run handler directly bypasses testing.saveBeforeTest,
+      // so save the suite and its program here: the CLI reads them from disk.
+      if (!(await saveBeforeCli([uri.fsPath, resolveCblPath(uri.fsPath)], 'running mutation testing'))) return;
+      // The save may have changed the suite: build its item from what is on
+      // disk now, and let the watcher's own rediscovery land, before the run
+      // takes the item -- a later one would replace it mid-run.
+      await discoverAndBuild(uri);
+      await discoveries.idle();
       const fileItem = fileItems.get(uri.toString());
       if (!fileItem) {
         void vscode.window.showWarningMessage(`mockymock: no test suite found in ${path.basename(uri.fsPath)}.`);

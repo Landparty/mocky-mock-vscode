@@ -17,6 +17,7 @@ export type SetupState =
   | 'installing'
   | 'docker-stopped'
   | 'docker-failed'
+  | 'docker-denied'
   | 'docker-missing';
 
 export interface StatusPresentation {
@@ -47,8 +48,10 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
       return {
         text: '$(warning) mockymock: CLI not found',
         background: 'statusBarItem.warningBackground',
-        summary: 'The mockymock CLI could not be found.',
-        clickHint: 'Click to install it.',
+        summary: detail ?? 'The mockymock CLI could not be found.',
+        // With a detail, the CLI is a configured one that won't run: Check
+        // Setup reports it rather than installing another copy.
+        clickHint: detail ? 'Click to re-check your setup.' : 'Click to install it.',
       };
     case 'cli-blocked':
       return {
@@ -76,6 +79,13 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
         background: 'statusBarItem.errorBackground',
         summary: detail ?? 'Docker Desktop did not start in time.',
         clickHint: 'Click to try again.',
+      };
+    case 'docker-denied':
+      return {
+        text: '$(error) mockymock: Docker access denied',
+        background: 'statusBarItem.errorBackground',
+        summary: detail ?? "Docker is running, but your user can't access it.",
+        clickHint: 'Click to re-check once you have access.',
       };
     case 'docker-missing':
       return {

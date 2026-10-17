@@ -128,6 +128,11 @@
           "command": "mockymock.fillMissingMocks",
           "when": "resourceLangId == cut",
           "group": "mockymock@1"
+        },
+        {
+          "command": "mockymock.exportMainframe",
+          "when": "resourceLangId == cut || resourceLangId == cobol && mockymock.activeProgramHasSuite",
+          "group": "mockymock@1"
         }
       ],
       "explorer/context": [
@@ -143,7 +148,7 @@
         },
         {
           "command": "mockymock.exportMainframe",
-          "when": "resourceLangId == cut",
+          "when": "resourceLangId == cut || resourceLangId == cobol && !(resourceFilename =~ /\\.mainframe\\.cbl$/)",
           "group": "7_mockymock@2"
         }
       ],
@@ -313,7 +318,7 @@
           "default": [],
           "scope": "resource",
           "order": 1,
-          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
+          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
         },
         "mockymock.lintOnSave": {
           "type": "boolean",
@@ -341,7 +346,7 @@
           "type": "string",
           "default": "",
           "order": 5,
-          "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build."
+          "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build.\n\nA relative path (e.g. `.venv/bin/mockymock`) resolves against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded. A bare name (`mockymock`) is looked up on `PATH`."
         }
       }
     },
@@ -371,7 +376,7 @@
           {
             "id": "createSuite",
             "title": "Create your first test suite",
-            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per paragraph, with every CALL, file, SQL, CICS and IMS boundary already mocked.\n[Create a Test Suite](command:mockymock.newTestSuite)",
+            "description": "Open a COBOL program (.cbl, .cob or .cobol), then create a .cut test suite for it under tests/. mockymock reads the program and scaffolds one test case per scenario through its entry point, with every CALL, file, SQL, CICS and IMS boundary already mocked. With Docker running it also records today's values as EXPECT lines.\n[Create a Test Suite](command:mockymock.newTestSuite)",
             "media": {
               "markdown": "walkthroughs/create-suite.md"
             },

@@ -15,6 +15,7 @@ import { activateCutCompletion } from './completion/cutCompletionProvider';
 import { activateCutHover } from './hover/cutHoverProvider';
 import { activateLintCodeActions } from './linting/lintCodeActionProvider';
 import { resolveExecutablePath } from './environment/checks';
+import { configuredExecutablePath } from './environment/invocationConfig';
 import { runCommandIn } from './environment/commandRunner';
 import { formatDoctorReport, parseDoctorJson, projectProblems } from './environment/doctorReport';
 import { activateCounterpartNavigation } from './navigation/counterpart';
@@ -42,7 +43,7 @@ async function runDoctor(context: vscode.ExtensionContext, channel: vscode.Outpu
   // Resolved exactly as EnvironmentManager.ensureReady resolves it, so doctor
   // reports on the same CLI the readiness check just probed.
   const executablePath = resolveExecutablePath(
-    vscode.workspace.getConfiguration('mockymock').get<string>('executablePath'),
+    configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
     context.extensionPath
   );
   const result = await runCommandIn(cwd ?? process.cwd())(executablePath, ['doctor', '--json']);
@@ -80,7 +81,7 @@ export function activate(context: vscode.ExtensionContext) {
       MOCKYMOCK_DEBUG_TYPE,
       new MockymockDebugAdapterDescriptorFactory(context.extensionPath)
     ),
-    vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider(context))
+    vscode.debug.registerDebugConfigurationProvider(MOCKYMOCK_DEBUG_TYPE, new MockymockDebugConfigurationProvider(context, environmentManager))
   );
 
   const setupChannel = vscode.window.createOutputChannel('mockymock: Setup');
@@ -89,10 +90,19 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('mockymock.checkEnvironment', async () => {
       const result = await environmentManager.ensureReady();
-      // On failure ensureReady() has already shown the relevant actionable
-      // prompt itself (install the CLI, start Docker, open the download
-      // page); a success needs its own feedback since the status bar text
-      // change alone is easy to miss on a deliberate "is this set up?" click.
+      // On most failures ensureReady() has already shown the relevant
+      // actionable prompt itself (install the CLI, open the download page);
+      // the rest (Docker failed to start, no access to Docker) only change
+      // the status bar, which is easy to miss on a deliberate "is this set
+      // up?" click -- and so is a success, which needs its own feedback too.
+      if (!result.ok) {
+        if (!result.reported) {
+          const tryAgain = 'Try Again';
+          const choice = await vscode.window.showErrorMessage(`mockymock: ${result.message}`, tryAgain);
+          if (choice === tryAgain) await vscode.commands.executeCommand('mockymock.checkEnvironment');
+        }
+        return;
+      }
       // In a workspace with no suite yet, "ready" naturally leads to "so
       // write one" -- offer that next step right on the toast.
       if (result.ok) {

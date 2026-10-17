@@ -8,6 +8,7 @@ import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../environment/cobolPaths';
 import { runExport } from './exportRunner';
+import { saveBeforeCli } from '../environment/saveBeforeCli';
 
 function defaultOutputPath(cblPath: string): string {
   const parsed = path.parse(cblPath);
@@ -84,6 +85,10 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
         await showCliProblem(message, executablePath, context.extensionPath);
         return;
       }
+
+      // The CLI reads both files from disk: unsaved MOCKs or cases would
+      // silently be missing from the exported source.
+      if (!(await saveBeforeCli([cblPath, cutPath], 'exporting'))) return;
 
       const outputPath = defaultOutputPath(cblPath);
 

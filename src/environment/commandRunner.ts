@@ -60,6 +60,14 @@ export function anchorCommandPath(command: string, baseDir: string): string {
 // In practice unreachable -- `"` is illegal in Windows filenames and .cut case names
 // can't contain it -- but wrong is wrong.
 //
+// Backslashes matter to the CHILD, not to cmd.exe: the bundled CPython (like every
+// MSVC-built program) splits its command line with the CRT rules, where a run of
+// backslashes followed by `"` is halved and `\"` reads as an escaped literal quote. So
+// a trailing separator -- `"D:\Common Cpy\"`, an ordinary copybookPaths entry -- used
+// to swallow the closing quote and run on into the next argument. Every run of
+// backslashes that precedes a `"` or the closing quote is therefore doubled; backslashes
+// anywhere else are literal and stay as they are.
+//
 // Known residual gap: `%VAR%` expands inside cmd.exe double quotes and cannot be
 // escaped on a non-batch command line at all, so a path containing a spelled-out
 // existing environment variable name between two % signs is still rewritten. There is
@@ -74,7 +82,8 @@ export function quoteArgForWindowsShell(arg: string): string {
     return '""'; // an unquoted empty arg would vanish from the joined command line
   }
   if (CMD_NEEDS_QUOTING.test(arg)) {
-    return `"${arg.replace(/"/g, '""')}"`;
+    const escaped = arg.replace(/(\\*)"/g, '$1$1""').replace(/(\\+)$/, '$1$1');
+    return `"${escaped}"`;
   }
   return arg;
 }
@@ -88,6 +97,39 @@ export function quoteArgForWindowsShell(arg: string): string {
 // chasing the wrong fix (reinstalling something that's already there).
 export function describeSpawnError(err: NodeJS.ErrnoException): string {
   return err.code === 'EACCES' ? 'permission denied' : 'command not found';
+}
+
+// Starts a long-running GUI app (Docker Desktop.exe on Windows) and returns as
+// soon as it has spawned. runCommand can't be used for one: it settles on
+// 'close', which waits for every holder of the child's piped stdout/stderr
+// -- the app itself, for as long as it runs. Detached with ignored stdio and
+// no shell (the path is spawned as-is, so it needs no quoting), unref'd so
+// it never holds the extension host open; only a spawn error is a failure.
+export function launchDetached(command: string, args: string[]): Promise<CommandResult> {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { detached: true, stdio: 'ignore', shell: false });
+    } catch (err) {
+      resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
+      return;
+    }
+    child.on('error', (err) =>
+      resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) })
+    );
+    child.on('spawn', () => {
+      child.unref();
+      resolve({ code: 0, stdout: '', stderr: '' });
+    });
+  });
+}
+
+// On Windows the spawned child is cmd.exe (shell: true), and killing it --
+// what spawn's own `signal` does -- leaves the process tree it started
+// (mockymock.exe, its docker exec, every remaining mutant) running. taskkill
+// /T ends the whole tree.
+export function windowsTreeKillCommand(pid: number): { command: string; args: string[] } {
+  return { command: 'taskkill', args: ['/pid', String(pid), '/T', '/F'] };
 }
 
 export const runCommand: CommandRunner = (command, args, onOutput, signal, cwd) => {
@@ -119,13 +161,30 @@ export const runCommand: CommandRunner = (command, args, onOutput, signal, cwd) 
       // ignore both variables.
       child = spawn(spawnCommand, spawnArgs, {
         shell: useShell,
-        signal,
+        // On Windows the abort is handled below instead (process tree kill).
+        signal: useShell ? undefined : signal,
         cwd,
         env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
       });
     } catch (err) {
       resolve({ code: -1, stdout: '', stderr: describeSpawnError(err as NodeJS.ErrnoException) });
       return;
+    }
+    if (useShell && signal) {
+      const spawned = child;
+      const onAbort = () => {
+        if (spawned.pid !== undefined) {
+          const kill = windowsTreeKillCommand(spawned.pid);
+          spawn(kill.command, kill.args, { shell: false, windowsHide: true }).on('error', () => undefined);
+        }
+        resolve({ code: -1, stdout, stderr: 'run cancelled' });
+      };
+      if (signal.aborted) {
+        onAbort();
+      } else {
+        signal.addEventListener('abort', onAbort, { once: true });
+        spawned.on('close', () => signal.removeEventListener('abort', onAbort));
+      }
     }
     // StringDecoder (not Buffer.toString per chunk): a multi-byte UTF-8
     // character split across two stream chunks would otherwise decode as two

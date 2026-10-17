@@ -41,7 +41,7 @@ async function explainCode(
 export function activateCutHover(context: vscode.ExtensionContext): void {
   const provider: vscode.HoverProvider = {
     async provideHover(document, position) {
-      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath)) {
+      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) {
         return undefined;
       }
       const range = document.getWordRangeAtPosition(position, /[A-Za-z0-9_-]+/);

@@ -3,8 +3,12 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
+import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
+import { pairingError } from '../discovery/suitePairing';
+import { isCobolPath, isCopybookPath } from '../environment/cobolPaths';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
 
 // Runs `mockymock lint` (pure static analysis, zero Docker) on every open or
@@ -28,10 +32,25 @@ export function activateLintDiagnostics(
   // re-lint rather than stacking processes.
   const inFlight = new Set<string>();
   const queued = new Set<string>();
+  // The program each open .cut was last linted against (whether or not it
+  // existed), so a pairing that changes later -- the CLI's answer arriving
+  // after activation, a program created or deleted -- can re-lint exactly
+  // the suites it affects.
+  const lintedAgainst = new Map<string, string>();
+  // What a suite lints against: its program, or -- when the CLI said why it
+  // could not pair the suite -- that reason, behind a NUL so it can never
+  // equal a real path.
+  const lintTarget = (cutPath: string): string => {
+    const error = pairingError(cutPath);
+    return error !== undefined ? `\0${error}` : resolveCblPath(cutPath);
+  };
+
+  const isOpen = (uri: vscode.Uri): boolean =>
+    vscode.workspace.textDocuments.some((d) => d.uri.toString() === uri.toString());
 
   async function lintDocument(document: vscode.TextDocument): Promise<void> {
     if (!document.uri.fsPath.endsWith('.cut') || document.uri.scheme !== 'file') return;
-    if (isExcludedCutPath(document.uri.fsPath)) return;
+    if (isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) return;
     const config = vscode.workspace.getConfiguration('mockymock', document.uri);
     if (!(config.get<boolean>('lintOnSave') ?? true)) {
       collection.delete(document.uri);
@@ -45,7 +64,24 @@ export function activateLintDiagnostics(
     }
     inFlight.add(cutPath);
     try {
+      const unpaired = pairingError(cutPath);
+      if (unpaired !== undefined) {
+        // The CLI could not pair this suite (two programs share its name,
+        // its PROGRAM line names a missing file): say so on the suite,
+        // exactly as `mockymock lint --cut` would, rather than linting a
+        // guessed sibling or staying silent.
+        lintedAgainst.set(cutPath, lintTarget(cutPath));
+        const diagnostic = new vscode.Diagnostic(
+          new vscode.Range(0, 0, 0, Math.max(document.lineCount ? document.lineAt(0).text.length : 0, 1)),
+          unpaired,
+          vscode.DiagnosticSeverity.Error
+        );
+        diagnostic.source = 'mockymock';
+        collection.set(document.uri, [diagnostic]);
+        return;
+      }
       const cblPath = resolveCblPath(cutPath);
+      lintedAgainst.set(cutPath, cblPath);
       try {
         await fs.access(cblPath);
       } catch {
@@ -59,6 +95,13 @@ export function activateLintDiagnostics(
       for (const p of copybookPaths) args.push('--copybook-path', p);
 
       const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
+      // The document may have closed while the CLI ran; its close handler
+      // already cleared the diagnostics, so a late result is discarded
+      // rather than left in the Problems panel for a file nobody has open.
+      if (!isOpen(document.uri)) {
+        collection.delete(document.uri);
+        return;
+      }
       const rangeForLine = (cutLine: number | null): vscode.Range => {
         const zeroBased = cutLine !== null ? Math.max(0, cutLine - 1) : 0;
         const lineLength = zeroBased < document.lineCount ? document.lineAt(zeroBased).text.length : 0;
@@ -116,32 +159,90 @@ export function activateLintDiagnostics(
     }
   }
 
+  // A suite is linted against its program, so saving, creating or deleting
+  // a program re-lints every open suite paired with it (before or after).
+  const samePath = (a: string, b: string): boolean =>
+    process.platform === 'win32'
+      ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase()
+      : path.resolve(a) === path.resolve(b);
+  const relintSuitesOf = (programUri: vscode.Uri): void => {
+    if (!isCobolPath(programUri.fsPath)) return;
+    for (const document of vscode.workspace.textDocuments) {
+      if (!document.uri.fsPath.endsWith('.cut')) continue;
+      const previous = lintedAgainst.get(document.uri.fsPath);
+      if (
+        (previous !== undefined && samePath(previous, programUri.fsPath)) ||
+        samePath(resolveCblPath(document.uri.fsPath), programUri.fsPath)
+      ) {
+        void lintDocument(document);
+      }
+    }
+  };
+  const programWatcher = vscode.workspace.createFileSystemWatcher(
+    '**/*.{cbl,cob,cobol,CBL,COB,COBOL}',
+    false,
+    true,
+    false
+  );
+
+  const relintAll = (): void => {
+    for (const document of vscode.workspace.textDocuments) {
+      void lintDocument(document);
+    }
+  };
+
   // A fixed (or newly broken) project config changes every suite's lint
-  // result without any .cut being saved.
+  // result without any .cut being saved -- so does a zapp.yml, whose
+  // library locations become --copybook-path arguments.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const zappWatcher = vscode.workspace.createFileSystemWatcher(ZAPP_FILE_GLOB);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
-    vscode.workspace.onDidSaveTextDocument((document) => void lintDocument(document)),
-    vscode.workspace.onDidCloseTextDocument((document) => collection.delete(document.uri)),
+    vscode.workspace.onDidSaveTextDocument((document) => {
+      void lintDocument(document);
+      relintSuitesOf(document.uri);
+      // Any suite's program may COPY the saved copybook.
+      if (isCopybookPath(document.uri.fsPath)) relintAll();
+    }),
+    programWatcher,
+    programWatcher.onDidCreate(relintSuitesOf),
+    programWatcher.onDidDelete(relintSuitesOf),
+    vscode.workspace.onDidCloseTextDocument((document) => {
+      collection.delete(document.uri);
+      lintedAgainst.delete(document.uri.fsPath);
+    }),
+    // At activation the CLI's pairing isn't known yet, so a suite under
+    // tests/ resolves to a sibling that doesn't exist and lints to nothing;
+    // once `mockymock suites --json` answers, re-lint every open suite
+    // whose program changed.
+    onDidChangeSuitePairing(() => {
+      for (const document of vscode.workspace.textDocuments) {
+        const previous = lintedAgainst.get(document.uri.fsPath);
+        if (previous !== undefined && previous !== lintTarget(document.uri.fsPath)) void lintDocument(document);
+      }
+    }),
     configWatcher,
-    ...[configWatcher.onDidChange, configWatcher.onDidCreate, configWatcher.onDidDelete].map((event) =>
-      event(() => {
-        for (const document of vscode.workspace.textDocuments) {
-          void lintDocument(document);
-        }
-      })
-    ),
+    zappWatcher,
+    ...[
+      configWatcher.onDidChange,
+      configWatcher.onDidCreate,
+      configWatcher.onDidDelete,
+      zappWatcher.onDidChange,
+      zappWatcher.onDidCreate,
+      zappWatcher.onDidDelete,
+    ].map((event) => event(relintAll)),
     // Re-evaluate every open .cut when the toggle flips: turning lintOnSave
     // OFF used to leave existing squiggles in the Problems panel until each
     // file was individually saved or closed (lintDocument's own disabled
     // branch deletes them); turning it ON now lints without waiting for a
     // save. Resource-scoped setting, so per-document re-evaluation (not a
     // blanket collection.clear()) is the correct granularity.
+    // The copybook-path settings and the CLI path change every suite's
+    // result the same way.
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (!e.affectsConfiguration('mockymock.lintOnSave')) return;
-      for (const document of vscode.workspace.textDocuments) {
-        void lintDocument(document);
-      }
+      const settings = ['mockymock.lintOnSave', ...INVOCATION_SETTINGS];
+      if (!settings.some((setting) => e.affectsConfiguration(setting))) return;
+      relintAll();
     })
   );
   for (const document of vscode.workspace.textDocuments) {

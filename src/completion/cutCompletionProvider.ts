@@ -10,18 +10,25 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { isCopybookPath } from '../environment/cobolPaths';
+import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import {
   BoundaryInfo,
+  FlowTargets,
   MOCK_CATEGORIES,
   boundaryKeyCandidates,
   detectCompletionContext,
+  flowTargetsFromSource,
+  keyReplaceLengthAfterCursor,
 } from './cutCompletionLogic';
 
 interface BoundaryCacheEntry {
   cutMtimeMs: number;
   cblMtimeMs: number;
   boundaries: BoundaryInfo[];
+  // MOCK PARAGRAPH / MOCK SECTION keys, scanned from the program text.
+  flowTargets: FlowTargets;
 }
 
 // Keyed by the .cut file's own path -- one cache entry per open document,
@@ -33,7 +40,7 @@ const boundaryCache = new Map<string, BoundaryCacheEntry>();
 async function loadBoundaries(
   context: vscode.ExtensionContext,
   document: vscode.TextDocument
-): Promise<BoundaryInfo[] | null> {
+): Promise<BoundaryCacheEntry | null> {
   const cutPath = document.uri.fsPath;
   const cblPath = resolveCblPath(cutPath);
   const fs = await import('fs/promises');
@@ -51,7 +58,7 @@ async function loadBoundaries(
     cached.cutMtimeMs === cutStat.mtimeMs &&
     cached.cblMtimeMs === cblStat.mtimeMs
   ) {
-    return cached.boundaries;
+    return cached;
   }
 
   const { executablePath, copybookPaths } = resolveInvocationConfig(context, document.uri);
@@ -72,21 +79,30 @@ async function loadBoundaries(
   // broken file does not spawn a CLI process on every keystroke; the next
   // save of either file invalidates it.
   const boundaries = payload.boundaries ?? [];
-  boundaryCache.set(cutPath, {
+  let flowTargets: FlowTargets = { paragraphs: [], sections: [] };
+  try {
+    flowTargets = flowTargetsFromSource((await fs.readFile(cblPath, 'utf8')).split(/\r?\n/));
+  } catch {
+    // unreadable program: no PARAGRAPH/SECTION keys to offer
+  }
+  const entry: BoundaryCacheEntry = {
     cutMtimeMs: cutStat.mtimeMs,
     cblMtimeMs: cblStat.mtimeMs,
     boundaries,
-  });
-  return boundaries;
+    flowTargets,
+  };
+  boundaryCache.set(cutPath, entry);
+  return entry;
 }
 
 export function activateCutCompletion(context: vscode.ExtensionContext): void {
   const provider: vscode.CompletionItemProvider = {
     async provideCompletionItems(document, position) {
-      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath)) {
+      if (document.uri.scheme !== 'file' || isExcludedCutPath(document.uri.fsPath, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath)) {
         return undefined;
       }
-      const lineTextBeforeCursor = document.lineAt(position).text.slice(0, position.character);
+      const lineText = document.lineAt(position).text;
+      const lineTextBeforeCursor = lineText.slice(0, position.character);
       const completionContext = detectCompletionContext(lineTextBeforeCursor);
       if (completionContext === null) return undefined;
 
@@ -102,21 +118,35 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
         const item = new vscode.CompletionItem('ROWS', vscode.CompletionItemKind.Keyword);
         item.range = new vscode.Range(position.translate(0, -completionContext.partial.length), position);
         item.detail =
-          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI call (those also need a TERMINAL ( ... ) line)';
+          'one row per FETCH/READ/RETURN, or one response per CALL/MQ/DLI/CICS call (those also need a TERMINAL ( ... ) line)';
         return [item];
       }
 
-      const boundaries = await loadBoundaries(context, document);
-      if (!boundaries) return undefined;
-      const candidates = boundaryKeyCandidates(boundaries, completionContext.category);
+      const loaded = await loadBoundaries(context, document);
+      if (!loaded) return undefined;
       // Replace exactly the token typed so far (which may start with a
       // quote and contain hyphens): VS Code's default word boundary stops
       // at both, so without an explicit range accepting `INV-FILE` after
-      // typing `INV-F` would yield `INV-INV-FILE`.
+      // typing `INV-F` would yield `INV-INV-FILE`. The range also takes in
+      // an auto-closed quote right after the cursor.
       const range = new vscode.Range(
         position.translate(0, -completionContext.partial.length),
-        position
+        position.translate(
+          0,
+          keyReplaceLengthAfterCursor(completionContext.partial, lineText.slice(position.character))
+        )
       );
+      const category = completionContext.category;
+      if (category === 'PARAGRAPH' || category === 'SECTION') {
+        const targets = category === 'PARAGRAPH' ? loaded.flowTargets.paragraphs : loaded.flowTargets.sections;
+        return targets.map(({ name, line }) => {
+          const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Function);
+          item.range = range;
+          item.detail = `${category.toLowerCase()} at line ${line}`;
+          return item;
+        });
+      }
+      const candidates = boundaryKeyCandidates(loaded.boundaries, category);
       return candidates.map(({ insertText, boundary }) => {
         const item = new vscode.CompletionItem(insertText, vscode.CompletionItemKind.Value);
         item.range = range;
@@ -127,16 +157,26 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
   };
 
   // The cache is keyed on the .cut/.cbl mtimes only, but a project config
-  // change (copybook_path, say) changes what `collect --boundaries` sees.
+  // change (copybook_path, say), a zapp.yml, the copybook-path settings or
+  // a copybook's own contents all change what `collect --boundaries` sees.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const zappWatcher = vscode.workspace.createFileSystemWatcher(ZAPP_FILE_GLOB);
   const dropCache = (): void => boundaryCache.clear();
   context.subscriptions.push(
     configWatcher,
     configWatcher.onDidChange(dropCache),
     configWatcher.onDidCreate(dropCache),
     configWatcher.onDidDelete(dropCache),
+    zappWatcher,
+    zappWatcher.onDidChange(dropCache),
+    zappWatcher.onDidCreate(dropCache),
+    zappWatcher.onDidDelete(dropCache),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (INVOCATION_SETTINGS.some((setting) => e.affectsConfiguration(setting))) dropCache();
+    }),
     vscode.languages.registerCompletionItemProvider('cut', provider, ' '),
     vscode.workspace.onDidSaveTextDocument((document) => {
+      if (isCopybookPath(document.uri.fsPath)) dropCache();
       if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {
         // A saved .cut/.cbl may have changed the boundary set; the mtime
         // check above would already catch this on the next request, but

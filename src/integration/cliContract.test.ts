@@ -57,8 +57,9 @@ const CUT = path.join(EXAMPLE_DIR, 'INVUPDT.cut');
 
 // The long flags an arg-builder actually emits. Values are skipped: a value
 // can legitimately start with "--" only if a path does, which none here do.
+// A `--flag=value` argument (--case=NAME) counts as its flag.
 function longFlags(args: string[]): string[] {
-  return [...new Set(args.filter((a) => a.startsWith('--')))];
+  return [...new Set(args.filter((a) => a.startsWith('--')).map((a) => a.split('=')[0]))];
 }
 
 describe('mockymock CLI contract (live)', function () {

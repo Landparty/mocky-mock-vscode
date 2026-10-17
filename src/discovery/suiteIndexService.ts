@@ -9,13 +9,21 @@
 // Also the one place that asks the CLI where a NEW suite for a program goes
 // (`mockymock suites PROG.cbl [--name topic] --json` -> newSuitePath), so
 // New Test Suite follows the project's tests/ layout instead of guessing.
+import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { runCommand, runCommandIn, PROJECT_CONFIG_GLOB } from '../environment/commandRunner';
 import { supportsSuitesCommand } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
 import { CUT_DISCOVERY_EXCLUDE_GLOB, resolveCutPath } from './cutDiscovery';
-import { parseProgramSuites, parseSuitesListing, setPairings, SuitesListing } from './suitePairing';
+import {
+  isProjectConfigFile,
+  parseProgramSuites,
+  parseSuitesListing,
+  projectConfigDir,
+  setPairings,
+  SuitesListing,
+} from './suitePairing';
 
 const changed = new vscode.EventEmitter<void>();
 
@@ -24,11 +32,41 @@ export const onDidChangeSuitePairing = changed.event;
 
 let extensionContext: vscode.ExtensionContext | undefined;
 
+function readTextOrUndefined(p: string): string | undefined {
+  try {
+    return fs.readFileSync(p, 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 // The CLI finds its project config by walking up from its working
 // directory, and with no config the project root IS that directory -- so
-// the workspace folder, not the file's own folder, is the right cwd.
+// the cwd is the folder of the nearest config between the file and its
+// workspace folder (a nested project's own mockymock.toml, which lint and
+// run also see from the suite's folder), else the workspace folder itself.
 function cwdFor(uri: vscode.Uri): string {
-  return vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath ?? path.dirname(uri.fsPath);
+  const folder = vscode.workspace.getWorkspaceFolder(uri)?.uri.fsPath;
+  if (!folder) return path.dirname(uri.fsPath);
+  return projectConfigDir(path.dirname(uri.fsPath), folder, fs.existsSync, readTextOrUndefined);
+}
+
+// The workspace folder, then every nested project config root below it,
+// shallowest first: setPairings lets the last listing of a suite win, so
+// a nested project's own pairing beats the root's.
+async function listingRoots(folder: vscode.WorkspaceFolder): Promise<string[]> {
+  const configs = await vscode.workspace.findFiles(
+    new vscode.RelativePattern(folder, PROJECT_CONFIG_GLOB),
+    CUT_DISCOVERY_EXCLUDE_GLOB
+  );
+  const nested = new Set<string>();
+  for (const config of configs) {
+    const dir = path.dirname(config.fsPath);
+    if (path.resolve(dir) === path.resolve(folder.uri.fsPath)) continue;
+    if (isProjectConfigFile(config.fsPath, readTextOrUndefined)) nested.add(dir);
+  }
+  const byDepth = [...nested].sort((a, b) => a.split(path.sep).length - b.split(path.sep).length || a.localeCompare(b));
+  return [folder.uri.fsPath, ...byDepth];
 }
 
 async function refresh(): Promise<void> {
@@ -38,9 +76,11 @@ async function refresh(): Promise<void> {
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const { executablePath } = resolveInvocationConfig(context, folder.uri);
     if (!(await supportsSuitesCommand(runCommand, executablePath))) continue;
-    const result = await runCommandIn(folder.uri.fsPath)(executablePath, ['suites', '--json']);
-    const listing = result.code === 0 ? parseSuitesListing(result.stdout) : undefined;
-    if (listing) listings.push(listing);
+    for (const root of await listingRoots(folder)) {
+      const result = await runCommandIn(root)(executablePath, ['suites', '--json']);
+      const listing = result.code === 0 ? parseSuitesListing(result.stdout) : undefined;
+      if (listing) listings.push(listing);
+    }
   }
   setPairings(listings);
   changed.fire();
@@ -115,6 +155,10 @@ export function activateSuiteIndex(context: vscode.ExtensionContext): void {
     configs,
     changed,
     vscode.workspace.onDidChangeWorkspaceFolders(scheduleRefresh),
+    // A moved or deleted folder of suites/programs arrives as one event for
+    // the folder, which the glob watchers above never match.
+    vscode.workspace.onDidDeleteFiles(scheduleRefresh),
+    vscode.workspace.onDidRenameFiles(scheduleRefresh),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('mockymock.executablePath')) scheduleRefresh();
     }),

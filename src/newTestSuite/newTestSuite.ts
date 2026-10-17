@@ -14,10 +14,12 @@
 //      characterization suite that pins today's behavior.
 //   2. `mockymock generate` (Docker-free): the same cases (or one per
 //      paragraph, with mockymock.newTestSuite.casePerParagraph) with every
-//      CALL / file / SQL / CICS / DLI boundary mocked, but no assertions.
-//      The toast says so, and why init didn't run.
-//   3. buildStarterCut (pure template, no CLI at all): one TESTCASE that
-//      PERFORMs the first paragraph, with commented MOVE/EXPECT guidance.
+//      CALL / file / SQL / CICS / DLI boundary mocked, and at most the
+//      VERIFY call counts / folded EXPECTs the CLI can work out statically.
+//      The toast says what it asserts, and why init didn't run.
+//   3. buildStarterCut (pure template, no CLI at all, or a scaffold with no
+//      cases): one TESTCASE that PERFORMs the first paragraph, with
+//      commented MOVE/EXPECT guidance.
 // The fallbacks mean the command never dead-ends: no Docker, a missing or
 // too-old CLI still produce a valid, runnable suite, and the notification
 // says which path was taken and why.
@@ -32,25 +34,39 @@ import {
   supportsPerParagraphFlag,
 } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
-import { firstNonEmptyLine } from '../environment/textUtils';
 import { focusClickedFile, showNeedsFile } from '../environment/notify';
 import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { rememberPairing } from '../discovery/suitePairing';
 import { newSuiteTarget } from '../discovery/suiteIndexService';
 import { askSuiteTopic, NEW_SUITE, pickSuite } from '../navigation/suitePicker';
+import { isExportedProgram, originalOfExport } from '../navigation/counterpartLogic';
 import { isCobolPath } from '../environment/cobolPaths';
 import {
+  AssertionCount,
   buildGenerateArgs,
   buildInitArgs,
   buildStarterCut,
+  countAssertions,
   describeCreatedSuite,
+  describeEmptyScaffold,
+  describeLintRefusedSuite,
+  failureReason,
+  initRecordingFailure,
+  lintRefusalOf,
   parseGeneratedCaseCount,
   parseInitOutcome,
+  shellArg,
   starterCutFacts,
 } from './cutTemplate';
 
 export const NEW_TEST_SUITE_COMMAND = 'mockymock.newTestSuite';
 const COMMAND_LABEL = 'New Test Suite for This Program';
+
+// `skipPicker`: the caller (Open Test Suite's picker) already listed the
+// existing suites and the user chose "New Test Suite…" there.
+interface NewTestSuiteOptions {
+  skipPicker?: boolean;
+}
 
 let outputChannel: vscode.OutputChannel | undefined;
 
@@ -89,7 +105,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
   });
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('mockymock.newTestSuite', async (uri?: vscode.Uri) => {
+    vscode.commands.registerCommand('mockymock.newTestSuite', async (uri?: vscode.Uri, options?: NewTestSuiteOptions) => {
       await focusClickedFile(uri);
       const editor = vscode.window.activeTextEditor;
       const activePath = editor?.document.uri.scheme === 'file' ? editor.document.uri.fsPath : undefined;
@@ -114,13 +130,29 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         return;
       }
 
+      // An exported PROG.mainframe.cbl is build output (the menus hide this
+      // command for it; the palette doesn't): a suite generated from it
+      // would PERFORM mockymock's own injected driver paragraphs.
+      if (isExportedProgram(activePath)) {
+        const original = originalOfExport(activePath);
+        const open = original ? `Open ${path.basename(original)}` : undefined;
+        const choice = await vscode.window.showErrorMessage(
+          `mockymock: "${path.basename(activePath)}" is an exported file (build output). Create test suites for the original program${original ? `, ${path.basename(original)}` : ''}.`,
+          ...(open ? [open] : [])
+        );
+        if (original && choice === open) {
+          await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(original));
+        }
+        return;
+      }
+
       const cblPath = activePath;
       // A program that already has suites: open one, or name another.
       // Never regenerate over one -- adding cases is an edit.
       let topic: string | undefined;
       const existing = suitesForProgram(cblPath);
       if (existing.length) {
-        const picked = await pickSuite(cblPath, existing);
+        const picked = options?.skipPicker ? NEW_SUITE : await pickSuite(cblPath, existing);
         if (picked === undefined) return;
         if (picked !== NEW_SUITE) {
           await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(picked));
@@ -178,6 +210,10 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         // init is scenario-only, so the per-paragraph option skips it.
         const dockerUp = !perParagraph && (await checkDocker(runCommand)) === 'available';
         let initTranscript = false;
+        // The suggested `mockymock run` command is pasted into the
+        // integrated terminal, which opens at the workspace root.
+        const cblArg = shellArg(vscode.workspace.asRelativePath(cblPath, false));
+        const cutArg = shellArg(vscode.workspace.asRelativePath(cutPath, false));
 
         if (dockerUp && (await supportsInitCommand(runCommand, executablePath))) {
           const initArgs = buildInitArgs(cblPath, cutPath, copybookPaths);
@@ -188,9 +224,12 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
             },
             () => runHere(executablePath, initArgs)
           );
+          const caseCount = parseGeneratedCaseCount(result.stdout);
+          // An empty TESTSUITE is nothing to open: let generate, and the
+          // starter template after it, take over below.
+          if (caseCount === 0 && (await exists(cutPath))) await fs.unlink(cutPath);
           if (await exists(cutPath)) {
             const outcome = parseInitOutcome(result.stdout);
-            const caseCount = parseGeneratedCaseCount(result.stdout);
             if (result.code === 0) {
               await openAndOffer(
                 cutPath,
@@ -199,22 +238,28 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
                   cutName,
                   caseCount,
                   perParagraph: false,
-                  ...(outcome.dockerSkipped ? { dockerDown: true } : { recorded: outcome.recorded }),
+                  cblArg,
+                  cutArg,
+                  ...(outcome.dockerSkipped
+                    ? { dockerDown: true, assertions: await assertionsIn(cutPath) }
+                    : { recorded: outcome.recorded }),
                 })
               );
               return;
             }
-            // The suite was written but the recording run failed (a refusal,
-            // a compile error, a case that crashed): the file is still the
-            // best starting point, so open it and say what went wrong.
+            // The suite was written but lint refuses it (init stops after
+            // generate then), or the recording run failed (a compile
+            // error, a case that crashed): the file is still the best
+            // starting point, so open it and say what went wrong.
             showInChannel(channel, initArgs, result);
-            await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(cutPath));
-            const showDetails = 'Show Details';
-            const choice = await vscode.window.showWarningMessage(
-              `mockymock: created ${cutName}, but recording what the program does failed, so some cases may have no EXPECT lines yet: ${reasonOf(result)}`,
-              showDetails
+            const refusal = lintRefusalOf(result);
+            await openAndWarn(
+              channel,
+              cutPath,
+              refusal
+                ? describeLintRefusedSuite(cutName, refusal)
+                : `mockymock: created ${cutName}, but recording what the program does failed, so some cases may have no EXPECT lines yet: ${initRecordingFailure(result) ?? 'see Show Details'}`
             );
-            if (choice === showDetails) channel.show();
             return;
           }
           // init wrote nothing (generate's own refusals, or a generator that
@@ -233,37 +278,58 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
           { location: vscode.ProgressLocation.Notification, title: `mockymock: creating ${cutName}…` },
           () => runHere(executablePath, generateArgs)
         );
-        if (result.code === 0 && (await exists(cutPath))) {
+        const cliWrote = await exists(cutPath);
+        const caseCount = parseGeneratedCaseCount(result.stdout);
+        if (cliWrote && caseCount === 0) {
+          // No boundary to mock, so no cases: an empty TESTSUITE runs
+          // nothing. The starter at least PERFORMs the first paragraph.
+          showInChannel(channel, generateArgs, result, { append: initTranscript });
+          await fs.unlink(cutPath);
+          await writeStarter(cblPath, cutPath, editor.document.getText());
+          await openAndOffer(cutPath, describeEmptyScaffold(cblName, cutName));
+          return;
+        }
+        if (result.code === 0 && cliWrote) {
           await openAndOffer(
             cutPath,
             describeCreatedSuite({
               cblName,
               cutName,
-              caseCount: parseGeneratedCaseCount(result.stdout),
+              caseCount,
               // An older CLI's plain generate, or the CLI's own fallback when
               // it can't build scenarios, is per-paragraph too.
               perParagraph: !/data-driven from a fixture bundle/.test(result.stdout),
               dockerDown: !perParagraph && !dockerUp,
+              assertions: await assertionsIn(cutPath),
+              cblArg,
+              cutArg,
             })
           );
           return;
         }
-        // A refusal (parse error, unresolved copybook, ...) is worth a
-        // look, but it shouldn't leave the user with nothing: fall through
-        // to the template and say why the richer scaffold didn't happen.
         showInChannel(channel, generateArgs, result, { append: initTranscript });
-        // The CLI only writes its output on success, but don't bet a
-        // crash on it: whatever is there now is what the user gets to edit.
-        if (!(await exists(cutPath))) await writeStarter(cblPath, cutPath, editor.document.getText());
-        // Open first: the toast below blocks until dismissed, and the file
-        // is the point.
-        await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(cutPath));
-        const showDetails = 'Show Details';
-        const choice = await vscode.window.showWarningMessage(
-          `mockymock: created a basic ${cutName}. The full scaffold (with mocks) was skipped because mockymock couldn't analyze the program: ${reasonOf(result)}`,
-          showDetails
+        if (cliWrote) {
+          // The CLI wrote the full scaffold and still failed: since
+          // mocky-mock #231 that means lint refuses what it wrote.
+          const refusal = lintRefusalOf(result);
+          await openAndWarn(
+            channel,
+            cutPath,
+            refusal
+              ? describeLintRefusedSuite(cutName, refusal)
+              : `mockymock: created ${cutName}, but mockymock generate reported a problem: ${failureReason(result)}`
+          );
+          return;
+        }
+        // A refusal (parse error, unresolved copybook, ...) is worth a
+        // look, but it shouldn't leave the user with nothing: fall back
+        // to the template and say why the richer scaffold didn't happen.
+        await writeStarter(cblPath, cutPath, editor.document.getText());
+        await openAndWarn(
+          channel,
+          cutPath,
+          `mockymock: created a basic ${cutName}. The full scaffold (with mocks) was skipped because mockymock couldn't analyze the program: ${failureReason(result)}`
         );
-        if (choice === showDetails) channel.show();
         return;
       }
 
@@ -296,8 +362,22 @@ interface CliResult {
   stderr: string;
 }
 
-function reasonOf(result: CliResult): string {
-  return firstNonEmptyLine(result.stderr) ?? firstNonEmptyLine(result.stdout) ?? `exit code ${result.code}`;
+// Generated VERIFY / EXPECT lines, so the toast says what the file asserts.
+async function assertionsIn(cutPath: string): Promise<AssertionCount | undefined> {
+  try {
+    return countAssertions(await fs.readFile(cutPath, 'utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
+// Open the file first -- the toast blocks until dismissed, and the file is
+// the point -- then warn, with the transcript behind "Show Details".
+async function openAndWarn(channel: vscode.OutputChannel, cutPath: string, message: string): Promise<void> {
+  await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(cutPath));
+  const showDetails = 'Show Details';
+  const choice = await vscode.window.showWarningMessage(message, showDetails);
+  if (choice === showDetails) channel.show();
 }
 
 // The full transcript behind a "Show Details" button. `append` keeps an

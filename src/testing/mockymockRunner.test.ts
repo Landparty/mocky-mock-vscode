@@ -76,8 +76,8 @@ describe('buildRunArgs extras', () => {
       'run', '/p/PROG.cbl', '--cut', '/p/PROG.cut', '--junit-xml', '/tmp/out.xml',
       '--json-report', '/tmp/report.json',
       '--coverage-json', '/tmp/coverage.json',
-      '--case', 'first case',
-      '--case', 'second case',
+      '--case=first case',
+      '--case=second case',
       '--copybook-path', '/copy/a',
     ]);
   });
@@ -113,6 +113,11 @@ describe('buildRunArgs extras', () => {
     assert.strictEqual(result.traceJson, null);
   });
 
+  it('keeps a case name starting with "-" attached to --case', () => {
+    const args = buildRunArgs('/p/PROG.cbl', '/p/PROG.cut', '/tmp/out.xml', [], { caseNames: ['-fetches', '--dry-run'] });
+    assert.deepStrictEqual(args.slice(-2), ['--case=-fetches', '--case=--dry-run']);
+  });
+
   it('adds a --trace-json flag when requested', () => {
     const args = buildRunArgs('/p/PROG.cbl', '/p/PROG.cut', '/tmp/out.xml', [], {
       traceJsonPath: '/tmp/trace.json',
@@ -121,7 +126,7 @@ describe('buildRunArgs extras', () => {
     assert.deepStrictEqual(args, [
       'run', '/p/PROG.cbl', '--cut', '/p/PROG.cut', '--junit-xml', '/tmp/out.xml',
       '--trace-json', '/tmp/trace.json',
-      '--case', 'only case',
+      '--case=only case',
     ]);
   });
 

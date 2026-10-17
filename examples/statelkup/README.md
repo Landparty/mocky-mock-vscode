@@ -26,6 +26,3 @@ TESTSUITE 'STATELKUP state name lookup' (line 1)
 The third row (`XX` -> `*Undefined*`) exercises `EVALUATE`'s `WHEN OTHER`
 branch -- proving the three generated cases are genuinely independent,
 not three copies of the same assertion.
-
-See [../../docs/2026-07-20-provider-parameterized-test-cases-design.md](../../docs/2026-07-20-provider-parameterized-test-cases-design.md)
-for the full design.

@@ -25,7 +25,9 @@ export function buildRunArgs(
     args.push('--trace-json', extras.traceJsonPath);
   }
   for (const name of extras.caseNames ?? []) {
-    args.push('--case', name);
+    // One `--case=<name>` element, not two: argparse reads a separate value
+    // that starts with `-` (a case named `-fetches`) as an option.
+    args.push(`--case=${name}`);
   }
   for (const p of copybookPaths) {
     args.push('--copybook-path', p);

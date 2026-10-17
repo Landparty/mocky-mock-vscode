@@ -157,10 +157,13 @@ export function cutSuitesFromCollectJson(text: string): CutSuite[] | null {
 }
 
 // The three extensions package.json registers for the `cobol` language --
-// keep in sync with environment/cobolPaths.ts's isCobolPath. Probed in this
-// order; .cbl stays the default when none exists (error messages then name
-// the conventional pairing).
-const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol'];
+// keep in sync with environment/cobolPaths.ts's isCobolPath -- plus their
+// uppercase spellings, the same six in the same order as the CLI's sibling
+// rule (mocky-mock's mockymock/cli/discovery.py COBOL_SOURCE_EXTENSIONS), so
+// PROG.cut pairs with PROG.CBL on a case-sensitive file system. .cbl stays
+// the default when none exists (error messages then name the conventional
+// pairing).
+const COBOL_SOURCE_EXTENSIONS = ['.cbl', '.cob', '.cobol', '.CBL', '.COB', '.COBOL'];
 
 function readTextOrUndefined(p: string): string | undefined {
   try {
@@ -226,8 +229,9 @@ export function suitesForProgram(
   }
 ): string[] {
   const found = new Map<string, string>();
+  const fileKey = (p: string) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
   const add = (p: string) => {
-    const k = process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p);
+    const k = fileKey(p);
     if (!found.has(k)) found.set(k, p);
   };
   for (const suite of pairedSuites(cblFilePath)) {
@@ -240,9 +244,16 @@ export function suitesForProgram(
     if (!lower.endsWith('.cut') || !lower.startsWith(prefix)) continue;
     const candidate = path.join(parsed.dir, entry);
     // A sibling whose own PROGRAM line points elsewhere isn't this program's.
-    if (path.resolve(resolveCblPath(candidate, exists)) === path.resolve(cblFilePath)) add(candidate);
+    if (fileKey(resolveCblPath(candidate, exists)) === fileKey(cblFilePath)) add(candidate);
   }
   return Array.from(found.values()).sort();
+}
+
+// True when `fsPath` is `folder` itself or anything inside it -- a folder
+// delete or rename arrives as one event for the folder, never one per file.
+export function isSameOrUnder(fsPath: string, folder: string): boolean {
+  const relative = path.relative(folder, fsPath);
+  return relative === '' || (!path.isAbsolute(relative) && relative.split(path.sep)[0] !== '..');
 }
 
 // Directory names that mark a path as generated/vendored/scratch, not a real
@@ -250,12 +261,40 @@ export function suitesForProgram(
 // own `.claude/worktrees/<name>/` convention and the plain `.worktrees/<name>/`
 // convention some repos use), which are full checkouts that duplicate every
 // example under a different absolute path and would otherwise show up as
-// look-alike duplicate entries in the Test Explorer tree.
-const EXCLUDED_PATH_SEGMENTS = new Set(['node_modules', '.git', '.worktrees', 'worktrees']);
+// look-alike duplicate entries in the Test Explorer tree. Also every folder
+// the CLI's own directory scan skips (mocky-mock's
+// mockymock/cli/discovery.py CUT_DISCOVERY_EXCLUDE_DIRS), so the two agree
+// on which suites belong to the project.
+export const EXCLUDED_PATH_SEGMENTS: ReadonlySet<string> = new Set([
+  'node_modules',
+  '.git',
+  '.worktrees',
+  'worktrees',
+  '.hg',
+  '.svn',
+  '.venv',
+  'venv',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  '.ruff_cache',
+  'dist',
+  'build',
+]);
 
-export function isExcludedCutPath(fsPath: string): boolean {
-  return fsPath.split(/[\\/]/).some((segment) => EXCLUDED_PATH_SEGMENTS.has(segment));
+// Only the segments BELOW the workspace folder count, the same scope as
+// CUT_DISCOVERY_EXCLUDE_GLOB (which findFiles applies relative to the
+// folder): a workspace opened at ~/worktrees/feature-x is not itself a
+// worktree to hide. A file outside every workspace folder (`workspaceRoot`
+// undefined, or not an ancestor) is never excluded.
+export function isExcludedCutPath(fsPath: string, workspaceRoot: string | undefined): boolean {
+  if (workspaceRoot === undefined) return false;
+  const fold = (segment: string) => (process.platform === 'win32' ? segment.toLowerCase() : segment);
+  const rootSegments = workspaceRoot.split(/[\\/]/).filter(Boolean);
+  const segments = fsPath.split(/[\\/]/).filter(Boolean);
+  if (rootSegments.length > segments.length) return false;
+  if (rootSegments.some((segment, i) => fold(segment) !== fold(segments[i]))) return false;
+  return segments.slice(rootSegments.length).some((segment) => EXCLUDED_PATH_SEGMENTS.has(segment));
 }
 
-export const CUT_DISCOVERY_EXCLUDE_GLOB =
-  '{**/node_modules/**,**/.git/**,**/.worktrees/**,**/worktrees/**}';
+export const CUT_DISCOVERY_EXCLUDE_GLOB = `{${Array.from(EXCLUDED_PATH_SEGMENTS, (name) => `**/${name}/**`).join(',')}}`;

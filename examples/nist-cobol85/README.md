@@ -36,16 +36,14 @@ feature tests, and WRITEs a formatted pass/fail report, and the paragraphs
   keeping the run clear of the print machinery. (`IC101A` still mocks the
   report `WRITE` it does reach.)
 
-- **The auto-scaffold is only a starter.** `mockymock generate` emits one
-  test case per paragraph, mocking only that paragraph's own boundaries. For
+- **The auto-scaffold is only a starter.** `mockymock generate --per-paragraph`
+  emits one test case per paragraph, mocking only that paragraph's own
+  boundaries (a plain `generate` writes a single "happy path" case through
+  the entry point). For
   a CCVS program that is not enough: fall-through reaches the shared
   `WRT-LN` / `PRINT-DETAIL` paragraphs, so an ungenerous scaffold is
   correctly *refused* at run time with `UNMOCKED_FILE_OP`. These curated
   `.cut` files are the hand-finished result.
-
-A wider sweep of the whole cobol-parser example folder — what mocks cleanly,
-what refuses, and why — is written up in
-[`docs/2026-07-08-cobol-parser-corpus-sweep.md`](../../docs/2026-07-08-cobol-parser-corpus-sweep.md).
 
 ## Provenance
 

@@ -27,7 +27,7 @@ on:
         default: ''
 
 env:
-  MOCKYMOCK_VERSION: ${{ inputs.mockymock_version || '0.10.1' }}
+  MOCKYMOCK_VERSION: ${{ inputs.mockymock_version || '0.10.2' }}
 
 permissions:
   contents: write
