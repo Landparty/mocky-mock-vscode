@@ -11,7 +11,7 @@
 // adapter process terminated unexpectedly" dialog instead of a clear
 // message. Running `lint` first and gating on it here prevents that.
 import { CommandResult } from '../environment/commandRunner';
-import { parseLintOutput } from '../linting/lintOutput';
+import { cutRelativeLine, parseLintOutput } from '../linting/lintOutput';
 
 export type LintGate = { blocked: false } | { blocked: true; message: string };
 
@@ -26,7 +26,11 @@ export function evaluateLintResult(result: CommandResult): LintGate {
   const detail = problems
     .map((problem) => {
       const code = problem.code ? `[${problem.code}] ` : '';
-      const location = problem.line !== null ? `line ${problem.line}: ` : '';
+      // Only a .cut-relative line gets a prefix: a refusal's embedded line
+      // is in the .cbl, and at the front it would read as a line of the
+      // .cut being debugged. The message still carries it in its own words.
+      const cutLine = cutRelativeLine(problem);
+      const location = cutLine !== null ? `line ${cutLine}: ` : '';
       return `${code}${location}${problem.message}`;
     })
     .join('\n');

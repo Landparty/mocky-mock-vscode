@@ -71,10 +71,13 @@ export function parseLintOutput(stdout: string): LintProblem[] {
     const line = rawLine.trimEnd();
     if (!line) continue;
     if (line.startsWith('  ')) {
-      // Indented parse-error detail under a refused (PARSE_ERROR) header —
-      // fold into the previous problem so the diagnostic carries the detail.
+      // Indented detail under a refused header -- PARSE_ERROR's errors (2
+      // spaces) or an "Add to this TESTCASE:" MOCK snippet (4 spaces, its
+      // body nested deeper) -- fold into the previous problem so the
+      // diagnostic carries it. Strip only the CLI's own continuation indent
+      // so the snippet keeps its MOCK / body / END-MOCK nesting.
       const last = problems[problems.length - 1];
-      if (last) last.message += `\n${line.trim()}`;
+      if (last) last.message += `\n${line.replace(/^ {1,4}/, '')}`;
       continue;
     }
     let match = INVALID_CUT_RE.exec(line);

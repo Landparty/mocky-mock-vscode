@@ -72,6 +72,25 @@ describe('parseLintOutput', () => {
     assert.match(problems[0].message, /2 parse error\(s\)\nline 3: unexpected token\nline 9: missing period/);
   });
 
+  it("keeps a suggested MOCK snippet's nesting, stripping only the continuation indent", () => {
+    const problems = parseLintOutput(
+      "mockymock lint: refused (UNMOCKED_CALL): dynamic CALL boundary at line 15 (paragraph '0000-MAIN') is unmocked\n" +
+        '    Add to this TESTCASE:\n' +
+        '        MOCK CALL WS-PGM-NAME\n' +
+        '            MOVE 0 TO RETURN-CODE\n' +
+        '        END-MOCK\n'
+    );
+    assert.strictEqual(problems.length, 1);
+    assert.strictEqual(
+      problems[0].message,
+      "dynamic CALL boundary at line 15 (paragraph '0000-MAIN') is unmocked\n" +
+        'Add to this TESTCASE:\n' +
+        '    MOCK CALL WS-PGM-NAME\n' +
+        '        MOVE 0 TO RETURN-CODE\n' +
+        '    END-MOCK'
+    );
+  });
+
   it('never reports the summary or the all-clean line as problems', () => {
     const problems = parseLintOutput(
       'mockymock lint: refused (X_CODE): something\nmockymock lint: 1 problem(s) found.\n'
