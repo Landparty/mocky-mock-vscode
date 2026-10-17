@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { isCobolPath } from './cobolPaths';
+import { isCobolPath, isCopybookPath } from './cobolPaths';
 
 describe('isCobolPath', () => {
   it('accepts the three COBOL program extensions', () => {
@@ -18,5 +18,15 @@ describe('isCobolPath', () => {
     assert.strictEqual(isCobolPath('/w/PROG.cut'), false);
     assert.strictEqual(isCobolPath('/w/README.md'), false);
     assert.strictEqual(isCobolPath('/w/cbl'), false);
+  });
+});
+
+describe('isCopybookPath', () => {
+  it('recognises .cpy and .copy copybooks in any case, and nothing else', () => {
+    assert.strictEqual(isCopybookPath('/p/CUSTREC.cpy'), true);
+    assert.strictEqual(isCopybookPath('/p/CUSTREC.CPY'), true);
+    assert.strictEqual(isCopybookPath('/p/custrec.copy'), true);
+    assert.strictEqual(isCopybookPath('/p/PROG.cbl'), false);
+    assert.strictEqual(isCopybookPath('/p/PROG.cut'), false);
   });
 });

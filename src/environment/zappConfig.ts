@@ -21,6 +21,10 @@ interface ZappConfig {
 
 const ZAPP_FILE_NAMES = ['zapp.yml', 'zapp.yaml'];
 
+// Watched alongside the project config files: a zapp.yml's library
+// locations feed every lint/run/completion's --copybook-path.
+export const ZAPP_FILE_GLOB = '**/{zapp.yml,zapp.yaml}';
+
 function findZappFile(workspaceRoot: string): string | undefined {
   for (const name of ZAPP_FILE_NAMES) {
     const candidate = path.join(workspaceRoot, name);

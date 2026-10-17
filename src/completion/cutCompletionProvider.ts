@@ -10,7 +10,9 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { isCopybookPath } from '../environment/cobolPaths';
+import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import {
   BoundaryInfo,
   MOCK_CATEGORIES,
@@ -127,16 +129,26 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
   };
 
   // The cache is keyed on the .cut/.cbl mtimes only, but a project config
-  // change (copybook_path, say) changes what `collect --boundaries` sees.
+  // change (copybook_path, say), a zapp.yml, the copybook-path settings or
+  // a copybook's own contents all change what `collect --boundaries` sees.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const zappWatcher = vscode.workspace.createFileSystemWatcher(ZAPP_FILE_GLOB);
   const dropCache = (): void => boundaryCache.clear();
   context.subscriptions.push(
     configWatcher,
     configWatcher.onDidChange(dropCache),
     configWatcher.onDidCreate(dropCache),
     configWatcher.onDidDelete(dropCache),
+    zappWatcher,
+    zappWatcher.onDidChange(dropCache),
+    zappWatcher.onDidCreate(dropCache),
+    zappWatcher.onDidDelete(dropCache),
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (INVOCATION_SETTINGS.some((setting) => e.affectsConfiguration(setting))) dropCache();
+    }),
     vscode.languages.registerCompletionItemProvider('cut', provider, ' '),
     vscode.workspace.onDidSaveTextDocument((document) => {
+      if (isCopybookPath(document.uri.fsPath)) dropCache();
       if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {
         // A saved .cut/.cbl may have changed the boundary set; the mtime
         // check above would already catch this on the next request, but

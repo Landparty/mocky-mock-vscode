@@ -4,9 +4,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
 import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
-import { isCobolPath } from '../environment/cobolPaths';
+import { isCobolPath, isCopybookPath } from '../environment/cobolPaths';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
 
 // Runs `mockymock lint` (pure static analysis, zero Docker) on every open or
@@ -160,14 +161,24 @@ export function activateLintDiagnostics(
     false
   );
 
+  const relintAll = (): void => {
+    for (const document of vscode.workspace.textDocuments) {
+      void lintDocument(document);
+    }
+  };
+
   // A fixed (or newly broken) project config changes every suite's lint
-  // result without any .cut being saved.
+  // result without any .cut being saved -- so does a zapp.yml, whose
+  // library locations become --copybook-path arguments.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
+  const zappWatcher = vscode.workspace.createFileSystemWatcher(ZAPP_FILE_GLOB);
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((document) => void lintDocument(document)),
     vscode.workspace.onDidSaveTextDocument((document) => {
       void lintDocument(document);
       relintSuitesOf(document.uri);
+      // Any suite's program may COPY the saved copybook.
+      if (isCopybookPath(document.uri.fsPath)) relintAll();
     }),
     programWatcher,
     programWatcher.onDidCreate(relintSuitesOf),
@@ -187,24 +198,27 @@ export function activateLintDiagnostics(
       }
     }),
     configWatcher,
-    ...[configWatcher.onDidChange, configWatcher.onDidCreate, configWatcher.onDidDelete].map((event) =>
-      event(() => {
-        for (const document of vscode.workspace.textDocuments) {
-          void lintDocument(document);
-        }
-      })
-    ),
+    zappWatcher,
+    ...[
+      configWatcher.onDidChange,
+      configWatcher.onDidCreate,
+      configWatcher.onDidDelete,
+      zappWatcher.onDidChange,
+      zappWatcher.onDidCreate,
+      zappWatcher.onDidDelete,
+    ].map((event) => event(relintAll)),
     // Re-evaluate every open .cut when the toggle flips: turning lintOnSave
     // OFF used to leave existing squiggles in the Problems panel until each
     // file was individually saved or closed (lintDocument's own disabled
     // branch deletes them); turning it ON now lints without waiting for a
     // save. Resource-scoped setting, so per-document re-evaluation (not a
     // blanket collection.clear()) is the correct granularity.
+    // The copybook-path settings and the CLI path change every suite's
+    // result the same way.
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (!e.affectsConfiguration('mockymock.lintOnSave')) return;
-      for (const document of vscode.workspace.textDocuments) {
-        void lintDocument(document);
-      }
+      const settings = ['mockymock.lintOnSave', ...INVOCATION_SETTINGS];
+      if (!settings.some((setting) => e.affectsConfiguration(setting))) return;
+      relintAll();
     })
   );
   for (const document of vscode.workspace.textDocuments) {
