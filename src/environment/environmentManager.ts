@@ -151,10 +151,9 @@ export class EnvironmentManager {
 
   private async doEnsureReady(): Promise<ReadyResult> {
     this.statusBarItem.show();
-    const executablePath = resolveExecutablePath(
-      configuredExecutablePath(vscode.workspace.workspaceFolders?.[0]),
-      this.context.extensionPath
-    );
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    const configured = configuredExecutablePath(folder);
+    const executablePath = resolveExecutablePath(configured, this.context.extensionPath);
 
     const mockymockProbe = await runCommand(executablePath, ['--version']);
     if (mockymockProbe.code !== 0) {
@@ -169,6 +168,16 @@ export class EnvironmentManager {
         const message = permissionDeniedMessageForPath(executablePath);
         this.setStatus('cli-blocked', message);
         vscode.window.showErrorMessage(message);
+        return { ok: false, message, reported: true };
+      }
+      // An explicit mockymock.executablePath that won't run is a setting to
+      // fix, not a CLI to install: a uv install lands somewhere else, which
+      // the setting still overrides, so it could never help.
+      if (configured && configured.trim().length > 0) {
+        const detail = mockymockProbe.stderr.trim().split(/\r?\n/)[0] || `exit code ${mockymockProbe.code}`;
+        const message = `The mockymock CLI set in mockymock.executablePath ("${executablePath}") could not be run (${detail}). Correct or clear the setting.`;
+        this.setStatus('cli-missing', message);
+        this.promptFixExecutablePath(message, folder);
         return { ok: false, message, reported: true };
       }
       const installed = await this.installMockymock();
@@ -301,6 +310,31 @@ export class EnvironmentManager {
         return { started: false };
       }
     );
+  }
+
+  private promptFixExecutablePath(message: string, folder: vscode.WorkspaceFolder | undefined) {
+    const openSettings = 'Open Settings';
+    const clearSetting = 'Clear Setting';
+    vscode.window
+      .showErrorMessage(message, openSettings, clearSetting)
+      .then(async (choice) => {
+        if (choice === openSettings) {
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'mockymock.executablePath');
+        } else if (choice === clearSetting) {
+          // Cleared wherever it is set, so the bundled/PATH CLI takes over.
+          const config = vscode.workspace.getConfiguration('mockymock', folder?.uri);
+          const set = config.inspect<string>('executablePath');
+          const targets: [string | undefined, vscode.ConfigurationTarget][] = [
+            [set?.workspaceFolderValue, vscode.ConfigurationTarget.WorkspaceFolder],
+            [set?.workspaceValue, vscode.ConfigurationTarget.Workspace],
+            [set?.globalValue, vscode.ConfigurationTarget.Global],
+          ];
+          for (const [value, target] of targets) {
+            if (value !== undefined) await config.update('executablePath', undefined, target);
+          }
+        }
+      })
+      .then(undefined, () => undefined);
   }
 
   private promptInstallDocker() {

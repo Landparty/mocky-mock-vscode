@@ -48,8 +48,10 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
       return {
         text: '$(warning) mockymock: CLI not found',
         background: 'statusBarItem.warningBackground',
-        summary: 'The mockymock CLI could not be found.',
-        clickHint: 'Click to install it.',
+        summary: detail ?? 'The mockymock CLI could not be found.',
+        // With a detail, the CLI is a configured one that won't run: Check
+        // Setup reports it rather than installing another copy.
+        clickHint: detail ? 'Click to re-check your setup.' : 'Click to install it.',
       };
     case 'cli-blocked':
       return {
