@@ -27,6 +27,7 @@ import {
   supportsMutateCommand,
 } from '../environment/checks';
 import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { saveBeforeCli } from '../environment/saveBeforeCli';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
 import { toCrlf, formatRunHeader, formatRunTrailer, createOutputStreamer } from './outputFormatting';
@@ -1082,6 +1083,9 @@ export function activateTestController(
         void vscode.window.showWarningMessage('mockymock: open a .cut test suite to run mutation testing on it.');
         return;
       }
+      // Calling the run handler directly bypasses testing.saveBeforeTest,
+      // so save the suite and its program here: the CLI reads them from disk.
+      if (!(await saveBeforeCli([uri.fsPath, resolveCblPath(uri.fsPath)], 'running mutation testing'))) return;
       if (!fileItems.has(uri.toString())) await discoverAndBuild(uri);
       const fileItem = fileItems.get(uri.toString());
       if (!fileItem) {
