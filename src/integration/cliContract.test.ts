@@ -139,9 +139,11 @@ describe('mockymock CLI contract (live)', function () {
 
     // Probed, not pinned: the extension passes these only to a CLI whose
     // `lint --help` lists them (supportsExtraCopybookPath /
-    // supportsLintCaseFlag), so an older pinned CLI skips this.
-    it('--extra-copybook-path and lint --case, where the CLI has them', function () {
-      if (!helpFor(['lint']).includes('--extra-copybook-path')) this.skip();
+    // supportsLintCaseFlag). An older pinned CLI has nothing to check here,
+    // and returns rather than skipping: CI treats a skipped contract test as
+    // an unusable CLI.
+    it('--extra-copybook-path and lint --case, where the CLI has them', () => {
+      if (!helpFor(['lint']).includes('--extra-copybook-path')) return;
       const extra = ['/zapp'];
       assertFlagsAccepted(['lint'], buildLintArgs({ program: CBL, cut: CUT, extraCopybookPaths: extra }, 'a case'));
       assertFlagsAccepted(['run'], buildRunArgs(CBL, CUT, '/tmp/j.xml', [], { extraCopybookPaths: extra }));
