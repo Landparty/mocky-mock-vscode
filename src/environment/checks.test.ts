@@ -15,6 +15,8 @@ import {
   supportsDebugCommand,
   supportsExportCommand,
   supportsMutateCommand,
+  supportsLintCaseFlag,
+  supportsExtraCopybookPath,
   supportsGenerateCommand,
   describeTooOldCli,
   describeUnsupportedFeature,
@@ -589,5 +591,30 @@ describe('describeUnsupportedFeature', () => {
       'interactive debugging'
     );
     assert.strictEqual(message, CLI_PERMISSION_DENIED_MESSAGE);
+  });
+});
+
+describe('supportsLintCaseFlag / supportsExtraCopybookPath', () => {
+  const current =
+    'usage: mockymock lint [-h] [--copybook-path COPYBOOK_PATH]\n' +
+    '                      [--extra-copybook-path EXTRA_COPYBOOK_PATH]\n' +
+    '                      [--case CASE] [--tag TAG]\n';
+  const older = 'usage: mockymock lint [-h] [--copybook-path COPYBOOK_PATH] [--cut CUT]\n';
+
+  it('finds both flags in a current lint --help', async () => {
+    const run = fakeRunner({ code: 0, stdout: current, stderr: '' });
+    assert.strictEqual(await supportsLintCaseFlag(run, 'mockymock'), true);
+    assert.strictEqual(await supportsExtraCopybookPath(run, 'mockymock'), true);
+  });
+
+  it('finds neither in an older one', async () => {
+    const run = fakeRunner({ code: 0, stdout: older, stderr: '' });
+    assert.strictEqual(await supportsLintCaseFlag(run, 'mockymock'), false);
+    assert.strictEqual(await supportsExtraCopybookPath(run, 'mockymock'), false);
+  });
+
+  it('does not take a longer flag that starts with --case for --case', async () => {
+    const run = fakeRunner({ code: 0, stdout: 'usage: mockymock lint [--case-sensitive]\n', stderr: '' });
+    assert.strictEqual(await supportsLintCaseFlag(run, 'mockymock'), false);
   });
 });

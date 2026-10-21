@@ -43,8 +43,8 @@ export function evaluateLintResult(result: CommandResult): LintGate {
   };
 }
 
-// `lint` is whole-file, so it can't catch a launch.json `case` naming no
-// TESTCASE -- which `mockymock debug --dap-stdio` refuses the same way, in
+// An older CLI's `lint` is whole-file, so it can't catch a launch.json
+// `case` naming no TESTCASE -- which `mockymock debug --dap-stdio` refuses the same way, in
 // plain text before speaking DAP. Gate on `collect --json` instead. Only a
 // definite answer blocks: a collect that failed or isn't a collect document
 // (a CLI predating it, a .cut that doesn't parse -- the lint gate's job)

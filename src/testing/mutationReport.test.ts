@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { parseMutationJson, survivorsOf, survivorReason } from './mutationReport';
+import { MutantEntry, parseMutationJson, survivorsOf, survivorsOfEverySuite, survivorReason } from './mutationReport';
 
 const SAMPLE = JSON.stringify({
   program: 'PROG.cbl',
@@ -144,5 +144,38 @@ describe('survivorReason', () => {
     const m = parseMutationJson(SAMPLE)!.mutants[1];
     assert.strictEqual(m.ran, true);
     assert.strictEqual(survivorReason(m), 'every test still passes when this line becomes "IF WS-AGE > 66"');
+  });
+});
+
+describe('survivorsOfEverySuite (#108)', () => {
+  const mutant = (line: number, mutated = `M${line}`): MutantEntry => ({
+    line,
+    operator: 'rel-swap',
+    description: "'>' -> '>='",
+    original: 'IF A > B',
+    mutated,
+    status: 'survived',
+    detail: '',
+    hint: '',
+    ran: true,
+  });
+
+  it('keeps only the mutants no suite killed', () => {
+    const a = [mutant(10), mutant(20), mutant(30)];
+    const b = [mutant(30), mutant(10)];
+    assert.deepStrictEqual(survivorsOfEverySuite([a, b]).map((m) => m.line), [10, 30]);
+  });
+
+  it('treats two mutants on one line as different mutants', () => {
+    assert.deepStrictEqual(survivorsOfEverySuite([[mutant(10, 'X')], [mutant(10, 'Y')]]), []);
+  });
+
+  it('flags nothing once one suite killed everything', () => {
+    assert.deepStrictEqual(survivorsOfEverySuite([[mutant(10)], []]), []);
+  });
+
+  it('is the survivors themselves for one suite, and nothing for none', () => {
+    assert.deepStrictEqual(survivorsOfEverySuite([[mutant(10)]]).map((m) => m.line), [10]);
+    assert.deepStrictEqual(survivorsOfEverySuite([]), []);
   });
 });

@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { describeUnsupportedFeature, supportsExportCommand } from '../environment/checks';
 import { focusClickedFile, showCliProblem, showNeedsFile } from '../environment/notify';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { resolveCliInvocationConfig } from '../environment/invocationConfig';
 import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { isCobolPath } from '../environment/cobolPaths';
 import { runExport } from './exportRunner';
@@ -72,7 +72,7 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
         return;
       }
 
-      const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor!.document.uri);
+      const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, editor!.document.uri);
 
       const supportsExport = await supportsExportCommand(runCommand, executablePath);
       if (!supportsExport) {
@@ -116,7 +116,7 @@ export function activateExportMainframeCommand(context: vscode.ExtensionContext)
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'Exporting mainframe-ready COBOL...' },
-        () => runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommandIn(path.dirname(cutPath)))
+        () => runExport(executablePath, cblPath, cutPath, copybookPaths, outputPath, runCommandIn(path.dirname(cutPath)), extraCopybookPaths)
       );
       if (result.exitCode !== 0) {
         vscode.window.showErrorMessage(`mockymock export failed:\n${result.stdout}${result.stderr}`);

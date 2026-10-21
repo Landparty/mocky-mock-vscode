@@ -7,16 +7,16 @@
 // directly too -- the entire reason this file exists as a separate,
 // vscode-free module.
 import { CommandRunner } from '../environment/commandRunner';
+import { copybookPathArgs } from '../environment/copybookPaths';
 
 export function buildExportArgs(
   cblPath: string,
   cutPath: string,
   copybookPaths: string[],
-  outputPath: string
+  outputPath: string,
+  extraCopybookPaths: string[] = []
 ): string[] {
-  const args = ['export', cblPath, '--cut', cutPath, '--output', outputPath];
-  for (const p of copybookPaths) args.push('--copybook-path', p);
-  return args;
+  return ['export', cblPath, '--cut', cutPath, '--output', outputPath, ...copybookPathArgs(copybookPaths, extraCopybookPaths)];
 }
 
 export interface ExportResult {
@@ -31,9 +31,10 @@ export async function runExport(
   cutPath: string,
   copybookPaths: string[],
   outputPath: string,
-  run: CommandRunner
+  run: CommandRunner,
+  extraCopybookPaths: string[] = []
 ): Promise<ExportResult> {
-  const args = buildExportArgs(cblPath, cutPath, copybookPaths, outputPath);
+  const args = buildExportArgs(cblPath, cutPath, copybookPaths, outputPath, extraCopybookPaths);
   const result = await run(executablePath, args);
   return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
 }

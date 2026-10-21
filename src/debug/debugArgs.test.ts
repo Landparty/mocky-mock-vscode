@@ -73,6 +73,23 @@ describe('buildLintArgs', () => {
       ['lint', 'P.cbl', '--cut', 'P.cut', '--copybook-path', '/ws/copybooks', '--copybook-path', '/ws/shared/copybooks']
     );
   });
+
+  it('scopes the lint to one TESTCASE when given its name, as one --case= element (#95)', () => {
+    assert.deepStrictEqual(buildLintArgs({ program: 'P.cbl', cut: 'P.cut' }, '-starts with a dash'), [
+      'lint',
+      'P.cbl',
+      '--cut',
+      'P.cut',
+      '--case=-starts with a dash',
+    ]);
+  });
+
+  it('passes inherited library locations on --extra-copybook-path (#130)', () => {
+    assert.deepStrictEqual(
+      buildLintArgs({ program: 'P.cbl', cut: 'P.cut', copybookPaths: ['/own'], extraCopybookPaths: ['/zapp'] }),
+      ['lint', 'P.cbl', '--cut', 'P.cut', '--copybook-path', '/own', '--extra-copybook-path', '/zapp']
+    );
+  });
 });
 
 describe('absolutizeDebugPaths', () => {

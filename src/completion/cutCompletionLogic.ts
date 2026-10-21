@@ -218,3 +218,38 @@ export function flowTargetsFromSource(sourceLines: string[]): FlowTargets {
   }
   return targets;
 }
+
+export interface CollectPayload {
+  boundaries?: BoundaryInfo[];
+  error?: string;
+}
+
+// `collect --json` prints its document on a parse error too (exit 1), so
+// stdout is read whatever the exit code.
+export function parseCollectPayload(stdout: string): CollectPayload {
+  try {
+    const parsed = JSON.parse(stdout) as CollectPayload | null;
+    if (parsed === null || typeof parsed !== 'object') return {};
+    return {
+      boundaries: Array.isArray(parsed.boundaries) ? parsed.boundaries : undefined,
+      error: typeof parsed.error === 'string' ? parsed.error : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+// The program's boundaries, whatever state the suite on disk is in (#100).
+// A .cut mid-edit (a half-typed MOCK line) does not parse: a current CLI
+// reports the boundaries alongside the error, an older one stops at the
+// error, so that one is asked again through `collectThrowaway` -- the same
+// lookup against a suite that cannot fail to parse.
+export async function collectBoundaries(
+  cutPath: string,
+  collect: (suitePath: string) => Promise<{ stdout: string }>,
+  collectThrowaway: () => Promise<{ stdout: string }>
+): Promise<CollectPayload> {
+  const payload = parseCollectPayload((await collect(cutPath)).stdout);
+  if (payload.boundaries !== undefined || payload.error === undefined) return payload;
+  return parseCollectPayload((await collectThrowaway()).stdout);
+}

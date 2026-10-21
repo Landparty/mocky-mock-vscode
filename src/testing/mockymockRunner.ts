@@ -1,10 +1,12 @@
 import { CommandRunner, OutputListener } from '../environment/commandRunner';
+import { copybookPathArgs } from '../environment/copybookPaths';
 
 export interface RunArgExtras {
   jsonReportPath?: string;
   coverageJsonPath?: string;
   traceJsonPath?: string;
   caseNames?: string[];
+  extraCopybookPaths?: string[];
 }
 
 export function buildRunArgs(
@@ -29,9 +31,7 @@ export function buildRunArgs(
     // that starts with `-` (a case named `-fetches`) as an option.
     args.push(`--case=${name}`);
   }
-  for (const p of copybookPaths) {
-    args.push('--copybook-path', p);
-  }
+  args.push(...copybookPathArgs(copybookPaths, extras.extraCopybookPaths));
   return args;
 }
 
@@ -41,6 +41,8 @@ export interface RunSuiteOptions {
   cutPath: string;
   junitXmlPath: string;
   copybookPaths: string[];
+  /** Appended to a project config's copybook list (--extra-copybook-path). */
+  extraCopybookPaths?: string[];
   /** Temp path for --json-report; when set, the result carries its content. */
   jsonReportPath?: string;
   /** Temp path for --coverage-json; when set, the result carries its content. */
@@ -73,6 +75,7 @@ export async function runSuite(
     coverageJsonPath: options.coverageJsonPath,
     traceJsonPath: options.traceJsonPath,
     caseNames: options.caseNames,
+    extraCopybookPaths: options.extraCopybookPaths,
   });
   const result = await run(options.executablePath, args, onOutput, signal);
   const junitXml = await readFileIfExists(options.junitXmlPath);

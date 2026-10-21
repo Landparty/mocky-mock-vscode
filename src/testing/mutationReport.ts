@@ -111,6 +111,24 @@ export function survivorsOf(report: MutationReport): MutantEntry[] {
   return report.mutants.filter((m) => m.status === 'survived');
 }
 
+function mutantIdentity(m: MutantEntry): string {
+  return JSON.stringify([m.line, m.operator, m.description, m.original, m.mutated]);
+}
+
+/**
+ * The mutants that survived EVERY suite run against the same program (#108):
+ * one suite killing a mutant means the program's tests do notice that
+ * change, so only a mutant no suite killed is worth a warning on the .cbl.
+ * Takes one survivor list per suite that produced a report, and keeps the
+ * first list's order. No lists at all means nothing to report.
+ */
+export function survivorsOfEverySuite(perSuite: MutantEntry[][]): MutantEntry[] {
+  if (perSuite.length === 0) return [];
+  const [first, ...rest] = perSuite;
+  const others = rest.map((survivors) => new Set(survivors.map(mutantIdentity)));
+  return first.filter((m) => others.every((ids) => ids.has(mutantIdentity(m))));
+}
+
 /**
  * Why a survivor survived, in words that point at the right fix: a mutant no
  * test ran against needs a test case that reaches its line, not a stronger
