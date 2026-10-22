@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import {
+  initAssertsNothing,
+  isNoCaseRefusal,
   buildGenerateArgs,
   buildInitArgs,
   buildStarterCut,
@@ -312,5 +314,33 @@ describe('buildStarterCut', () => {
     const text = buildStarterCut({ programName: 'PROG', firstParagraph: undefined });
     assert.ok(text.includes('    PERFORM MAIN-PARAGRAPH'));
     assert.ok(text.includes('TESTCASE "first paragraph runs without error"'));
+  });
+});
+
+describe('empty-suite outcomes of a current CLI (mocky-mock #275)', () => {
+  it('recognises generate refusing a suite with no TESTCASE', () => {
+    const stdout =
+      'mockymock generate: no test case to write -- no paragraph of P.cbl touches a boundary to mock, so P.cut was not written.';
+    assert.equal(isNoCaseRefusal({ code: 1, stdout, stderr: '' }), true);
+    assert.equal(isNoCaseRefusal({ code: 1, stdout: 'mockymock generate: cannot parse P.cbl', stderr: '' }), false);
+  });
+
+  it('recognises init recording nothing to assert', () => {
+    const stdout = 'mockymock init: P.cut was written, but none of its test cases asserts anything -- add an EXPECT';
+    assert.equal(initAssertsNothing({ code: 1, stdout, stderr: '' }), true);
+    assert.equal(initAssertsNothing({ code: 1, stdout: 'mockymock run: compile failed', stderr: '' }), false);
+  });
+
+  it('passes inherited library locations on --extra-copybook-path (#130)', () => {
+    assert.deepEqual(buildInitArgs('/w/P.cbl', '/w/P.cut', ['/own'], ['/zapp']), [
+      'init',
+      '/w/P.cbl',
+      '--output',
+      '/w/P.cut',
+      '--copybook-path',
+      '/own',
+      '--extra-copybook-path',
+      '/zapp',
+    ]);
   });
 });

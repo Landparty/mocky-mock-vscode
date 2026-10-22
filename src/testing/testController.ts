@@ -26,7 +26,7 @@ import { parseJsonReport, mapJsonReportCases, unattributedReportFailures, format
 import { parseCoverageJson, mergeCoverage, CoverageData } from './coverageReport';
 import { runSuite } from './mockymockRunner';
 import { DiscoveryTracker } from './discoveryTracker';
-import { parseMutationJson, survivorsOf, survivorReason, MutantEntry } from './mutationReport';
+import { parseMutationJson, survivorsOf, survivorsOfEverySuite, survivorReason, MutantEntry } from './mutationReport';
 import { runMutate } from './mutationRunner';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
 import { pairingError } from '../discovery/suitePairing';
@@ -35,9 +35,10 @@ import {
   describeTooOldCli,
   resolveExecutablePath,
   supportsDebugCommand,
+  supportsLintCaseFlag,
   supportsMutateCommand,
 } from '../environment/checks';
-import { configuredExecutablePath, resolveInvocationConfig } from '../environment/invocationConfig';
+import { configuredExecutablePath, resolveCliInvocationConfig } from '../environment/invocationConfig';
 import { saveBeforeCli } from '../environment/saveBeforeCli';
 import { MockymockDebugConfiguration, buildLintArgs } from '../debug/debugArgs';
 import { evaluateLintResult } from '../debug/lintGate';
@@ -541,7 +542,7 @@ export function activateTestController(
     const junitXmlPath = path.join(tmpDir, 'report.xml');
     const jsonReportPath = path.join(tmpDir, 'report.json');
     const coverageJsonPath = withCoverage ? path.join(tmpDir, 'coverage.json') : undefined;
-    const { executablePath, copybookPaths } = resolveInvocationConfig(context, fileItem.uri!);
+    const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, fileItem.uri!);
 
     const abort = new AbortController();
     const cancelListener = token.onCancellationRequested(() => abort.abort());
@@ -557,6 +558,7 @@ export function activateTestController(
           cutPath,
           junitXmlPath,
           copybookPaths,
+          extraCopybookPaths,
           jsonReportPath,
           coverageJsonPath,
           // The CLI's --case flags are name-keyed; deduped so a same-labeled
@@ -741,7 +743,8 @@ export function activateTestController(
     plan: FilePlan,
     run: vscode.TestRun,
     token: vscode.CancellationToken,
-    ensureReady: () => Promise<ReadyResult>
+    ensureReady: () => Promise<ReadyResult>,
+    survivorsByProgram: Map<string, { uri: vscode.Uri; perSuite: MutantEntry[][] }>
   ) {
     const { fileItem } = plan;
     run.started(fileItem);
@@ -781,7 +784,7 @@ export function activateTestController(
       return;
     }
 
-    const { executablePath, copybookPaths } = resolveInvocationConfig(context, fileItem.uri!);
+    const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, fileItem.uri!);
 
     const supportsMutate = await supportsMutateCommand(runCommand, executablePath);
     if (!supportsMutate) {
@@ -803,7 +806,7 @@ export function activateTestController(
     let result;
     try {
       result = await runMutate(
-        { executablePath, cblPath, cutPath, jsonReportPath, copybookPaths },
+        { executablePath, cblPath, cutPath, jsonReportPath, copybookPaths, extraCopybookPaths },
         runCommandIn(path.dirname(cutPath)),
         async (p) => {
           try {
@@ -838,7 +841,12 @@ export function activateTestController(
     }
 
     const survivors = survivorsOf(report);
-    mutationDiagnostics.set(cblUri, survivors.map(survivorDiagnostic));
+    // Diagnostics go on the program once the whole run is over: several
+    // suites test one program, and setting them per suite let the last
+    // suite's survivors replace the others' (#108).
+    const program = survivorsByProgram.get(cblUri.fsPath) ?? { uri: cblUri, perSuite: [] };
+    program.perSuite.push(survivors);
+    survivorsByProgram.set(cblUri.fsPath, program);
 
     if (survivors.length) {
       const scoreText = report.score !== null ? `${(report.score * 100).toFixed(1)}%` : 'n/a';
@@ -930,7 +938,7 @@ export function activateTestController(
       return;
     }
     const cblPath = resolveCblPath(cutPath);
-    const { executablePath, copybookPaths } = resolveInvocationConfig(context, cutUri);
+    const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, cutUri);
 
     const supportsDebug = await supportsDebugCommand(runCommand, executablePath);
     if (!supportsDebug) {
@@ -947,8 +955,13 @@ export function activateTestController(
     // DAP -- run `lint` first with the exact program/cut/copybookPaths the
     // debug session itself will use, so a static problem surfaces as a
     // clear error here instead of a generic "debug adapter process
-    // terminated unexpectedly" dialog.
-    const lintResult = await runCommandIn(path.dirname(cutPath))(executablePath, buildLintArgs({ program: cblPath, cut: cutPath, copybookPaths }));
+    // terminated unexpectedly" dialog. Scoped to this TESTCASE when the CLI
+    // can (#95): a problem in another case doesn't stop this one running.
+    const lintCase = (await supportsLintCaseFlag(runCommand, executablePath)) ? caseItem.label : undefined;
+    const lintResult = await runCommandIn(path.dirname(cutPath))(
+      executablePath,
+      buildLintArgs({ program: cblPath, cut: cutPath, copybookPaths, extraCopybookPaths }, lintCase)
+    );
     const lintGate = evaluateLintResult(lintResult);
     if (lintGate.blocked) {
       run.appendOutput(toCrlf(`${lintGate.message}\n`), undefined, caseItem);
@@ -971,6 +984,7 @@ export function activateTestController(
       case: caseItem.label,
       executablePath,
       copybookPaths,
+      extraCopybookPaths,
       // Already through ensureReady() and the lint gate above.
       [PREFLIGHTED]: true,
     };
@@ -1224,10 +1238,11 @@ export function activateTestController(
           mutationDiagnostics.delete(vscode.Uri.file(resolveCblPath(plan.fileItem.uri!.fsPath)));
         }
         const ensureReady = readinessForRun(token);
+        const survivorsByProgram = new Map<string, { uri: vscode.Uri; perSuite: MutantEntry[][] }>();
         for (const plan of plans) {
           if (token.isCancellationRequested) break;
           try {
-            await runMutationFile(plan, run, token, ensureReady);
+            await runMutationFile(plan, run, token, ensureReady, survivorsByProgram);
           } catch (err) {
             // Never leave a "started" item without a terminal state: same
             // guard as makeRunHandler's worker for "Run"/"Run with
@@ -1239,6 +1254,11 @@ export function activateTestController(
             run.appendOutput(toCrlf(`${message}\n`), undefined, plan.fileItem);
             run.errored(plan.fileItem, new vscode.TestMessage(message));
           }
+        }
+        // One set per program: a mutant any suite of the selection killed is
+        // not flagged. A cancelled run reports the suites that finished.
+        for (const { uri, perSuite } of survivorsByProgram.values()) {
+          mutationDiagnostics.set(uri, survivorsOfEverySuite(perSuite).map(survivorDiagnostic));
         }
       } finally {
         cancelListeners.forEach((l) => l.dispose());

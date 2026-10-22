@@ -1,7 +1,12 @@
 import * as assert from 'assert';
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import {
+  copybookPathArgs,
   expandSettingPath,
+  hasProjectConfig,
+  planCopybookPaths,
   mergeCopybookPaths,
   resolveAgainstWorkspaceRoot,
   resolveCopybookPathSetting,
@@ -97,5 +102,95 @@ describe('setting path expansion', () => {
     assert.strictEqual(resolveCopybookPathSetting('${workspaceFolder}/copybooks', ctx), path.join(ws, 'copybooks'));
     assert.strictEqual(resolveCopybookPathSetting('~/copybooks', ctx), path.join(home, 'copybooks'));
     assert.strictEqual(resolveCopybookPathSetting('copybooks', ctx), path.join(ws, 'copybooks'));
+  });
+});
+
+describe('planCopybookPaths (#130, #145)', () => {
+  const base = { companion: [], zapp: [], hasProjectConfig: false, supportsExtraCopybookPath: true };
+
+  it('keeps the explicit setting on --copybook-path and sends zapp.yml to --extra-copybook-path', () => {
+    assert.deepStrictEqual(planCopybookPaths({ ...base, explicit: ['/own', '/shared'], zapp: ['/shared/', '/zapp'] }), {
+      copybookPaths: ['/own', '/shared'],
+      extraCopybookPaths: ['/zapp'],
+    });
+  });
+
+  it('sends the companion setting and zapp.yml to --extra-copybook-path when nothing is explicit', () => {
+    assert.deepStrictEqual(planCopybookPaths({ ...base, explicit: undefined, companion: ['/ca'], zapp: ['/zapp'] }), {
+      copybookPaths: [],
+      extraCopybookPaths: ['/ca', '/zapp'],
+    });
+  });
+
+  it('treats an explicit [] as "no copybook paths from the extension", zapp.yml included', () => {
+    for (const supportsExtraCopybookPath of [true, false]) {
+      assert.deepStrictEqual(
+        planCopybookPaths({ ...base, supportsExtraCopybookPath, explicit: [], companion: ['/ca'], zapp: ['/zapp'] }),
+        { copybookPaths: [], extraCopybookPaths: [] }
+      );
+    }
+  });
+
+  describe('a CLI without --extra-copybook-path', () => {
+    const old = { ...base, supportsExtraCopybookPath: false };
+
+    it('gets one merged list, as before', () => {
+      assert.deepStrictEqual(planCopybookPaths({ ...old, explicit: ['/own'], zapp: ['/zapp'] }), {
+        copybookPaths: ['/own', '/zapp'],
+        extraCopybookPaths: [],
+      });
+      assert.deepStrictEqual(planCopybookPaths({ ...old, explicit: undefined, companion: ['/ca'], zapp: ['/zapp'] }), {
+        copybookPaths: ['/ca', '/zapp'],
+        extraCopybookPaths: [],
+      });
+    });
+
+    it('drops the zapp.yml locations when a project config would lose its list to them', () => {
+      assert.deepStrictEqual(
+        planCopybookPaths({ ...old, hasProjectConfig: true, explicit: undefined, zapp: ['/zapp'] }),
+        { copybookPaths: [], extraCopybookPaths: [] }
+      );
+    });
+
+    it('still passes an explicit setting, which replaces the config list by design', () => {
+      assert.deepStrictEqual(
+        planCopybookPaths({ ...old, hasProjectConfig: true, explicit: ['/own'], zapp: ['/zapp'] }),
+        { copybookPaths: ['/own', '/zapp'], extraCopybookPaths: [] }
+      );
+    });
+  });
+});
+
+describe('copybookPathArgs', () => {
+  it('lists --copybook-path entries first, then --extra-copybook-path ones', () => {
+    assert.deepStrictEqual(copybookPathArgs(['/a'], ['/b', '/c']), [
+      '--copybook-path',
+      '/a',
+      '--extra-copybook-path',
+      '/b',
+      '--extra-copybook-path',
+      '/c',
+    ]);
+  });
+});
+
+describe('hasProjectConfig', () => {
+  let root: string;
+  beforeEach(() => {
+    root = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'mm-config-')));
+    fs.mkdirSync(path.join(root, 'src', 'deep'), { recursive: true });
+  });
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
+
+  it('finds a cobol.yml or mockymock.toml in a parent folder', () => {
+    fs.writeFileSync(path.join(root, 'cobol.yml'), 'copybook_paths: [cpy]\n');
+    assert.strictEqual(hasProjectConfig(path.join(root, 'src', 'deep')), true);
+  });
+
+  it('counts a pyproject.toml only with a [tool.mockymock] table', () => {
+    fs.writeFileSync(path.join(root, 'src', 'pyproject.toml'), '[tool.black]\nline-length = 88\n');
+    assert.strictEqual(hasProjectConfig(path.join(root, 'src', 'deep')), false);
+    fs.writeFileSync(path.join(root, 'src', 'pyproject.toml'), '[tool.mockymock]\nseed = 7\n');
+    assert.strictEqual(hasProjectConfig(path.join(root, 'src', 'deep')), true);
   });
 });

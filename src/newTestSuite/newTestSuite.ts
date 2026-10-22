@@ -33,7 +33,7 @@ import {
   supportsInitCommand,
   supportsPerParagraphFlag,
 } from '../environment/checks';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { resolveCliInvocationConfig } from '../environment/invocationConfig';
 import { focusClickedFile, showNeedsFile } from '../environment/notify';
 import { resolveCblPath, suitesForProgram } from '../discovery/cutDiscovery';
 import { rememberPairing } from '../discovery/suitePairing';
@@ -51,7 +51,9 @@ import {
   describeEmptyScaffold,
   describeLintRefusedSuite,
   failureReason,
+  initAssertsNothing,
   initRecordingFailure,
+  isNoCaseRefusal,
   lintRefusalOf,
   parseGeneratedCaseCount,
   parseInitOutcome,
@@ -192,7 +194,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
       // watcher-driven pairing refresh lands.
       rememberPairing(cutPath, cblPath);
 
-      const { executablePath, copybookPaths } = resolveInvocationConfig(context, editor.document.uri);
+      const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, editor.document.uri);
       const channel = getOutputChannel();
 
       // The --help probe keeps the shared module-level runner: its positive
@@ -216,7 +218,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         const cutArg = shellArg(vscode.workspace.asRelativePath(cutPath, false));
 
         if (dockerUp && (await supportsInitCommand(runCommand, executablePath))) {
-          const initArgs = buildInitArgs(cblPath, cutPath, copybookPaths);
+          const initArgs = buildInitArgs(cblPath, cutPath, copybookPaths, extraCopybookPaths);
           const result = await vscode.window.withProgress(
             {
               location: vscode.ProgressLocation.Notification,
@@ -258,6 +260,8 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
               cutPath,
               refusal
                 ? describeLintRefusedSuite(cutName, refusal)
+                : initAssertsNothing(result)
+                ? `mockymock: created ${cutName} and ran it, but none of its test cases asserts anything yet. Add an EXPECT on what ${cblName} writes before relying on it.`
                 : `mockymock: created ${cutName}, but recording what the program does failed, so some cases may have no EXPECT lines yet: ${initRecordingFailure(result) ?? 'see Show Details'}`
             );
             return;
@@ -272,7 +276,8 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
           cblPath,
           cutPath,
           copybookPaths,
-          perParagraph && (await supportsPerParagraphFlag(runCommand, executablePath))
+          perParagraph && (await supportsPerParagraphFlag(runCommand, executablePath)),
+          extraCopybookPaths
         );
         const result = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: `mockymock: creating ${cutName}…` },
@@ -280,11 +285,11 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
         );
         const cliWrote = await exists(cutPath);
         const caseCount = parseGeneratedCaseCount(result.stdout);
-        if (cliWrote && caseCount === 0) {
+        if ((cliWrote && caseCount === 0) || (!cliWrote && isNoCaseRefusal(result))) {
           // No boundary to mock, so no cases: an empty TESTSUITE runs
           // nothing. The starter at least PERFORMs the first paragraph.
           showInChannel(channel, generateArgs, result, { append: initTranscript });
-          await fs.unlink(cutPath);
+          if (cliWrote) await fs.unlink(cutPath);
           await writeStarter(cblPath, cutPath, editor.document.getText());
           await openAndOffer(cutPath, describeEmptyScaffold(cblName, cutName));
           return;

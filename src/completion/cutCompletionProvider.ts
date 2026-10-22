@@ -1,3 +1,4 @@
+import * as os from 'os';
 import * as path from 'path';
 // src/completion/cutCompletionProvider.ts
 //
@@ -9,12 +10,14 @@ import * as path from 'path';
 // repo) for the design this implements.
 import * as vscode from 'vscode';
 import { isExcludedCutPath, resolveCblPath } from '../discovery/cutDiscovery';
-import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
+import { CommandResult, PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
+import { copybookPathArgs } from '../environment/copybookPaths';
 import { isCopybookPath } from '../environment/cobolPaths';
-import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { INVOCATION_SETTINGS, resolveCliInvocationConfig } from '../environment/invocationConfig';
 import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import {
   BoundaryInfo,
+  collectBoundaries,
   FlowTargets,
   MOCK_CATEGORIES,
   boundaryKeyCandidates,
@@ -24,17 +27,17 @@ import {
 } from './cutCompletionLogic';
 
 interface BoundaryCacheEntry {
-  cutMtimeMs: number;
   cblMtimeMs: number;
   boundaries: BoundaryInfo[];
   // MOCK PARAGRAPH / MOCK SECTION keys, scanned from the program text.
   flowTargets: FlowTargets;
 }
 
-// Keyed by the .cut file's own path -- one cache entry per open document,
-// invalidated whenever either file's own mtime moves. A completion
-// request is not worth a fresh `collect --boundaries` process on every
-// keystroke inside an unrelated part of the file.
+// Keyed by the program's path and invalidated when its mtime moves. The
+// boundaries are the program's (and its copybooks'), never the suite's:
+// keying on the .cut too meant a half-typed MOCK line on disk cached an
+// empty list until the next parseable save (#100). A completion request is
+// not worth a fresh `collect --boundaries` process on every keystroke.
 const boundaryCache = new Map<string, BoundaryCacheEntry>();
 
 async function loadBoundaries(
@@ -44,40 +47,35 @@ async function loadBoundaries(
   const cutPath = document.uri.fsPath;
   const cblPath = resolveCblPath(cutPath);
   const fs = await import('fs/promises');
-  let cutStat;
   let cblStat;
   try {
-    [cutStat, cblStat] = await Promise.all([fs.stat(cutPath), fs.stat(cblPath)]);
+    cblStat = await fs.stat(cblPath);
   } catch {
     return null; // no paired program on disk -- nothing to offer
   }
 
-  const cached = boundaryCache.get(cutPath);
-  if (
-    cached &&
-    cached.cutMtimeMs === cutStat.mtimeMs &&
-    cached.cblMtimeMs === cblStat.mtimeMs
-  ) {
+  const cached = boundaryCache.get(cblPath);
+  if (cached && cached.cblMtimeMs === cblStat.mtimeMs) {
     return cached;
   }
 
-  const { executablePath, copybookPaths } = resolveInvocationConfig(context, document.uri);
-  const args = ['collect', cblPath, '--cut', cutPath, '--json', '--boundaries'];
-  for (const p of copybookPaths) args.push('--copybook-path', p);
-
-  const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
-  let payload: { boundaries?: BoundaryInfo[] } = {};
-  if (result.code === 0) {
-    try {
-      payload = JSON.parse(result.stdout);
-    } catch {
-      payload = {};
-    }
-  }
+  const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, document.uri);
+  const run = runCommandIn(path.dirname(cutPath));
+  const collect = (suitePath: string): Promise<CommandResult> =>
+    run(executablePath, [
+      'collect',
+      cblPath,
+      '--cut',
+      suitePath,
+      '--json',
+      '--boundaries',
+      ...copybookPathArgs(copybookPaths, extraCopybookPaths),
+    ]);
+  const payload = await collectBoundaries(cutPath, collect, () => collectWithThrowawaySuite(collect));
   // A failed `collect` (the .cbl does not parse yet, the CLI is absent) is
-  // cached as an empty list against the same mtimes, so a typist inside a
-  // broken file does not spawn a CLI process on every keystroke; the next
-  // save of either file invalidates it.
+  // cached as an empty list against the same mtime, so a typist does not
+  // spawn a CLI process on every keystroke; the program's next save
+  // invalidates it.
   const boundaries = payload.boundaries ?? [];
   let flowTargets: FlowTargets = { paragraphs: [], sections: [] };
   try {
@@ -86,13 +84,28 @@ async function loadBoundaries(
     // unreadable program: no PARAGRAPH/SECTION keys to offer
   }
   const entry: BoundaryCacheEntry = {
-    cutMtimeMs: cutStat.mtimeMs,
     cblMtimeMs: cblStat.mtimeMs,
     boundaries,
     flowTargets,
   };
-  boundaryCache.set(cutPath, entry);
+  boundaryCache.set(cblPath, entry);
   return entry;
+}
+
+// The fallback collectBoundaries needs for a CLI that predates boundaries
+// next to a suite parse error: a temp suite with nothing in it to fail.
+async function collectWithThrowawaySuite(
+  collect: (suitePath: string) => Promise<CommandResult>
+): Promise<CommandResult> {
+  const fs = await import('fs/promises');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'mockymock-completion-'));
+  try {
+    const suitePath = path.join(dir, 'boundaries.cut');
+    await fs.writeFile(suitePath, 'TESTSUITE "boundaries"\n');
+    return await collect(suitePath);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 }
 
 export function activateCutCompletion(context: vscode.ExtensionContext): void {
@@ -156,7 +169,7 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
     },
   };
 
-  // The cache is keyed on the .cut/.cbl mtimes only, but a project config
+  // The cache is keyed on the .cbl mtime only, but a project config
   // change (copybook_path, say), a zapp.yml, the copybook-path settings or
   // a copybook's own contents all change what `collect --boundaries` sees.
   const configWatcher = vscode.workspace.createFileSystemWatcher(PROJECT_CONFIG_GLOB);
@@ -178,14 +191,13 @@ export function activateCutCompletion(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidSaveTextDocument((document) => {
       if (isCopybookPath(document.uri.fsPath)) dropCache();
       if (/\.(cut|cbl|cob|cobol)$/i.test(document.uri.fsPath)) {
-        // A saved .cut/.cbl may have changed the boundary set; the mtime
-        // check above would already catch this on the next request, but
-        // dropping the cache entry outright avoids serving a stale list
-        // for the split second before the new mtime is observed.
-        const cutPath = document.uri.fsPath.endsWith('.cut')
-          ? document.uri.fsPath
-          : document.uri.fsPath.replace(/\.(cbl|cob|cobol)$/i, '.cut');
-        boundaryCache.delete(cutPath);
+        // A saved .cbl may have changed the boundary set (a saved .cut may
+        // pair with a different program); the mtime check above would
+        // already catch this on the next request, but dropping the cache
+        // entry outright avoids serving a stale list for the split second
+        // before the new mtime is observed.
+        const cblPath = document.uri.fsPath.endsWith('.cut') ? resolveCblPath(document.uri.fsPath) : document.uri.fsPath;
+        boundaryCache.delete(cblPath);
       }
     })
   );

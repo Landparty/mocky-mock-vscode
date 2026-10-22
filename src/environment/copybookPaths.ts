@@ -1,4 +1,5 @@
 // src/environment/copybookPaths.ts
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { anchorCommandPath } from './commandRunner';
@@ -88,4 +89,89 @@ export function mergeCopybookPaths(primaryPaths: string[], secondaryPaths: strin
     }
   }
   return result;
+}
+
+// Where the copybook library locations for one CLI invocation came from.
+// `explicit` is mockymock.copybookPaths when the user set it anywhere
+// (`[]` included); `companion` is cobolAnalyzer.copybookPaths, read only
+// when `explicit` is unset; `zapp` is the zapp.yml library locations.
+export interface CopybookPathSources {
+  explicit: string[] | undefined;
+  companion: string[];
+  zapp: string[];
+  // A cobol.yml / mockymock.toml / pyproject [tool.mockymock] the CLI
+  // would read from the file's folder up.
+  hasProjectConfig: boolean;
+  // The installed CLI takes --extra-copybook-path.
+  supportsExtraCopybookPath: boolean;
+}
+
+export interface PlannedCopybookPaths {
+  // Passed as --copybook-path: replaces the project config's list.
+  copybookPaths: string[];
+  // Passed as --extra-copybook-path: added after the project config's list.
+  extraCopybookPaths: string[];
+}
+
+// Which flag each copybook library location travels on (issues #130, #145).
+// The CLI's --copybook-path REPLACES the copybook list of a cobol.yml or
+// mockymock.toml, so only a list the user typed into mockymock.copybookPaths
+// goes there. Locations the extension discovered on the user's behalf
+// (zapp.yml, the companion's setting) go on --extra-copybook-path, which the
+// CLI appends to whatever the project config says. An explicit `[]` means
+// "no copybook paths from the extension", zapp.yml included. A CLI too old
+// for --extra-copybook-path gets the old single list, minus the zapp.yml
+// locations when a project config exists: passing them would silently throw
+// away the config's own list.
+export function planCopybookPaths(sources: CopybookPathSources): PlannedCopybookPaths {
+  const { explicit, companion, zapp, hasProjectConfig, supportsExtraCopybookPath } = sources;
+  if (explicit !== undefined && explicit.length === 0) {
+    return { copybookPaths: [], extraCopybookPaths: [] };
+  }
+  const primary = explicit ?? [];
+  const inherited = explicit === undefined ? mergeCopybookPaths(companion, zapp) : zapp;
+  if (supportsExtraCopybookPath) {
+    const primaryKeys = new Set(primary.map(dedupKey));
+    return {
+      copybookPaths: primary,
+      extraCopybookPaths: inherited.filter((p) => !primaryKeys.has(dedupKey(p))),
+    };
+  }
+  const keptZapp = hasProjectConfig && explicit === undefined ? [] : zapp;
+  return {
+    copybookPaths: mergeCopybookPaths(explicit ?? companion, keptZapp),
+    extraCopybookPaths: [],
+  };
+}
+
+// The argv for one invocation's copybook library locations.
+export function copybookPathArgs(copybookPaths: string[], extraCopybookPaths: string[] = []): string[] {
+  const args: string[] = [];
+  for (const p of copybookPaths) args.push('--copybook-path', p);
+  for (const p of extraCopybookPaths) args.push('--extra-copybook-path', p);
+  return args;
+}
+
+const PROJECT_CONFIG_FILES = ['cobol.yml', 'cobol.yaml', 'mockymock.toml'];
+
+// Whether the CLI, started in `startDir`, would find a project config: the
+// same files it looks for, from that folder up.
+export function hasProjectConfig(startDir: string): boolean {
+  let dir = path.resolve(startDir);
+  for (;;) {
+    for (const name of PROJECT_CONFIG_FILES) {
+      if (fs.existsSync(path.join(dir, name))) return true;
+    }
+    const pyproject = path.join(dir, 'pyproject.toml');
+    if (fs.existsSync(pyproject)) {
+      try {
+        if (/^\s*\[tool\.mockymock\b/m.test(fs.readFileSync(pyproject, 'utf8'))) return true;
+      } catch {
+        // unreadable: the CLI could not read it either
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
 }

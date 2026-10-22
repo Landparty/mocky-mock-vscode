@@ -6,6 +6,7 @@
 // `configuration` (typed as vscode.DebugConfiguration, which carries a
 // `[key: string]: any` index signature) to this interface at its one call site.
 import * as path from 'path';
+import { copybookPathArgs } from '../environment/copybookPaths';
 
 export interface MockymockDebugConfiguration {
   program: string;
@@ -13,7 +14,12 @@ export interface MockymockDebugConfiguration {
   case: string;
   executablePath?: string;
   copybookPaths?: string[];
+  // Filled from settings, never hand-authored: library locations the CLI
+  // appends to a project config's list (--extra-copybook-path).
+  extraCopybookPaths?: string[];
 }
+
+type CopybookFields = 'program' | 'cut' | 'copybookPaths' | 'extraCopybookPaths';
 
 // Mirrors mockymockRunner.ts's buildRunArgs: a plain function building the
 // argv mockymock debug --dap-stdio needs, kept separate from the
@@ -21,26 +27,29 @@ export interface MockymockDebugConfiguration {
 export function buildDebugArgs(config: MockymockDebugConfiguration): string[] {
   // `--case=<name>` as one element, as in buildRunArgs: a case name that
   // starts with `-` would otherwise be read by argparse as an option.
-  const args = ['debug', config.program, '--cut', config.cut, `--case=${config.case}`, '--dap-stdio'];
-  for (const p of config.copybookPaths ?? []) {
-    args.push('--copybook-path', p);
-  }
-  return args;
+  return [
+    'debug',
+    config.program,
+    '--cut',
+    config.cut,
+    `--case=${config.case}`,
+    '--dap-stdio',
+    ...copybookPathArgs(config.copybookPaths ?? [], config.extraCopybookPaths),
+  ];
 }
 
 // The lint preflight that `runInteractiveDebug` runs before ever starting a
 // debug session (see lintGate.ts): built from the same program/cut/copybookPaths
 // a debug session would use, so it can never false-positive-block on a
-// copybook path the session itself would have resolved fine. Note this is
-// whole-file, not case-scoped (mockymock lint has no --case flag) -- a
-// syntax/copybook problem is a property of the .cbl/.cut pair regardless of
-// which TESTCASE runs, so this is a deliberate, not an accidental, scope choice.
-export function buildLintArgs(config: Pick<MockymockDebugConfiguration, 'program' | 'cut' | 'copybookPaths'>): string[] {
+// copybook path the session itself would have resolved fine. With `caseName`
+// (a CLI whose lint takes --case, see supportsLintCaseFlag) only that
+// TESTCASE is checked, so a problem in an unrelated case no longer blocks
+// debugging this one (#95); without it the whole suite is linted.
+export function buildLintArgs(config: Pick<MockymockDebugConfiguration, CopybookFields>, caseName?: string): string[] {
   const args = ['lint', config.program, '--cut', config.cut];
-  for (const p of config.copybookPaths ?? []) {
-    args.push('--copybook-path', p);
-  }
-  return args;
+  // `--case=<name>` as one element: a name starting with `-` stays a value.
+  if (caseName !== undefined) args.push(`--case=${caseName}`);
+  return [...args, ...copybookPathArgs(config.copybookPaths ?? [], config.extraCopybookPaths)];
 }
 
 // `mockymock debug` matches each setBreakpoints source against the program
@@ -51,7 +60,7 @@ export function buildLintArgs(config: Pick<MockymockDebugConfiguration, 'program
 // copybook) paths to the launching workspace folder instead; absolute paths
 // pass through.
 export function absolutizeDebugPaths<
-  T extends Pick<MockymockDebugConfiguration, 'program' | 'cut' | 'copybookPaths'>,
+  T extends Pick<MockymockDebugConfiguration, CopybookFields>,
 >(config: T, folderPath: string | undefined): T {
   if (!folderPath) {
     return config;
@@ -60,6 +69,9 @@ export function absolutizeDebugPaths<
   const resolved: T = { ...config, program: anchor(config.program), cut: anchor(config.cut) };
   if (config.copybookPaths) {
     resolved.copybookPaths = config.copybookPaths.map(anchor);
+  }
+  if (config.extraCopybookPaths) {
+    resolved.extraCopybookPaths = config.extraCopybookPaths.map(anchor);
   }
   return resolved;
 }

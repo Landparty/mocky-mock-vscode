@@ -7,7 +7,8 @@ import { onDidChangeSuitePairing } from '../discovery/suiteIndexService';
 import { pairingError } from '../discovery/suitePairing';
 import { isCobolPath, isCopybookPath } from '../environment/cobolPaths';
 import { PROJECT_CONFIG_GLOB, runCommandIn } from '../environment/commandRunner';
-import { INVOCATION_SETTINGS, resolveInvocationConfig } from '../environment/invocationConfig';
+import { INVOCATION_SETTINGS, resolveCliInvocationConfig } from '../environment/invocationConfig';
+import { copybookPathArgs } from '../environment/copybookPaths';
 import { ZAPP_FILE_GLOB } from '../environment/zappConfig';
 import { cutRelativeLine, LintWarning, parseLintOutput, parseLintWarnings } from './lintOutput';
 
@@ -90,9 +91,9 @@ export function activateLintDiagnostics(
         return;
       }
 
-      const { executablePath, copybookPaths } = resolveInvocationConfig(context, document.uri);
+      const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, document.uri);
       const args = ['lint', cblPath, '--cut', cutPath];
-      for (const p of copybookPaths) args.push('--copybook-path', p);
+      args.push(...copybookPathArgs(copybookPaths, extraCopybookPaths));
 
       const result = await runCommandIn(path.dirname(cutPath))(executablePath, args);
       // The document may have closed while the CLI ran; its close handler

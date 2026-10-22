@@ -118,6 +118,28 @@ export async function supportsGenerateCommand(run: CommandRunner, executablePath
   });
 }
 
+// `lint --case NAME` / `--tag NAME` (narrow the lint to the selected
+// TESTCASEs) arrived with the CLI that also gained --extra-copybook-path.
+// An older lint rejects the flag outright, so a false here means "lint the
+// whole suite, as before" (#95).
+export async function supportsLintCaseFlag(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'lint-case', async () => {
+    const result = await run(executablePath, ['lint', '--help']);
+    return result.code === 0 && /--case\s/.test(result.stdout);
+  });
+}
+
+// `--extra-copybook-path DIR` adds a copybook library location AFTER the
+// project config's list, where --copybook-path replaces it (#130). Every
+// subcommand that takes one takes the other, so `lint --help` speaks for
+// all of them.
+export async function supportsExtraCopybookPath(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'extra-copybook-path', async () => {
+    const result = await run(executablePath, ['lint', '--help']);
+    return result.code === 0 && result.stdout.includes('--extra-copybook-path');
+  });
+}
+
 // `mockymock init` (generate --with-data + run --record-expectations) records
 // the program's current outputs as EXPECT lines. Absent from older CLIs.
 export async function supportsInitCommand(run: CommandRunner, executablePath: string): Promise<boolean> {

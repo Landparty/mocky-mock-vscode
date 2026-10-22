@@ -137,6 +137,24 @@ describe('mockymock CLI contract (live)', function () {
       assertFlagsAccepted(['debug'], args);
     });
 
+    // Probed, not pinned: the extension passes these only to a CLI whose
+    // `lint --help` lists them (supportsExtraCopybookPath /
+    // supportsLintCaseFlag). An older pinned CLI has nothing to check here,
+    // and returns rather than skipping: CI treats a skipped contract test as
+    // an unusable CLI.
+    it('--extra-copybook-path and lint --case, where the CLI has them', () => {
+      if (!helpFor(['lint']).includes('--extra-copybook-path')) return;
+      const extra = ['/zapp'];
+      assertFlagsAccepted(['lint'], buildLintArgs({ program: CBL, cut: CUT, extraCopybookPaths: extra }, 'a case'));
+      assertFlagsAccepted(['run'], buildRunArgs(CBL, CUT, '/tmp/j.xml', [], { extraCopybookPaths: extra }));
+      assertFlagsAccepted(['mutate'], buildMutateArgs(CBL, CUT, '/tmp/m.json', [], extra));
+      assertFlagsAccepted(['export'], buildExportArgs(CBL, CUT, [], '/tmp/out.cbl', extra));
+      assertFlagsAccepted(['debug'], buildDebugArgs({ program: CBL, cut: CUT, case: 'a case', extraCopybookPaths: extra }));
+      assertFlagsAccepted(['generate'], buildGenerateArgs(CBL, '/tmp/P.cut', [], false, extra));
+      assertFlagsAccepted(['init'], buildInitArgs(CBL, '/tmp/P.cut', [], extra));
+      assertFlagsAccepted(['collect'], ['--extra-copybook-path', '/zapp']);
+    });
+
     it('the collect --json discovery call', () => {
       assertFlagsAccepted(['collect'], ['collect', '--cut', CUT, '--json']);
     });

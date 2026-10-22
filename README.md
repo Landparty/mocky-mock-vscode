@@ -178,8 +178,21 @@ DBB tooling uses) is honored by both on top of that.
 mockymock also reads a project config — `cobol.yml` (`project:
 copybook_path`), `mockymock.toml`, or `[tool.mockymock]` in
 `pyproject.toml` — found by walking up from the `.cut` file's folder. The
-CLI uses its `copybook_path` only when no `--copybook-path` is passed, so it
-applies when neither extension setting nor a `zapp.yml` names a folder.
+CLI uses its `copybook_path` only when no `--copybook-path` is passed, and
+the two sources combine like this:
+
+- **`mockymock.copybookPaths` replaces the project config's list.** It is
+  passed as `--copybook-path`, so a folder you name there is searched instead
+  of the config's `copybook_path`, not as well as it.
+- **Inherited folders are added after it.** `cobolAnalyzer.copybookPaths`
+  (when `mockymock.copybookPaths` is unset) and the `zapp.yml` locations go
+  on `--extra-copybook-path`, which the CLI appends to the config's list.
+  A CLI older than that flag gets them as `--copybook-path` instead, except
+  the `zapp.yml` locations when a project config exists, so the config's own
+  list is never silently thrown away.
+- **`"mockymock.copybookPaths": []` turns all of it off**: nothing from the
+  companion setting or `zapp.yml` is passed, and only the project config
+  (if any) decides.
 `mockymock: Check Setup` warns if that config can't be read, and a broken
 config shows up as a lint problem on the `.cut` file.
 
@@ -235,7 +248,7 @@ xattr -d com.apple.quarantine <path-from-the-command-above>
 | Setting | Default | Purpose |
 |---|---|---|
 | `mockymock.executablePath` | `""` | Explicit path to the `mockymock` executable (bundled binary otherwise, falling back to PATH) |
-| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). When left unset it falls back to `cobolAnalyzer.copybookPaths`, so one copybook setup serves both extensions — see [Sharing one copybook setup](#sharing-one-copybook-setup). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: the `local` library locations of its `cobol`-language property groups (and of groups with no `language`, which cover every language) are merged in after this setting's own entries, which win on a duplicate path |
+| `mockymock.copybookPaths` | `[]` | Folders passed as `--copybook-path` on every run/lint (resource-scoped; relative paths resolve against the workspace folder). When left unset it falls back to `cobolAnalyzer.copybookPaths`, so one copybook setup serves both extensions — see [Sharing one copybook setup](#sharing-one-copybook-setup). A `zapp.yml`/`zapp.yaml` at the workspace root — the same file IBM Z Open Editor's DBB tooling uses — is also honored: the `local` library locations of its `cobol`-language property groups (and of groups with no `language`, which cover every language) are merged in after this setting's own entries, which win on a duplicate path. This setting replaces a project config's `copybook_path`; the inherited folders are added to it instead, and `[]` turns the inheritance (zapp.yml included) off — see [Sharing one copybook setup](#sharing-one-copybook-setup) |
 | `mockymock.lintOnSave` | `true` | Run `mockymock lint` on open/save of `.cut` files |
 | `mockymock.newTestSuite.casePerParagraph` | `false` | **New Test Suite** writes one test case per paragraph that touches a boundary instead of one per scenario through the entry point; these cases are never run to record `EXPECT` lines |
 | `mockymock.maxParallelRuns` | `1` | Concurrent `.cut` files per test run — raise only if your container setup tolerates concurrent compiles |

@@ -4,6 +4,7 @@
 // newTestSuite.ts (vscode-touching command registration) is the only
 // production consumer.
 import * as path from 'path';
+import { copybookPathArgs } from '../environment/copybookPaths';
 import { buildOutline, OutlineNode } from '../outline/outlineModel';
 
 // `mockymock generate <program> --output <cut> [--per-paragraph]
@@ -18,22 +19,25 @@ export function buildGenerateArgs(
   cblPath: string,
   outputPath: string,
   copybookPaths: string[],
-  perParagraph = false
+  perParagraph = false,
+  extraCopybookPaths: string[] = []
 ): string[] {
   const args = ['generate', cblPath, '--output', outputPath];
   if (perParagraph) args.push('--per-paragraph');
-  for (const p of copybookPaths) args.push('--copybook-path', p);
-  return args;
+  return [...args, ...copybookPathArgs(copybookPaths, extraCopybookPaths)];
 }
 
 // `mockymock init <program> --output <cut> [--copybook-path DIR ...]`:
 // generate one case per scenario, run them once in Docker, and write the
 // values the program produced as EXPECT lines -- a characterization suite
 // that pins today's behavior. Needs Docker; see parseInitOutcome.
-export function buildInitArgs(cblPath: string, outputPath: string, copybookPaths: string[]): string[] {
-  const args = ['init', cblPath, '--output', outputPath];
-  for (const p of copybookPaths) args.push('--copybook-path', p);
-  return args;
+export function buildInitArgs(
+  cblPath: string,
+  outputPath: string,
+  copybookPaths: string[],
+  extraCopybookPaths: string[] = []
+): string[] {
+  return ['init', cblPath, '--output', outputPath, ...copybookPathArgs(copybookPaths, extraCopybookPaths)];
 }
 
 export interface InitOutcome {
@@ -165,6 +169,19 @@ interface CliOutput {
 // `generate` (and `init`, which runs it first) wrote the full scaffold but
 // exits 1 because lint refuses it for a reason no MOCK block can fix; the
 // refusals are on stdout, stderr only points back at them.
+// A current CLI refuses to write a per-paragraph suite with no TESTCASE
+// (mocky-mock #275) where an older one wrote it empty: either way the
+// program has no boundary to mock, and the starter takes over.
+export function isNoCaseRefusal(result: CliOutput): boolean {
+  return /no test case to write/.test(result.stdout);
+}
+
+// init exits 1 when recording left no case asserting anything (mocky-mock
+// #275): the suite was written and ran, it just pins nothing yet.
+export function initAssertsNothing(result: CliOutput): boolean {
+  return /none of its test cases asserts anything/.test(result.stdout);
+}
+
 export function lintRefusalOf(result: CliOutput): string | undefined {
   if (!/was written, but `lint` refuses it/.test(result.stdout + result.stderr)) return undefined;
   return refusalLine(result.stdout) ?? firstLine(result.stderr) ?? 'see Show Details';

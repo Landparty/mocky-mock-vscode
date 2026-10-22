@@ -15,7 +15,8 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { resolveCblPath } from '../discovery/cutDiscovery';
 import { runCommandIn } from '../environment/commandRunner';
-import { resolveInvocationConfig } from '../environment/invocationConfig';
+import { resolveCliInvocationConfig } from '../environment/invocationConfig';
+import { copybookPathArgs } from '../environment/copybookPaths';
 import { describePartialFill, hasSuggestedFix, parseFillOutcome } from './lintCodeActionLogic';
 
 export const FILL_MISSING_MOCKS_COMMAND = 'mockymock.fillMissingMocks';
@@ -90,9 +91,9 @@ export function activateLintCodeActions(
       }
       const cutPath = uri.fsPath;
       const cblPath = resolveCblPath(cutPath);
-      const { executablePath, copybookPaths } = resolveInvocationConfig(context, uri);
+      const { executablePath, copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(context, uri);
       const args = ['generate', cblPath, '--fill', cutPath];
-      for (const p of copybookPaths) args.push('--copybook-path', p);
+      args.push(...copybookPathArgs(copybookPaths, extraCopybookPaths));
 
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: 'mockymock: filling in missing mocks…' },
