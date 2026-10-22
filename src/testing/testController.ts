@@ -853,7 +853,15 @@ export function activateTestController(
         return message;
       });
       run.failed(fileItem, messages);
-    } else if (report.generated === 0 || report.generated === report.stillborn) {
+    } else if (!report.complete) {
+      // A mutant the Docker toolchain failed under was never evaluated
+      // (mocky-mock#347): the score covers only the rest, so this run did
+      // not verify the suite either way.
+      const message =
+        `mockymock mutate could not evaluate ${report.errors} mutant(s) -- the Docker toolchain failed, ` +
+        'not the suite; the mutation score is incomplete. Check Docker and re-run.';
+      run.errored(fileItem, new vscode.TestMessage(message));
+    } else if (report.generated === 0 || report.generated === report.stillborn + report.equivalent) {
       // Nothing scorable: either mockymock generated zero mutants, or every
       // mutant it generated failed to compile (stillborn). score is null in
       // both cases (see mockymock/mutation/report.py) and exitCode is
@@ -863,7 +871,7 @@ export function activateTestController(
       // used for the interactive-debug profile's terminal skipped state.
       const message =
         'mockymock mutate produced no scorable mutants for this file (nothing was generated, or every ' +
-        'mutant was stillborn) -- mutation coverage was not verified by this run.';
+        'mutant was stillborn or equivalent) -- mutation coverage was not verified by this run.';
       run.appendOutput(toCrlf(`${message}\n`), undefined, fileItem);
       run.skipped(fileItem);
     } else if (result.exitCode !== 0) {
