@@ -10,7 +10,11 @@
 // truthfully has a survivor could parse into zero survivors and read as a
 // clean pass.
 
-export type MutantStatus = 'killed' | 'survived' | 'stillborn' | 'timeout';
+// 'error': the Docker toolchain failed while the mutant ran, so it was never
+// evaluated and is left out of the score (mocky-mock#347). 'equivalent': a
+// mutant provably computing what the original does -- no test can kill it,
+// so it is shown but left out of the score (mocky-mock#349).
+export type MutantStatus = 'killed' | 'survived' | 'stillborn' | 'timeout' | 'error' | 'equivalent';
 
 export interface MutantEntry {
   /** 1-based line number in the original .cbl file. */
@@ -47,10 +51,20 @@ export interface MutationReport {
   timeouts: number;
   survived: number;
   stillborn: number;
+  /** Mutants the toolchain failed under: not evaluated, not scored. */
+  errors: number;
+  /** Provably equivalent mutants: shown, not scored. */
+  equivalent: number;
+  /**
+   * False when any mutant could not be evaluated: the score then covers only
+   * the mutants that were, and the CLI exits non-zero. True on a CLI older
+   * than the field.
+   */
+  complete: boolean;
   mutants: MutantEntry[];
 }
 
-const STATUSES = new Set<string>(['killed', 'survived', 'stillborn', 'timeout']);
+const STATUSES = new Set<string>(['killed', 'survived', 'stillborn', 'timeout', 'error', 'equivalent']);
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
@@ -94,6 +108,7 @@ export function parseMutationJson(text: string): MutationReport | null {
       ? (totals[key] as number)
       : mutants.filter((m) => m.status === status).length;
 
+  const errors = count('errors', 'error');
   return {
     program: asString(root.program),
     cut: asString(root.cut),
@@ -103,6 +118,9 @@ export function parseMutationJson(text: string): MutationReport | null {
     timeouts: count('timeouts', 'timeout'),
     survived: count('survived', 'survived'),
     stillborn: count('stillborn', 'stillborn'),
+    errors,
+    equivalent: count('equivalent', 'equivalent'),
+    complete: typeof root.complete === 'boolean' ? root.complete : errors === 0,
     mutants,
   };
 }

@@ -105,6 +105,39 @@ describe('parseMutationJson', () => {
     assert.strictEqual(report!.survived, 1);
     assert.strictEqual(report!.timeouts, 0);
     assert.strictEqual(report!.stillborn, 0);
+    assert.strictEqual(report!.errors, 0);
+    assert.strictEqual(report!.equivalent, 0);
+    // An older CLI carries no `complete` field: no errors means complete.
+    assert.strictEqual(report!.complete, true);
+  });
+
+  it('accepts error and equivalent mutants and reads an incomplete report', () => {
+    const report = parseMutationJson(
+      JSON.stringify({
+        score: 1,
+        complete: false,
+        totals: { generated: 3, killed: 1, errors: 1, equivalent: 1 },
+        mutants: [
+          { line: 1, operator: 'a', description: '', original: '', mutated: '', status: 'killed', detail: '' },
+          { line: 2, operator: 'b', description: '', original: '', mutated: '', status: 'error', detail: 'toolchain failure: container mockymock-cobc stopped' },
+          { line: 3, operator: 'stmt-delete', description: '', original: '', mutated: '', status: 'equivalent', detail: 'equivalent: line 4 overwrites WS-X' },
+        ],
+      })
+    );
+    assert.ok(report);
+    assert.strictEqual(report!.errors, 1);
+    assert.strictEqual(report!.equivalent, 1);
+    assert.strictEqual(report!.complete, false);
+    assert.deepStrictEqual(survivorsOf(report!), []);
+  });
+
+  it('derives completeness from the errors when the field is missing', () => {
+    const report = parseMutationJson(
+      JSON.stringify({ mutants: [{ line: 2, operator: 'b', status: 'error' }] })
+    );
+    assert.ok(report);
+    assert.strictEqual(report!.errors, 1);
+    assert.strictEqual(report!.complete, false);
   });
 });
 
