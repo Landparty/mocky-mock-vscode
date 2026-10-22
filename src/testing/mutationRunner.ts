@@ -1,4 +1,5 @@
 import { CommandRunner, OutputListener } from '../environment/commandRunner';
+import { copybookPathArgs } from '../environment/copybookPaths';
 
 // `mockymock mutate` has no --case flag: the suite compiles as one binary
 // and every mutant faces the WHOLE suite, so there is nothing narrower to
@@ -7,13 +8,18 @@ export function buildMutateArgs(
   cblPath: string,
   cutPath: string,
   jsonReportPath: string,
-  copybookPaths: string[]
+  copybookPaths: string[],
+  extraCopybookPaths: string[] = []
 ): string[] {
-  const args = ['mutate', cblPath, '--cut', cutPath, '--json-report', jsonReportPath];
-  for (const p of copybookPaths) {
-    args.push('--copybook-path', p);
-  }
-  return args;
+  return [
+    'mutate',
+    cblPath,
+    '--cut',
+    cutPath,
+    '--json-report',
+    jsonReportPath,
+    ...copybookPathArgs(copybookPaths, extraCopybookPaths),
+  ];
 }
 
 export interface MutateOptions {
@@ -23,6 +29,7 @@ export interface MutateOptions {
   /** Temp path for --json-report; the result carries its content. */
   jsonReportPath: string;
   copybookPaths: string[];
+  extraCopybookPaths?: string[];
 }
 
 export interface MutateResult {
@@ -39,7 +46,7 @@ export async function runMutate(
   onOutput?: OutputListener,
   signal?: AbortSignal
 ): Promise<MutateResult> {
-  const args = buildMutateArgs(options.cblPath, options.cutPath, options.jsonReportPath, options.copybookPaths);
+  const args = buildMutateArgs(options.cblPath, options.cutPath, options.jsonReportPath, options.copybookPaths, options.extraCopybookPaths);
   const result = await run(options.executablePath, args, onOutput, signal);
   const jsonReport = await readFileIfExists(options.jsonReportPath);
   return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr, jsonReport };

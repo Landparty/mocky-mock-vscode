@@ -3,6 +3,8 @@ import {
   ROWS_CATEGORIES,
   BoundaryInfo,
   boundaryKeyCandidates,
+  collectBoundaries,
+  parseCollectPayload,
   detectCompletionContext,
   flowTargetsFromSource,
   keyFromDirective,
@@ -294,5 +296,64 @@ describe('flowTargetsFromSource', () => {
 
   it('lists PROCEDURE DIVISION sections without the SECTION suffix, and no DATA DIVISION ones', () => {
     assert.deepStrictEqual(flowTargetsFromSource(source).sections, [{ name: 'RPT-BLOCK', line: 13 }]);
+  });
+});
+
+describe('collectBoundaries (#100)', () => {
+  const sql: BoundaryInfo = {
+    category: 'SQL',
+    key: 'OPEN C1',
+    keys: ['OPEN C1'],
+    label: 'OPEN C1',
+    paragraph: 'MAIN',
+    line: 12,
+    matchText: null,
+  };
+
+  it('takes the boundaries a current CLI reports next to a suite parse error', async () => {
+    let throwawayCalls = 0;
+    const payload = await collectBoundaries(
+      '/w/P.cut',
+      async () => ({ stdout: JSON.stringify({ error: 'line 3: malformed MOCK directive', boundaries: [sql] }) }),
+      async () => {
+        throwawayCalls++;
+        return { stdout: '{}' };
+      }
+    );
+    assert.deepStrictEqual(payload.boundaries, [sql]);
+    assert.strictEqual(throwawayCalls, 0);
+  });
+
+  it('asks an older CLI again with a throwaway suite when the real one does not parse', async () => {
+    const asked: string[] = [];
+    const payload = await collectBoundaries(
+      '/w/P.cut',
+      async (suite) => {
+        asked.push(suite);
+        return { stdout: JSON.stringify({ error: 'line 3: malformed MOCK directive' }) };
+      },
+      async () => ({ stdout: JSON.stringify({ version: 1, boundaries: [sql] }) })
+    );
+    assert.deepStrictEqual(asked, ['/w/P.cut']);
+    assert.deepStrictEqual(payload.boundaries, [sql]);
+  });
+
+  it('does not retry when the CLI printed nothing usable (absent, program does not parse)', async () => {
+    let throwawayCalls = 0;
+    const payload = await collectBoundaries(
+      '/w/P.cut',
+      async () => ({ stdout: 'Traceback ...' }),
+      async () => {
+        throwawayCalls++;
+        return { stdout: '{}' };
+      }
+    );
+    assert.deepStrictEqual(payload, {});
+    assert.strictEqual(throwawayCalls, 0);
+  });
+
+  it('ignores a non-object document and a non-array boundaries field', () => {
+    assert.deepStrictEqual(parseCollectPayload('null'), {});
+    assert.deepStrictEqual(parseCollectPayload('{"boundaries": "x"}'), { boundaries: undefined, error: undefined });
   });
 });

@@ -1,10 +1,10 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { anchorCommandPath, runCommandIn } from '../environment/commandRunner';
-import { resolveExecutablePath } from '../environment/checks';
+import { anchorCommandPath, runCommand, runCommandIn } from '../environment/commandRunner';
+import { resolveExecutablePath, supportsLintCaseFlag } from '../environment/checks';
 import { resolveExecutablePathSetting } from '../environment/copybookPaths';
 import { EnvironmentManager } from '../environment/environmentManager';
-import { configuredExecutablePath, resolveInvocationConfig, settingPathContext } from '../environment/invocationConfig';
+import { configuredExecutablePath, resolveCliInvocationConfig, settingPathContext } from '../environment/invocationConfig';
 import { absolutizeDebugPaths, buildLintArgs } from './debugArgs';
 import { evaluateCaseSelection, evaluateLintResult } from './lintGate';
 
@@ -68,7 +68,7 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
     if (typeof config.program !== 'string' || typeof config.cut !== 'string') {
       return config;
     }
-    const resolved = this.withDefaults(folder, config);
+    const resolved = await this.withDefaults(folder, config);
     if (config[PREFLIGHTED]) return resolved;
     const problem = await this.preflight(folder, resolved);
     // null: ensureReady() already showed its own prompt for the problem.
@@ -109,19 +109,32 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
     const lintGate = evaluateLintResult(
       await run(
         executablePath,
-        buildLintArgs({
-          program: config.program as string,
-          cut: cutPath,
-          copybookPaths: config.copybookPaths as string[] | undefined,
-        })
+        buildLintArgs(
+          {
+            program: config.program as string,
+            cut: cutPath,
+            copybookPaths: config.copybookPaths as string[] | undefined,
+            extraCopybookPaths: config.extraCopybookPaths as string[] | undefined,
+          },
+          (await supportsLintCaseFlag(runCommand, executablePath)) ? String(config.case) : undefined
+        )
       )
     );
     return lintGate.blocked ? lintGate.message : undefined;
   }
 
-  private withDefaults(folder: vscode.WorkspaceFolder | undefined, config: vscode.DebugConfiguration): vscode.DebugConfiguration {
+  private async withDefaults(
+    folder: vscode.WorkspaceFolder | undefined,
+    config: vscode.DebugConfiguration
+  ): Promise<vscode.DebugConfiguration> {
     const resolved = absolutizeDebugPaths(
-      { ...config, program: config.program, cut: config.cut, copybookPaths: config.copybookPaths as string[] | undefined },
+      {
+        ...config,
+        program: config.program,
+        cut: config.cut,
+        copybookPaths: config.copybookPaths as string[] | undefined,
+        extraCopybookPaths: config.extraCopybookPaths as string[] | undefined,
+      },
       folder?.uri.fsPath
     );
 
@@ -132,9 +145,9 @@ export class MockymockDebugConfigurationProvider implements vscode.DebugConfigur
       // launching folder when `program` is still relative.
       const scopeUri = path.isAbsolute(resolved.program) ? vscode.Uri.file(resolved.program) : folder?.uri;
       if (scopeUri) {
-        const { copybookPaths } = resolveInvocationConfig(this.context, scopeUri);
-        if (copybookPaths.length > 0) {
-          return { ...resolved, copybookPaths };
+        const { copybookPaths, extraCopybookPaths } = await resolveCliInvocationConfig(this.context, scopeUri);
+        if (copybookPaths.length > 0 || extraCopybookPaths.length > 0) {
+          return { ...resolved, copybookPaths, extraCopybookPaths };
         }
       }
     }

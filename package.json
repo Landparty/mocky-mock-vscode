@@ -318,7 +318,7 @@
           "default": [],
           "scope": "resource",
           "order": 1,
-          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically. Set it to `[]` to turn that inheritance off."
+          "markdownDescription": "Folders to search for `COPY` and `EXEC SQL INCLUDE` members, e.g. `[\"copybooks\", \"../shared/cpy\"]`. Relative paths resolve against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded.\n\n**Usually you don't need to set this:** when it's unset, `cobolAnalyzer.copybookPaths` is used, and a `zapp.yml` at the workspace root is read automatically; both are added after a `cobol.yml`/`mockymock.toml` copybook list. A value here **replaces** that project config's list. Set it to `[]` to turn the inheritance (zapp.yml included) off."
         },
         "mockymock.lintOnSave": {
           "type": "boolean",
