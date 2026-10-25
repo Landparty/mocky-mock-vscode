@@ -13,7 +13,9 @@ import {
   getDockerDesktopLaunchCommand,
   permissionDeniedMessageForPath,
   resolveExecutablePath,
+  supportsNativeToolchain,
 } from './checks';
+import { applyToolchainEnvironment, cCompilerHint, ToolchainChoice, ToolchainSetting } from './bundledToolchain';
 import { mockymockInstallRequirement } from './cliPackage';
 import { configuredExecutablePath } from './invocationConfig';
 import { presentStatus, SetupState, statusTooltipMarkdown } from './statusPresentation';
@@ -32,9 +34,13 @@ export class EnvironmentManager {
   private readonly context: vscode.ExtensionContext;
   // In-flight ensureReady(), shared by concurrent callers -- see ensureReady().
   private ensureReadyInFlight: Promise<ReadyResult> | undefined;
+  // Which GnuCOBOL the CLI runs on (bundled tree or Docker), from
+  // mockymock.toolchain -- see bundledToolchain.ts.
+  private toolchain: ToolchainChoice;
 
   constructor(context: vscode.ExtensionContext) {
     this.context = context;
+    this.toolchain = this.applyToolchainSetting();
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     this.statusBarItem.name = 'mockymock';
     this.statusBarItem.command = 'mockymock.checkEnvironment';
@@ -51,7 +57,10 @@ export class EnvironmentManager {
     // should clear "CLI not found" right away, not at the next test run.
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('mockymock.executablePath')) void this.refreshStatus();
+        if (e.affectsConfiguration('mockymock.toolchain')) this.toolchain = this.applyToolchainSetting();
+        if (e.affectsConfiguration('mockymock.executablePath') || e.affectsConfiguration('mockymock.toolchain')) {
+          void this.refreshStatus();
+        }
       })
     );
   }
@@ -90,6 +99,38 @@ export class EnvironmentManager {
     this.statusBarItem.tooltip = tooltip;
   }
 
+  private applyToolchainSetting(): ToolchainChoice {
+    const setting = vscode.workspace.getConfiguration('mockymock').get<ToolchainSetting>('toolchain');
+    return applyToolchainEnvironment(this.context.extensionPath, setting);
+  }
+
+  // True when tests compile and run on the GnuCOBOL bundled with the
+  // extension (or one the user pointed MOCKYMOCK_GNUCOBOL_HOME at) rather
+  // than in Docker.
+  usesNativeToolchain(): boolean {
+    return this.toolchain.backend === 'native';
+  }
+
+  // usesNativeToolchain(), and the CLI at `executablePath` can act on it.
+  private async runsNative(executablePath: string): Promise<boolean> {
+    return this.usesNativeToolchain() && (await supportsNativeToolchain(runCommand, executablePath));
+  }
+
+  // The native toolchain's readiness, from `mockymock setup`: for that
+  // backend it only checks (the tree is there, cobc runs, a C compiler is
+  // on PATH) and builds nothing, so it is as cheap as `docker info`.
+  private async checkNativeToolchain(executablePath: string): Promise<ReadyResult> {
+    const result = await runCommand(executablePath, ['setup']);
+    if (result.code === 0) return { ok: true, message: 'ready' };
+    const detail =
+      (result.stdout + result.stderr)
+        .split(/\r?\n/)
+        .map((line) => line.replace(/^mockymock setup:\s*/, '').trim())
+        .find((line) => line.length > 0) ?? `mockymock setup exited ${result.code}`;
+    const message = /C compiler/.test(detail) ? `${detail} ${cCompilerHint()}` : detail;
+    return { ok: false, message };
+  }
+
   // Read-only status probe for the status bar: reports what's there without
   // installing anything or launching Docker. ensureReady() (below) is the
   // one that actually fixes problems, and is what the status bar item's
@@ -106,6 +147,12 @@ export class EnvironmentManager {
       } else {
         this.setStatus('cli-missing');
       }
+      return;
+    }
+    if (await this.runsNative(executablePath)) {
+      const native = await this.checkNativeToolchain(executablePath);
+      if (native.ok) this.setStatus('ready');
+      else this.setStatus('toolchain-missing', native.message);
       return;
     }
     const dockerStatus = await checkDocker(runCommand);
@@ -189,6 +236,16 @@ export class EnvironmentManager {
           reported: true,
         };
       }
+    }
+
+    if (await this.runsNative(executablePath)) {
+      const native = await this.checkNativeToolchain(executablePath);
+      if (native.ok) {
+        this.setStatus('ready');
+        return native;
+      }
+      this.setStatus('toolchain-missing', native.message);
+      return native;
     }
 
     const dockerStatus = await checkDocker(runCommand);

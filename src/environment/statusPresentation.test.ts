@@ -13,6 +13,7 @@ const states: SetupState[] = [
   'docker-failed',
   'docker-denied',
   'docker-missing',
+  'toolchain-missing',
 ];
 
 describe('status bar presentation', () => {

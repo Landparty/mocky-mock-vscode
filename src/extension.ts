@@ -110,7 +110,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (problems.length) {
           const showReport = 'Show Report';
           const choice = await vscode.window.showWarningMessage(
-            `mockymock: the CLI and Docker are available, but ${problems.join('; ')}`,
+            `mockymock: the CLI and its GnuCOBOL toolchain are available, but ${problems.join('; ')}`,
             showReport
           );
           if (choice === showReport) setupChannel.show();
@@ -119,7 +119,7 @@ export function activate(context: vscode.ExtensionContext) {
         const createSuite = 'Create a Test Suite';
         const actions = (await isCutWorkspace()) ? [] : [createSuite];
         const choice = await vscode.window.showInformationMessage(
-          'mockymock is ready: the CLI and Docker are both available.',
+          'mockymock is ready: the CLI and its GnuCOBOL toolchain are both available.',
           ...actions
         );
         if (choice === createSuite) {

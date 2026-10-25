@@ -27,8 +27,10 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { runCommand, runCommandIn } from '../environment/commandRunner';
+import { nativeToolchainSelected } from '../environment/bundledToolchain';
 import {
   checkDocker,
+  supportsNativeToolchain,
   supportsGenerateCommand,
   supportsInitCommand,
   supportsPerParagraphFlag,
@@ -209,15 +211,20 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
           vscode.workspace
             .getConfiguration('mockymock', editor.document.uri)
             .get<boolean>('newTestSuite.casePerParagraph') ?? false;
-        // init is scenario-only, so the per-paragraph option skips it.
-        const dockerUp = !perParagraph && (await checkDocker(runCommand)) === 'available';
+        // init is scenario-only, so the per-paragraph option skips it. The
+        // bundled GnuCOBOL needs no Docker; `init` itself reports it if it
+        // cannot compile.
+        const toolchainUp =
+          !perParagraph &&
+          ((nativeToolchainSelected() && (await supportsNativeToolchain(runCommand, executablePath))) ||
+            (await checkDocker(runCommand)) === 'available');
         let initTranscript = false;
         // The suggested `mockymock run` command is pasted into the
         // integrated terminal, which opens at the workspace root.
         const cblArg = shellArg(vscode.workspace.asRelativePath(cblPath, false));
         const cutArg = shellArg(vscode.workspace.asRelativePath(cutPath, false));
 
-        if (dockerUp && (await supportsInitCommand(runCommand, executablePath))) {
+        if (toolchainUp && (await supportsInitCommand(runCommand, executablePath))) {
           const initArgs = buildInitArgs(cblPath, cutPath, copybookPaths, extraCopybookPaths);
           const result = await vscode.window.withProgress(
             {
@@ -304,7 +311,7 @@ export function activateNewTestSuiteCommand(context: vscode.ExtensionContext): v
               // An older CLI's plain generate, or the CLI's own fallback when
               // it can't build scenarios, is per-paragraph too.
               perParagraph: !/data-driven from a fixture bundle/.test(result.stdout),
-              dockerDown: !perParagraph && !dockerUp,
+              dockerDown: !perParagraph && !toolchainUp,
               assertions: await assertionsIn(cutPath),
               cblArg,
               cutArg,
