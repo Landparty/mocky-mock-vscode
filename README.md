@@ -282,13 +282,18 @@ one setting the two extensions deliberately share.
 
 ### Bundled GnuCOBOL
 
-The linux-x64 `.vsix` carries GnuCOBOL 3.2 (`cobc`, `libcob`, GMP and
-Berkeley DB, about 5 MB) under `gnucobol/`, and points the CLI at it, so
-tests compile and run directly on your machine with no Docker. cobc
-translates COBOL to C, so a C compiler is the one thing it needs from the
-system: `gcc` (`sudo apt install gcc`). Check Setup tells you if it is
-missing. Coverage and the debugger work the same way; the debugger needs
-`gdb` on `PATH`.
+The Linux and Windows `.vsix` files carry GnuCOBOL 3.2 under `gnucobol/`
+and point the CLI at it, so tests compile and run directly on your machine
+with no Docker. On macOS tests run in Docker.
+
+- **Linux:** `cobc`, `libcob`, GMP and Berkeley DB, about 5 MB. cobc
+  translates COBOL to C, so a C compiler is the one thing it needs from the
+  system: `gcc` (`sudo apt install gcc`). Check Setup tells you if it is
+  missing. The debugger needs `gdb` on `PATH`.
+- **Windows:** the GnuCOBOL build the Chocolatey `gnucobol` package
+  installs (Arnold Trembley's MinGW build), which carries its own gcc, gcov
+  and gdb, so nothing else is needed. It makes the Windows extension larger
+  (about 165 MB installed). XML PARSE/GENERATE are not supported by it.
 
 `mockymock.toolchain` picks where tests run: `auto` (the default: bundled
 GnuCOBOL when there is one, Docker otherwise), `bundled`, or `docker`. The
@@ -299,7 +304,9 @@ Exact coverage percentages can differ slightly between the two, because
 gcov counts lines differently across gcc versions.
 
 The bundled binaries are free software: cobc is GPL-3.0-or-later, libcob
-LGPL-3.0-or-later, GMP LGPL-3.0-or-later, Berkeley DB 5.3 Sleepycat. Their
+LGPL-3.0-or-later, GMP LGPL-3.0-or-later, Berkeley DB 5.3 Sleepycat on
+Linux and 18.1 AGPL-3.0 on Windows, the Windows MinGW toolchain
+GPL-3.0-or-later. Their
 license texts are in `gnucobol/licenses/`, and the exact source they were
 built from (`gnucobol-3.2.tar.xz`) is attached to each
 [release](https://github.com/Landparty/mocky-mock-vscode/releases).

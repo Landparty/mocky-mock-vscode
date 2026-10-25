@@ -80,10 +80,19 @@ workflow clones `mocky-mock` or needs `ORG_PAT`.
 
 ## Bundled GnuCOBOL
 
-The linux-x64 vsix carries a relocatable GnuCOBOL 3.2 tree under
-`gnucobol/`, built by `scripts/build-gnucobol.sh` in the `build-gnucobol`
-job of `build-and-release.yml` (inside `debian:11`, so it runs on any Linux
-with glibc 2.31 or newer). At activation `src/environment/bundledToolchain.ts`
+The linux-x64 and win32-x64 vsix files carry a GnuCOBOL 3.2 tree under
+`gnucobol/`. Linux: a relocatable tree built by `scripts/build-gnucobol.sh`
+in the `build-gnucobol` job of `build-and-release.yml` (inside `debian:11`,
+so it runs on any Linux with glibc 2.31 or newer). Windows: the build the
+Chocolatey `gnucobol` package (3.2.0.20240515) installs, Arnold Trembley's
+32-bit MinGW GC32-BDB, fetched by `scripts/fetch-gnucobol-windows.sh` in the
+`fetch-gnucobol-windows` job from the same URL and SHA-256 the package's
+`chocolateyinstall.ps1` pins (the binaries are not inside the nupkg, which
+is a 4 KB wrapper script). It carries its own gcc 9.2, gcov and gdb, so a
+Windows user installs nothing; it is about 165 MB unpacked (34 MB
+compressed). Verified on Windows 11 on 2026-10-25: compile, run, coverage,
+mutate and the debugger all work natively, and Smart App Control did not
+block compiled test binaries. At activation `src/environment/bundledToolchain.ts`
 sets `MOCKYMOCK_GNUCOBOL_HOME` to it and `MOCKYMOCK_TOOLCHAIN=native` on the
 extension host's environment, which every CLI spawn and the debug adapter
 inherit; mocky-mock's `runtime/native_toolchain.py` then compiles and runs
@@ -105,7 +114,10 @@ backend.**
 | cobc (compiler) | GPL-3.0-or-later | binary |
 | libcob (runtime) | LGPL-3.0-or-later | shared library |
 | GMP | LGPL-3.0-or-later / GPL-2.0-or-later | shared library + `gmp.h` |
-| Berkeley DB 5.3 | Sleepycat (GPL-compatible copyleft) | shared library |
+| Berkeley DB 5.3 (Linux) | Sleepycat (GPL-compatible copyleft) | shared library |
+| Berkeley DB 18.1 (Windows) | AGPL-3.0 | DLL |
+| MinGW gcc, binutils, gdb (Windows) | GPL-3.0-or-later (runtime: permissive) | binaries |
+| cJSON (Windows) | MIT | DLL |
 
 Shipping GPL binaries needs the license texts (in `gnucobol/licenses/`) and
 the corresponding source. The release job attaches the exact
@@ -120,6 +132,17 @@ CLI AGPL-3.0, both compatible; the bundled tree is a separate program the
 extension runs, not linked into it. COBOL programs a user compiles link
 libcob dynamically, which the LGPL allows for any license.
 
+The Windows tree is a third-party binary build, unmodified. Its own
+archive has no license texts for GMP, Berkeley DB or MinGW, so the script
+adds GnuCOBOL's and a `gnucobol/licenses/README.txt` naming every
+component, its license and upstream source. **Still to do before a real
+release:** add the GMP, Berkeley DB 18.1 (AGPL) and MinGW license texts,
+and attach (or link a durable copy of) their corresponding source, since
+the GPL/AGPL obligation passes to whoever redistributes the binaries. The
+AGPL on Berkeley DB is compatible with the extension's GPL-3.0 and the
+CLI's AGPL-3.0. XML PARSE/GENERATE do not compile with this build (no
+libxml2).
+
 ### Not bundled yet
 
 - **macOS (arm64, x64).** Same script shape, built on the macOS runners from
@@ -127,11 +150,6 @@ libcob dynamically, which the LGPL allows for any license.
   libcob at `@loader_path` copies of both. The C compiler is Xcode's command
   line tools (`xcode-select --install`), which Check Setup already names.
   Debugging needs `gdb`, which macOS does not ship (lldb only).
-- **Windows (x64).** Use a MinGW build of GnuCOBOL 3.2 that carries its own
-  gcc, so there is no C compiler to install; about 150 MB unpacked, so better
-  as a first-run download than inside the vsix. Windows Smart App Control /
-  WDAC can refuse freshly compiled unsigned test binaries (one of the two
-  reasons mockymock went Docker-only), so Docker stays the safer default
-  there.
+- **macOS stays on Docker** (Samuel's call, 2026-10-25).
 - **Linux arm64.** Needs an arm64 runner (or QEMU) and a `linux-arm64`
   vsix target, which the release does not build at all today.

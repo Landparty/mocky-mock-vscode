@@ -183,8 +183,24 @@ jobs:
             gnucobol-linux-x64.tar.gz
             gnucobol-build/gnucobol-3.2.tar.xz
 
+  # The GnuCOBOL tree the win32-x64 vsix carries: the build the Chocolatey
+  # `gnucobol` package installs (pinned URL + SHA-256, see the script). It
+  # brings its own MinGW gcc, so Windows users need nothing else.
+  fetch-gnucobol-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch the GnuCOBOL tree
+        run: scripts/fetch-gnucobol-windows.sh gnucobol-build
+      - name: Pack it
+        run: tar -C gnucobol-build -czf gnucobol-win32-x64.tar.gz gnucobol
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnucobol-win32-x64
+          path: gnucobol-win32-x64.tar.gz
+
   build-vsix:
-    needs: [build-cli, build-gnucobol]
+    needs: [build-cli, build-gnucobol, fetch-gnucobol-windows]
     runs-on: ubuntu-latest
     env:
       # A plain workspace-relative path, not ${{ runner.temp }}/staging --
@@ -203,6 +219,10 @@ jobs:
         with:
           name: gnucobol-linux-x64
           path: ${{ env.STAGING_DIR }}/gnucobol
+      - uses: actions/download-artifact@v4
+        with:
+          name: gnucobol-win32-x64
+          path: ${{ env.STAGING_DIR }}/gnucobol
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -214,9 +234,13 @@ jobs:
           rm -rf bin && mkdir bin
           cp "$STAGING_DIR/mockymock-windows-amd64.exe" bin/mockymock.exe
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          rm -rf gnucobol
+          tar -xzf "$STAGING_DIR/gnucobol/gnucobol-win32-x64.tar.gz"
           npx @vscode/vsce package --target win32-x64 -o dist/
+          rm -rf gnucobol
           unzip -l dist/*win32-x64*.vsix | grep -q 'extension/bin/mockymock.exe' || { echo "win32-x64 package missing bundled binary" >&2; exit 1; }
-          if unzip -l dist/*win32-x64*.vsix | grep -q 'extension/gnucobol/'; then
+          unzip -l dist/*win32-x64*.vsix | grep -q 'extension/gnucobol/bin/cobc.exe$' || { echo "win32-x64 package missing bundled GnuCOBOL" >&2; exit 1; }
+          if unzip -l dist/*win32-x64*.vsix | grep -q 'extension/gnucobol/bin/cobc$'; then
             echo "win32-x64 package contains the linux GnuCOBOL tree" >&2
             exit 1
           fi
