@@ -56,3 +56,6 @@ PUBLISHING.md
 # ever claw them back out.
 out/**
 !out/extension.js
+# Source of the notices scripts/fetch-gnucobol-windows.sh copies into
+# gnucobol/licenses/; they ship from there, not from here.
+licenses/**

@@ -65,25 +65,9 @@ mkdir -p "$TREE/licenses"
 tar -xJf "$TARBALL" -C "$WORK" "gnucobol-${SRC_VERSION}/COPYING" "gnucobol-${SRC_VERSION}/COPYING.LESSER"
 cp "$WORK/gnucobol-${SRC_VERSION}/COPYING" "$TREE/licenses/GnuCOBOL-COPYING"
 cp "$WORK/gnucobol-${SRC_VERSION}/COPYING.LESSER" "$TREE/licenses/GnuCOBOL-COPYING.LESSER"
-cat >"$TREE/licenses/README.txt" <<EOF
-GnuCOBOL ${SRC_VERSION} for Windows, bundled with the mockymock VS Code extension
-so tests run without Docker. It is Arnold Trembley's MinGW build, the one the
-Chocolatey package \`gnucobol\` ${CHOCO_VERSION} installs:
-  ${URL}
-  sha256 ${SHA256}
-
-cobc is GPL-3.0-or-later and libcob LGPL-3.0-or-later (texts in this folder).
-The build also carries GMP (LGPL-3.0-or-later / GPL-2.0-or-later), Berkeley
-DB (AGPL-3.0 for the 18.x releases, BSD-style Sleepycat for 5.x), cJSON (MIT)
-and the MinGW gcc/binutils/gdb toolchain (GPL-3.0-or-later; the MinGW-w64
-runtime headers and libraries are under permissive licenses).
-
-Corresponding source:
-  GnuCOBOL: gnucobol-${SRC_VERSION}.tar.xz, attached to the same GitHub release as
-    this extension (https://github.com/Landparty/mocky-mock-vscode/releases),
-    and upstream at ${SRC_URL}
-  GMP: https://gmplib.org/   Berkeley DB: https://www.oracle.com/database/technologies/related/berkeleydb-downloads.html
-  cJSON: https://github.com/DaveGamble/cJSON   MinGW: https://www.mingw-w64.org/ and https://sourceware.org/
-EOF
+# The archive carries GnuCOBOL's own COPYING texts only; the notices for
+# every other component it ships (GMP, Berkeley DB, GCC, MinGW, ...) live in
+# this repo, with a README naming each one's version, license and source.
+cp "$(dirname "$0")/../licenses/gnucobol-windows/"* "$TREE/licenses/"
 
 du -sh "$TREE"
