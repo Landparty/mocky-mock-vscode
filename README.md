@@ -9,9 +9,11 @@ COBOL today — see you on the *wildside*.
 
 1. **Install** the `.vsix` for your OS from the
    [latest release](https://github.com/Landparty/mocky-mock-vscode/releases/latest)
-   (`Extensions` → `…` → `Install from VSIX…`). The mockymock CLI is bundled;
-   you also need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
-   to run tests.
+   (`Extensions` → `…` → `Install from VSIX…`). The mockymock CLI is bundled.
+   On Linux x64 GnuCOBOL is bundled too, so tests run with nothing else
+   installed but a C compiler (`gcc`); on other platforms you also need
+   [Docker Desktop](https://www.docker.com/products/docker-desktop/) to run
+   tests (see [Bundled GnuCOBOL](#bundled-gnucobol)).
 2. **Open a COBOL program** (`.cbl`, `.cob` or `.cobol`) and click the
    beaker icon in the editor title bar — **New Test Suite for This Program**.
    mockymock reads the program and writes a `.cut` suite under `tests/`
@@ -271,11 +273,36 @@ one setting the two extensions deliberately share.
   Debug Test needs the `debug` subcommand; Export Mainframe-Ready COBOL
   needs the `export` subcommand. An older CLI degrades to a clear message
   on the one feature it affects rather than failing anything else.
-- Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
+- A GnuCOBOL toolchain: the bundled one (Linux x64 builds, see below) or
+  Docker (mockymock compiles and runs COBOL in its `mockymock-cobc`
   container). If Docker Desktop is installed but not running, the extension
   starts it automatically before your first run and waits for it to
   become ready — no need to launch it yourself. If Docker isn't installed at
   all, you'll get a prompt linking to the Docker Desktop download page.
+
+### Bundled GnuCOBOL
+
+The linux-x64 `.vsix` carries GnuCOBOL 3.2 (`cobc`, `libcob`, GMP and
+Berkeley DB, about 5 MB) under `gnucobol/`, and points the CLI at it, so
+tests compile and run directly on your machine with no Docker. cobc
+translates COBOL to C, so a C compiler is the one thing it needs from the
+system: `gcc` (`sudo apt install gcc`). Check Setup tells you if it is
+missing. Coverage and the debugger work the same way; the debugger needs
+`gdb` on `PATH`.
+
+`mockymock.toolchain` picks where tests run: `auto` (the default: bundled
+GnuCOBOL when there is one, Docker otherwise), `bundled`, or `docker`. The
+difference that matters: Docker runs every test inside a locked-down
+container (no network, memory and process limits), while the bundled
+toolchain runs your test binaries as you, like running `cobc -x` yourself.
+Exact coverage percentages can differ slightly between the two, because
+gcov counts lines differently across gcc versions.
+
+The bundled binaries are free software: cobc is GPL-3.0-or-later, libcob
+LGPL-3.0-or-later, GMP LGPL-3.0-or-later, Berkeley DB 5.3 Sleepycat. Their
+license texts are in `gnucobol/licenses/`, and the exact source they were
+built from (`gnucobol-3.2.tar.xz`) is attached to each
+[release](https://github.com/Landparty/mocky-mock-vscode/releases).
 - VS Code ≥ 1.88.
 
 ## Generating tests

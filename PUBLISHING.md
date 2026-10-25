@@ -77,3 +77,61 @@ Overrides that don't move the pin:
 The bundled binaries are compiled by `scripts/build-cli.sh` from that PyPI
 install (plus the newest `cobol-parser` the release allows), so neither
 workflow clones `mocky-mock` or needs `ORG_PAT`.
+
+## Bundled GnuCOBOL
+
+The linux-x64 vsix carries a relocatable GnuCOBOL 3.2 tree under
+`gnucobol/`, built by `scripts/build-gnucobol.sh` in the `build-gnucobol`
+job of `build-and-release.yml` (inside `debian:11`, so it runs on any Linux
+with glibc 2.31 or newer). At activation `src/environment/bundledToolchain.ts`
+sets `MOCKYMOCK_GNUCOBOL_HOME` to it and `MOCKYMOCK_TOOLCHAIN=native` on the
+extension host's environment, which every CLI spawn and the debug adapter
+inherit; mocky-mock's `runtime/native_toolchain.py` then compiles and runs
+there instead of in Docker. Nothing in the tree is patched for its new
+location: cobc's and libcob's baked-in paths all have environment overrides,
+and the CLI sets them.
+
+The extension only uses the tree with a CLI whose `setup --help` mentions
+`MOCKYMOCK_GNUCOBOL_HOME` (`supportsNativeToolchain` in `checks.ts`). An
+older CLI ignores the variable, so with one of those the extension keeps
+doing the Docker check. **So the tree only takes effect once
+`MOCKYMOCK_CLI_VERSION` names a mocky-mock release with the native
+backend.**
+
+### Licensing obligations
+
+| Component | License | What we ship |
+|-----------|---------|--------------|
+| cobc (compiler) | GPL-3.0-or-later | binary |
+| libcob (runtime) | LGPL-3.0-or-later | shared library |
+| GMP | LGPL-3.0-or-later / GPL-2.0-or-later | shared library + `gmp.h` |
+| Berkeley DB 5.3 | Sleepycat (GPL-compatible copyleft) | shared library |
+
+Shipping GPL binaries needs the license texts (in `gnucobol/licenses/`) and
+the corresponding source. The release job attaches the exact
+`gnucobol-3.2.tar.xz` the tree was built from to the same GitHub release as
+the vsix files (GPLv3 §6(d): equivalent access from the same place);
+GnuCOBOL is unmodified, built with the configure flags in the script.
+GMP and Berkeley DB are Debian's own packages, unmodified;
+`gnucobol/README.txt` points at their Debian source (attaching those
+tarballs to the release too would be the belt-and-braces option). They ship
+as separate shared libraries, so a user can swap them, as the LGPL asks. The extension itself is GPL-3.0-only and the
+CLI AGPL-3.0, both compatible; the bundled tree is a separate program the
+extension runs, not linked into it. COBOL programs a user compiles link
+libcob dynamically, which the LGPL allows for any license.
+
+### Not bundled yet
+
+- **macOS (arm64, x64).** Same script shape, built on the macOS runners from
+  Homebrew's `gmp` and `berkeley-db@5`, with `install_name_tool` pointing
+  libcob at `@loader_path` copies of both. The C compiler is Xcode's command
+  line tools (`xcode-select --install`), which Check Setup already names.
+  Debugging needs `gdb`, which macOS does not ship (lldb only).
+- **Windows (x64).** Use a MinGW build of GnuCOBOL 3.2 that carries its own
+  gcc, so there is no C compiler to install; about 150 MB unpacked, so better
+  as a first-run download than inside the vsix. Windows Smart App Control /
+  WDAC can refuse freshly compiled unsigned test binaries (one of the two
+  reasons mockymock went Docker-only), so Docker stays the safer default
+  there.
+- **Linux arm64.** Needs an arm64 runner (or QEMU) and a `linux-arm64`
+  vsix target, which the release does not build at all today.

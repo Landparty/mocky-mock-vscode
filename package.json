@@ -347,6 +347,18 @@
           "default": "",
           "order": 5,
           "markdownDescription": "Path to a `mockymock` CLI to use instead of the one bundled with this extension. **Leave empty** unless you know you need a different build.\n\nA relative path (e.g. `.venv/bin/mockymock`) resolves against the workspace folder; `~`, `${userHome}`, `${workspaceFolder}` and `${workspaceFolder:name}` are expanded. A bare name (`mockymock`) is looked up on `PATH`."
+        },
+        "mockymock.toolchain": {
+          "type": "string",
+          "enum": ["auto", "bundled", "docker"],
+          "enumDescriptions": [
+            "Use the GnuCOBOL bundled with this extension when there is one for your platform, otherwise Docker.",
+            "Always use the bundled GnuCOBOL (falls back to Docker on a platform without one).",
+            "Always compile and run in the Docker container, even when GnuCOBOL is bundled."
+          ],
+          "default": "auto",
+          "order": 6,
+          "markdownDescription": "Where tests are compiled and run. The bundled GnuCOBOL needs no Docker, only a C compiler (`gcc` on Linux, Xcode's command line tools on macOS). Docker runs each test in a locked-down container instead."
         }
       }
     },

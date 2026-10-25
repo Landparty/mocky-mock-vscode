@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { toolchainEnvironment } from '../environment/bundledToolchain';
 import { resolveExecutablePath } from '../environment/checks';
 import { anchorCommandPath } from '../environment/commandRunner';
 import { resolveExecutablePathSetting } from '../environment/copybookPaths';
@@ -25,8 +26,12 @@ export class MockymockDebugAdapterDescriptorFactory implements vscode.DebugAdapt
     // A relative path left over here (no workspace folder to resolve it
     // against) keeps meaning the host-cwd binary, whatever cwd the adapter
     // itself runs in.
+    // env: the bundled-GnuCOBOL variables applyToolchainEnvironment() put on
+    // this host's process.env, passed on explicitly so the adapter runs on
+    // the same toolchain as a test run.
     return new vscode.DebugAdapterExecutable(anchorCommandPath(executablePath, process.cwd()), buildDebugArgs(config), {
       cwd,
+      env: toolchainEnvironment(),
     });
   }
 }

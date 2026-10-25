@@ -18,7 +18,8 @@ export type SetupState =
   | 'docker-stopped'
   | 'docker-failed'
   | 'docker-denied'
-  | 'docker-missing';
+  | 'docker-missing'
+  | 'toolchain-missing';
 
 export interface StatusPresentation {
   text: string;
@@ -35,13 +36,13 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
     case 'checking':
       return {
         text: '$(sync~spin) mockymock',
-        summary: 'Checking for the mockymock CLI and Docker…',
+        summary: 'Checking for the mockymock CLI and its GnuCOBOL toolchain…',
         clickHint: 'Click to run the full setup check.',
       };
     case 'ready':
       return {
         text: '$(check) mockymock',
-        summary: 'Ready: the mockymock CLI and Docker are both available.',
+        summary: 'Ready: the mockymock CLI and its GnuCOBOL toolchain are both available.',
         clickHint: 'Click to re-check your setup.',
       };
     case 'cli-missing':
@@ -93,6 +94,13 @@ export function presentStatus(state: SetupState, detail?: string): StatusPresent
         background: 'statusBarItem.warningBackground',
         summary: 'Docker Desktop is required to run tests and was not found.',
         clickHint: 'Click to open the Docker Desktop download page.',
+      };
+    case 'toolchain-missing':
+      return {
+        text: '$(warning) mockymock: GnuCOBOL not ready',
+        background: 'statusBarItem.warningBackground',
+        summary: detail ?? 'The bundled GnuCOBOL toolchain cannot compile yet.',
+        clickHint: 'Click to re-check once it is fixed.',
       };
   }
 }

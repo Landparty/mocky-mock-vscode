@@ -140,6 +140,16 @@ export async function supportsExtraCopybookPath(run: CommandRunner, executablePa
   });
 }
 
+// A CLI that can compile on the GnuCOBOL bundled with the extension (mocky-mock's
+// native toolchain backend) says so in `setup --help`. An older one ignores
+// MOCKYMOCK_GNUCOBOL_HOME and would build the Docker image instead.
+export async function supportsNativeToolchain(run: CommandRunner, executablePath: string): Promise<boolean> {
+  return probeCapability(run, executablePath, 'native-toolchain', async () => {
+    const result = await run(executablePath, ['setup', '--help']);
+    return result.code === 0 && result.stdout.includes('MOCKYMOCK_GNUCOBOL_HOME');
+  });
+}
+
 // `mockymock init` (generate --with-data + run --record-expectations) records
 // the program's current outputs as EXPECT lines. Absent from older CLIs.
 export async function supportsInitCommand(run: CommandRunner, executablePath: string): Promise<boolean> {

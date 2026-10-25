@@ -158,8 +158,33 @@ jobs:
             cli-build/${{ matrix.artifact }}
             cli-build/LICENSE
 
+  # The GnuCOBOL tree the linux-x64 vsix carries under gnucobol/, so tests
+  # run with no Docker (mocky-mock's native toolchain backend). Built in
+  # Debian 11 so it runs on any Linux with glibc 2.31 or newer, not just on
+  # whatever the current ubuntu-latest ships.
+  build-gnucobol:
+    runs-on: ubuntu-latest
+    container: debian:11
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends build-essential libgmp-dev libdb5.3-dev curl ca-certificates xz-utils
+      - uses: actions/checkout@v4
+      - name: Build the relocatable GnuCOBOL tree
+        run: scripts/build-gnucobol.sh gnucobol-build
+      # A tarball, not the bare tree: upload-artifact drops the execute bit.
+      - name: Pack it
+        run: tar -C gnucobol-build -czf gnucobol-linux-x64.tar.gz gnucobol
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gnucobol-linux-x64
+          path: |
+            gnucobol-linux-x64.tar.gz
+            gnucobol-build/gnucobol-3.2.tar.xz
+
   build-vsix:
-    needs: build-cli
+    needs: [build-cli, build-gnucobol]
     runs-on: ubuntu-latest
     env:
       # A plain workspace-relative path, not ${{ runner.temp }}/staging --
@@ -174,6 +199,10 @@ jobs:
           pattern: dist-exe-*
           path: ${{ env.STAGING_DIR }}
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: gnucobol-linux-x64
+          path: ${{ env.STAGING_DIR }}/gnucobol
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -187,6 +216,10 @@ jobs:
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target win32-x64 -o dist/
           unzip -l dist/*win32-x64*.vsix | grep -q 'extension/bin/mockymock.exe' || { echo "win32-x64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*win32-x64*.vsix | grep -q 'extension/gnucobol/'; then
+            echo "win32-x64 package contains the linux GnuCOBOL tree" >&2
+            exit 1
+          fi
           if unzip -l dist/*win32-x64*.vsix | grep -qE 'extension/bin/mockymock$|extension/staging/'; then
             echo "win32-x64 package contains a foreign-platform binary or staging leakage" >&2
             exit 1
@@ -197,8 +230,12 @@ jobs:
           cp "$STAGING_DIR/mockymock-linux-x86_64" bin/mockymock
           chmod +x bin/mockymock
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
+          rm -rf gnucobol
+          tar -xzf "$STAGING_DIR/gnucobol/gnucobol-linux-x64.tar.gz"
           npx @vscode/vsce package --target linux-x64 -o dist/
+          rm -rf gnucobol
           unzip -l dist/*linux-x64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "linux-x64 package missing bundled binary" >&2; exit 1; }
+          unzip -l dist/*linux-x64*.vsix | grep -q 'extension/gnucobol/bin/cobc$' || { echo "linux-x64 package missing bundled GnuCOBOL" >&2; exit 1; }
           if unzip -l dist/*linux-x64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
             echo "linux-x64 package contains a foreign-platform binary or staging leakage" >&2
             exit 1
@@ -211,6 +248,10 @@ jobs:
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target darwin-arm64 -o dist/
           unzip -l dist/*darwin-arm64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "darwin-arm64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*darwin-arm64*.vsix | grep -q 'extension/gnucobol/'; then
+            echo "darwin-arm64 package contains the linux GnuCOBOL tree" >&2
+            exit 1
+          fi
           if unzip -l dist/*darwin-arm64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
             echo "darwin-arm64 package contains a foreign-platform binary or staging leakage" >&2
             exit 1
@@ -223,6 +264,10 @@ jobs:
           cp "$STAGING_DIR/LICENSE" bin/LICENSE-mockymock
           npx @vscode/vsce package --target darwin-x64 -o dist/
           unzip -l dist/*darwin-x64*.vsix | grep -q 'extension/bin/mockymock$' || { echo "darwin-x64 package missing bundled binary" >&2; exit 1; }
+          if unzip -l dist/*darwin-x64*.vsix | grep -q 'extension/gnucobol/'; then
+            echo "darwin-x64 package contains the linux GnuCOBOL tree" >&2
+            exit 1
+          fi
           if unzip -l dist/*darwin-x64*.vsix | grep -qE 'extension/bin/mockymock\.exe$|extension/staging/'; then
             echo "darwin-x64 package contains a foreign-platform binary or staging leakage" >&2
             exit 1
@@ -241,6 +286,12 @@ jobs:
         with:
           name: dist-vsix
           path: dist/
+      # The GPL's corresponding source for the bundled GnuCOBOL binaries:
+      # the exact tarball they were built from, on the same release page.
+      - uses: actions/download-artifact@v4
+        with:
+          name: gnucobol-linux-x64
+          path: gnucobol/
       - name: Resolve the release tag from this repo's own package.json
         id: tag
         run: echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
@@ -263,7 +314,7 @@ jobs:
       - name: Upload the vsix files (clobber lets a re-dispatch replace a bad build)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix --clobber
+        run: gh release upload "${{ steps.tag.outputs.tag }}" dist/*.vsix gnucobol/gnucobol-build/gnucobol-3.2.tar.xz --clobber
       - name: Record the mocky-mock and cobol-parser releases this vsix was built from
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

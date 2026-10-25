@@ -11,3 +11,5 @@ docs/
 .vscodeignore
 scripts/.local/
 cli-build/
+gnucobol/
+gnucobol-*.tar.xz
