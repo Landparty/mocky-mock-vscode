@@ -133,14 +133,17 @@ extension runs, not linked into it. COBOL programs a user compiles link
 libcob dynamically, which the LGPL allows for any license.
 
 The Windows tree is a third-party binary build, unmodified. Its own
-archive has no license texts for GMP, Berkeley DB or MinGW, so the script
-adds GnuCOBOL's and a `gnucobol/licenses/README.txt` naming every
-component, its license and upstream source. **Still to do before a real
-release:** add the GMP, Berkeley DB 18.1 (AGPL) and MinGW license texts,
-and attach (or link a durable copy of) their corresponding source, since
-the GPL/AGPL obligation passes to whoever redistributes the binaries. The
-AGPL on Berkeley DB is compatible with the extension's GPL-3.0 and the
-CLI's AGPL-3.0. XML PARSE/GENERATE do not compile with this build (no
+archive carries only GnuCOBOL's GPL/LGPL/FDL texts, so the notices for every
+other component it ships live in `licenses/gnucobol-windows/` and the script
+copies them into `gnucobol/licenses/`. Its `README.txt` lists each component
+with the version the build reports (GMP 6.2.1, Berkeley DB 18.1.40, MinGW.org
+GCC 9.2.0, binutils 2.32, gdb 7.6.1, mingwrt/w32api 5.4.2, cJSON 1.7.14,
+PDCursesMod 4.3.7, gettext 0.18.3, plus libiconv, expat, zlib, bzip2, MPFR,
+MPC, ISL), its license, and its upstream source. The source is linked rather
+than attached; attaching the GCC, binutils, gdb, GMP and Berkeley DB tarballs
+to each release would be the stricter reading of GPLv3 §6 and the AGPL, and is
+a one-step addition to the release job if wanted. The AGPL on Berkeley DB is
+compatible with the extension's GPL-3.0 and the CLI's AGPL-3.0. XML PARSE/GENERATE do not compile with this build (no
 libxml2).
 
 ### Not bundled yet
