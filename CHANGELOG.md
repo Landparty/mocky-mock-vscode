@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/Landparty/mocky-mock-vscode/compare/v0.14.0...v0.14.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **examples:** sync custprog and ACCTPRG suites with mockymock 0.11.0 ([5b917d8](https://github.com/Landparty/mocky-mock-vscode/commit/5b917d83ac12f58c762009e534f57c34acc2c7c7))
+
 ## [0.14.0](https://github.com/Landparty/mocky-mock-vscode/compare/v0.13.0...v0.14.0) (2026-10-26)
 
 
