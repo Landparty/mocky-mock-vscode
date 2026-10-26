@@ -2,7 +2,7 @@
   "name": "mockymock-vscode",
   "displayName": "mockymock",
   "description": "Write, run, debug and cover COBOL unit tests from VS Code -- no mainframe needed.",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "publisher": "lanparty",
   "private": true,
   "license": "GPL-3.0-only",
@@ -350,7 +350,11 @@
         },
         "mockymock.toolchain": {
           "type": "string",
-          "enum": ["auto", "bundled", "docker"],
+          "enum": [
+            "auto",
+            "bundled",
+            "docker"
+          ],
           "enumDescriptions": [
             "Use the GnuCOBOL bundled with this extension when there is one for your platform, otherwise Docker.",
             "Always use the bundled GnuCOBOL (falls back to Docker on a platform without one).",
