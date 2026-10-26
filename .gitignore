@@ -13,3 +13,6 @@ scripts/.local/
 cli-build/
 gnucobol/
 gnucobol-*.tar.xz
+
+# mockymock build/run output
+.mockymock/
